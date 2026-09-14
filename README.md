@@ -1,2 +1,3 @@
-# isolatingServer
-multithreaded server fo DB isolation
+# equipQuery_server
+Сервер подбора оборудования
+Целевая OS: FreeBSD x86-64
