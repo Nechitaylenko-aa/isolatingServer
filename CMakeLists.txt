@@ -1,107 +1,131 @@
-cmake_minimum_required(VERSION 3.20)
-set(TARGET_NAME app-server)
+cmake_minimum_required(VERSION 3.20)  # Лучше 3.20, как у всех
 
-# Устанавливаем стандарт C++ (например, C++17, C++20, C++23)
-set(CMAKE_CXX_STANDARD 20)
+set(LIB_CORE core)
+
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(TARGET_NAME ${TARGET_NAME}d)
+if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+    set(LIB_CORE ${LIB_CORE}d)
 endif()
 
-project(${TARGET_NAME})
+project(${LIB_CORE})
 
-#include(FetchContent)
-#FetchContent_Declare(
-#        databased
-#        GIT_REPOSITORY git@github.com:Nechitaylenko-aa/lib-database.git
-#        GIT_TAG dev
-#)
+set(CORE_LIB ${PROJECT_NAME} CACHE INTERNAL "")
 
-#FetchContent_MakeAvailable(databased)
+# --- Пути ---
+set(PUBLIC_HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(PRIVATE_SRC_DIR   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-find_package(Catch2 3 REQUIRED)
-
-file(GLOB_RECURSE src
-        sources/*.h
-        sources/*.cpp
+# --- Публичные заголовки ---
+file(GLOB_RECURSE PUBLIC_HEADERS
+        ${PUBLIC_HEADER_DIR}/*.h
+        )
+include_directories(
+        include
+)
+# --- Исходники core ---
+file(GLOB_RECURSE CORE_SOURCES
+        ${PRIVATE_SRC_DIR}/*.cpp
+        automation/*.cpp
+        automation/*.h
         )
 
-add_executable(${TARGET_NAME}
-        main.cpp
-        ${src}
-
+# --- Компоненты и оборудование ---
+file(GLOB_RECURSE COMPONENT_SOURCES
+        components/*.cpp
+        equipment/*.cpp
         )
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
-    add_definitions("-DFreeBSD")
-endif()
+# --- Заголовки компонентов (для установки) ---
+file(GLOB_RECURSE COMPONENT_HEADERS
+        components/*.h
+        equipment/*.h
+        )
+file(GLOB_RECURSE logger
+        ../server/sources/logger-common/logger.cpp
+        )
 
-set(OCTO_INC ${octo-encryption-cpp_SOURCE_DIR}/include/octo-encryption-cpp)
+# --- Сборка библиотеки ---
+add_library(${PROJECT_NAME} STATIC
+        ${PUBLIC_HEADERS}
+        ${COMPONENT_HEADERS}
+        ${CORE_SOURCES}
+        ${COMPONENT_SOURCES}
+        ${logger}
+        )
 
-target_include_directories(${TARGET_NAME} PRIVATE
+# --- Настройка инклудов ---
+target_include_directories(${PROJECT_NAME}
+        PUBLIC
+        $<BUILD_INTERFACE:${PUBLIC_HEADER_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:include>
+        PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${OCTO_INC}
+        ${CMAKE_CURRENT_SOURCE_DIR}/equipment/base/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/equipment/water/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/components/water/include
+
+        ${CMAKE_SOURCE_DIR}/libmeasures/include
+        ${CMAKE_SOURCE_DIR}/libmultilang/include
+
+
+        ${CMAKE_BINARY_DIR}/libmeasures
+        ${CMAKE_BINARY_DIR}/libmultilang
+
+        ../interfaces/include
+        ../saver/include
+        /usr/include
+        /usr/local/include
+        ${CMAKE_CURRENT_BINARY_DIR}
         )
 
+# --- Скрываем символы ---
+set_target_properties(${PROJECT_NAME} PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+        )
 
-target_link_libraries(${TARGET_NAME} PRIVATE
-        database
-        octo-encryption-cpp
+# --- Генерируем export header ---
+include(GenerateExportHeader)
+
+GENERATE_EXPORT_HEADER(${PROJECT_NAME}
+        BASE_NAME ${PROJECT_NAME}
+        EXPORT_MACRO_NAME CORE_EXPORT
+        EXPORT_FILE_NAME core_export.h
+        STATIC_DEFINE CORE_STATIC
+        )
+
+# --- Линковка зависимостей ---
+target_link_libraries(${PROJECT_NAME}
+        PUBLIC
         ${MEASURE_LIB}
-        ${CORE_LIB}
-        pthread
-        stdc++
-        PRIVATE Catch2::Catch2
+        ${LIB_LANG}
+        PRIVATE
+        # внутренние зависимости
+
         )
 
-target_compile_options(${TARGET_NAME} PRIVATE
-        -Wall
-        -Wextra
-        -pedantic
-        -std=c++17
-        -D_REENTRANT
-        )
-
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(${TARGET_NAME} PRIVATE
-            -g
-            -O0
-            -DDEBUG
-            -D_DEBUG
-            )
-else()
-    target_compile_options(${TARGET_NAME} PRIVATE
-            -O2
-            -DNDEBUG
-            )
-endif()
-
-
-if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
-    target_compile_options(${TARGET_NAME} PRIVATE
-            -D_XOPEN_SOURCE=700
-            -D__BSD_VISIBLE
-            )
-endif()
-
-
-set_target_properties(${TARGET_NAME} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
-        )
-
-
-#add_custom_target(server
-#        DEPENDS ${TARGET_NAME}
+# --- Установка ---
+#install(TARGETS ${PROJECT_NAME}
+#        EXPORT coreTargets
+#        LIBRARY DESTINATION lib
+#        ARCHIVE DESTINATION lib
+#        RUNTIME DESTINATION bin
 #        )
 
+#install(DIRECTORY ${PUBLIC_HEADER_DIR}/
+#        DESTINATION include
+#        FILES_MATCHING PATTERN "*.h"
+#        )
 
-#if(BUILD_TESTS)
-#    enable_testing()
-#    add_subdirectory(tests)
-#endif()
+#install(FILES ${CMAKE_CURRENT_BINARY_DIR}/core_export.h
+#        DESTINATION include
+#        )
+
+#install(EXPORT coreTargets
+#        FILE coreTargets.cmake
+#        NAMESPACE core::
+#        DESTINATION lib/cmake/core
+#        )
