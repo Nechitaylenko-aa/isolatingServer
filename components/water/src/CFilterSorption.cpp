@@ -9,9 +9,6 @@
 #include "CContainer.h"
 #include <cassert>
 
-static Tstring mutnost = "Мутность"; // TODO: временно строкой, как в CLightFilter —
-                                      // ждёт перехода на enum-каталог параметров (совместно)
-
 namespace NCore
 {
     CFilterSorption::CFilterSorption(IGeneralTor * tor, CCell *owner)
@@ -43,11 +40,11 @@ namespace NCore
 
         /// Параметры устройства по умолчанию. В дальнейшем они должны браться из оборудования.
         m_throughput_capacity = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                               0, EStandardPrefix::ESP_NONE, "загруз.");
+                                               0, EStandardPrefix::ESP_NONE, Tstring ("загруз."));
         m_throughput_capacity->set_value(20);
 
         m_average_filtration = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                              0, EStandardPrefix::ESP_MILLI, "фильтрация");
+                                              0, EStandardPrefix::ESP_MILLI, Tstring ("фильтрация"));
         m_average_filtration->set_value(150);
 
         /// Наполнить параметрами для отображения в свойствах.
@@ -126,22 +123,27 @@ namespace NCore
     void CFilterSorption::calculateInBody()
     {
         Logger &logger = Logger::instance();
-        CParameter* turbidity_param = nullptr;
+        CParameter* smell_param = nullptr;
+        CParameter* flavor_param = nullptr;
 
         for (uint32_t i = 0; i < m_body->parameters_count(); ++i)
         {
             auto param = m_body->get_parameter(i);
-            Tstring pName = param->unit_name();
-            if (pName == mutnost)
+            E_MEASURE_UNITS measure_unit = param->measure_unit()->measure_unit();
+
+            if (measure_unit == E_MEASURE_UNITS::EMU_SMELL)
             {
-                turbidity_param = param;
-                break;
+                smell_param = param;
+            }
+            else if (measure_unit == E_MEASURE_UNITS::EMU_FLAVOR)
+            {
+                flavor_param = param;
             }
         }
 
-        if (!turbidity_param)
+        if (!smell_param && !flavor_param)
         {
-            logger.error("CFilterSorption: There is no parameter '" + mutnost + "' in operating body");
+            logger.error("CFilterSorption: neither smell nor flavor parameter found in operating body");
             return;
         }
 
@@ -161,9 +163,10 @@ namespace NCore
 
         auto values = IShadowManager::getBodyParams(this, m_equipProxy, m_generalTor, m_body);
 
-        if (!values.empty())
+        if (values.size() >= 2)
         {
-            turbidity_param->set_si_value(values.front());
+            if (smell_param)  smell_param->set_si_value(values.at(0));
+            if (flavor_param) flavor_param->set_si_value(values.at(1));
         }
         else
         {

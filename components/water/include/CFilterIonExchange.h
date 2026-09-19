@@ -37,6 +37,7 @@ namespace NCore
         uint16_t    m_ser_comp_type,
                     m_ser_project_type;
         Tuint64 id_in{0}, id_out{0}, id_in1{0}, id_out1{0};
+        std::vector<SEquipLight> m_equipmentChoice;
 
         void calculate_body();
     };

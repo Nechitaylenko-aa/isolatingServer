@@ -39,12 +39,9 @@ namespace NCore
         m_outputs.push_back(out);
 
         m_volume = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                   0, EStandardPrefix::ESP_NONE, "производительность");
-        m_volume->set_value(500); // TODO: паспортное значение по умолчанию, взято с потолка
-
+                                   500, EStandardPrefix::ESP_NONE, Tstring ("производительность"));
         m_time = new CParameter(E_MEASURE_UNITS::EMU_TIME, EMUTIM::emit_hour,
-                                 0, EStandardPrefix::ESP_NONE, "время цикла");
-        m_time->set_value(1);
+                                 1, EStandardPrefix::ESP_NONE, Tstring ("время цикла"));
 
         m_parameters.push_back(*m_volume);
         m_parameters.push_back(*m_time);

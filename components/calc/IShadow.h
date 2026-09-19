@@ -28,7 +28,8 @@ public:
 
     virtual  NCore::SEquipmentRequest getEquipRequest(NCore::COperatingBody * body, IGeneralTor *tor) = 0; // рассчитать параметры и дать структуру для подбора (отправки на сервер) для конкретного компонента
     virtual  std::vector<float>  getCalculationsWithEquip(NCore::SEquipLight & equip_proxy, NCore::COperatingBody * body, IGeneralTor *tor) = 0;
-    virtual  void  generateReport(NCore::COperatingBody * body, IGeneralTor *tor, EReportAction action) = 0; // сгенерировать отчет по компоненту для документации
+    virtual  std::vector<SReportEntry>  generateReport(NCore::COperatingBody * body, IGeneralTor *tor, EReportAction action,
+                                                         const Tstring &section_number, uint32_t & formula_start) = 0; // сгенерировать отчет по компоненту для документации
     [[nodiscard]] const NCore::NComponent * component() const { return m_component; }
 
 protected:

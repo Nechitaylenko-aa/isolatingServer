@@ -45,10 +45,10 @@ namespace NCore
 
 
         m_volume = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                   0, EStandardPrefix::ESP_NONE, "объём");
-        m_width = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 1000, ESP_MILLI, "width");
-        m_deepness = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 1000, ESP_MILLI, "deepness");
-        m_height = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 1000, ESP_MILLI, "height");;
+                                   0, EStandardPrefix::ESP_NONE, Tstring ("объём"));
+        m_width = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 1000, ESP_MILLI, Tstring ("width"));
+        m_deepness = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 1000, ESP_MILLI, Tstring ("deepness"));
+        m_height = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 1000, ESP_MILLI, Tstring("Height"));
         m_volume->set_si_value(m_width->si_value() * m_deepness->si_value() * m_height->si_value());
 
 

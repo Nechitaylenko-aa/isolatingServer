@@ -18,7 +18,7 @@ namespace NCore
         m_outputs.push_back(out);
         m_body = body;
 
-        m_parameter = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 120, ESP_MILLI);
+        m_parameter = new CParameter(E_MEASURE_UNITS::EMU_DISTANCE, EMUDIS::emd_meter, 120, ESP_MILLI, Tstring{});
     }
 
     CAccountNode::~CAccountNode()

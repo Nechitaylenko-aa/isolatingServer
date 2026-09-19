@@ -8,6 +8,10 @@
 #include "IShadow.h"
 #include "NComponent.h"
 #include "shadows/include/CShadowLightFiletr.h"
+#include "shadows/include/CShadowFilterSorption.h"
+#include "shadows/include/CShadowFilterIonEx.h"
+#include "shadows/include/CShadowWaterCapacity.h"
+#include "shadows/include/CShadowPumpStation.h"
 
 IShadowManager::IShadowManager() = default;
 
@@ -55,10 +59,22 @@ IShadowManager::getBodyParams(NCore::NComponent *component, NCore::SEquipLight &
     return {};
 }
 
-void IShadowManager::generateReport(NCore::NComponent *component, IGeneralTor *tor, NCore::COperatingBody *body,
-                                    EReportAction action)
+std::vector<SReportEntry>
+IShadowManager::generateReport(NCore::NComponent *component, IGeneralTor *tor, NCore::COperatingBody *body,
+                                EReportAction action, const Tstring &section_number, uint32_t formula_start)
 {
+    auto shadow = instance().getShadow(component);
+    if (shadow)
+    {
+        return shadow->generateReport(body, tor, action, section_number, formula_start);
+    }
 
+    return {};
+}
+
+IShadow* IShadowManager::getComponentShadow(NCore::NComponent *component)
+{
+    return instance().getShadow(component);
 }
 
 IShadow *IShadowManager::getShadow(NCore::NComponent *component)
@@ -106,9 +122,9 @@ IShadow *IShadowManager::getWaterShadow(NCore::E_WATER_COMPONENTS subtype, NCore
         case NCore::E_WATER_COMPONENTS::EWB_WATER_FILTER_LIGHT:
             return new CShadowLightFilter(component);
         case NCore::EWB_WATER_FILTER_ION_EXCHANGE:
-            break;
+            return new CShadowFilterIonEx(component);
         case NCore::EWB_WATER_FILTER_SORPTION:
-            break;
+            return new CShadowFilterSorption(component);
         case NCore::EWB_MEMBRANE_OSMOS:
             break;
         case NCore::EWB_MEMBRANE_NANO:
@@ -116,9 +132,9 @@ IShadow *IShadowManager::getWaterShadow(NCore::E_WATER_COMPONENTS subtype, NCore
         case NCore::EWB_MEMBRANE_ULTRA:
             break;
         case NCore::EWB_CAPACITY:
-            break;
+            return new CShadowWaterCapacity(component);
         case NCore::EWB_PUMP_STATION:
-            break;
+            return new CShadowPumpStation(component);
         case NCore::EWB_ACCOUNT_NODE:
             break;
         case NCore::EWB_COUNT:

@@ -25,8 +25,7 @@ namespace NCore
         m_outputs.push_back(out);
 
         m_nominal_pressure = new CParameter(E_MEASURE_UNITS::EMU_PRESSURE, EMUPRE::emp_pascale,
-                                             0, EStandardPrefix::ESP_NONE, "напор");
-        m_nominal_pressure->set_value(300000); // TODO: паспортное значение по умолчанию
+                                            0.3, EStandardPrefix::ESP_MEGA, Tstring ("напор"));
 
         m_parameters.push_back(*m_nominal_pressure);
     }

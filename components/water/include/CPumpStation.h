@@ -40,7 +40,7 @@ namespace NCore
 
     protected:
         void set_equipment(equip::CEquipment *equip) override {}
-        void set_equipmentProxy(std::vector<SEquipLight> && items) override {}
+        void set_equipmentProxy(std::vector<SEquipLight> && items) override;
         /*[[nodiscard]] std::vector<SAutomationAtom> build_internal_atoms(
                 const std::vector<SBoundaryInterlockCandidate> &external_candidates) const override;*/
 
@@ -55,6 +55,9 @@ namespace NCore
     private:
         uint16_t     m_pump_count;
         CParameter * m_nominal_pressure; // паспортное давление на выходе станции
+        std::vector<SEquipLight> m_equipmentChoice;
+
+        void calculateInBody();
     };
 }
 

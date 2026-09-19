@@ -5,6 +5,7 @@
 #include "../../../automation/CTechnologyBuilder.h"
 #include "../../../automation/codegen/CCodegenShadowsManager.h"
 #include "../../../automation/codegen/shadows/include/CShadowPumpStation.h"
+#include "../../calc/IShadowManager.h"
 #include <cassert>
 
 
@@ -28,7 +29,7 @@ namespace NCore
         m_outputs.push_back(out);
 
         m_nominal_pressure = new CParameter(E_MEASURE_UNITS::EMU_PRESSURE, EMUPRE::emp_pascale,
-                                             6, EStandardPrefix::ESP_MEGA, "напор");
+                                             6, EStandardPrefix::ESP_MEGA, Tstring ("напор"));
 
         m_parameters.push_back(*m_nominal_pressure);
     }
@@ -78,6 +79,7 @@ namespace NCore
 
         if (sender == m_inputs.front())
         {
+            calculateInBody();
             m_body->set_si_pressure(m_nominal_pressure->si_value());
             return m_outputs.front()->put_ob(m_body, nullptr);
         }
@@ -86,6 +88,45 @@ namespace NCore
             m_inputs.front()->put_ob(m_body, nullptr);
         }
         return nullptr;
+    }
+
+    void CPumpStation::calculateInBody()
+    {
+        Logger &logger = Logger::instance();
+
+        if (m_equipProxy.equip_id == 0)
+        {
+            SEquipmentRequest request = IShadowManager::getEquipRequest(this, m_generalTor, m_body);
+            if (!request.params.empty())
+            {
+                m_info_bus->addRequest(std::move(request));
+            }
+            else
+            {
+                logger.error("CPumpStation: no parameters to request equipment (downstream neighbor not ready or has nothing for us to size against)");
+            }
+            return;
+        }
+
+        auto values = IShadowManager::getBodyParams(this, m_equipProxy, m_generalTor, m_body);
+
+        if (!values.empty())
+        {
+            m_nominal_pressure->set_si_value(values.front());
+        }
+        else
+        {
+            logger.error("CPumpStation: no calculations result with equipment");
+        }
+    }
+
+    void CPumpStation::set_equipmentProxy(std::vector<SEquipLight> &&items)
+    {
+        if (items.empty())
+            return;
+
+        m_equipmentChoice = std::move(items);
+        m_equipProxy = m_equipmentChoice.at(0);
     }
 
     // ---- Слой 2 автоматизации ---------------------------------------------------------

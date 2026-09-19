@@ -3,11 +3,11 @@
 namespace NCore
 {
     CTwoWayValve::CTwoWayValve(IGeneralTor *tor, CCell *owner)
-            : NComponent(tor, owner, E_WATER_COMPONENTS::EWB_VALVE_WATER_TWO_WAY)
+            : NComponent(tor, owner, E_WATER_COMPONENTS::EWB_VALVE_WATER_THREE_WAY)
     {
         assert(owner->get_owner() == nullptr);
 
-        m_descript = "Two-way valve";
+        m_descript = "Three-way valve";
         m_schName = "КО" + std::to_string(m_id);
         m_imgSource = ":/palette/images/palette/25.png";
 
@@ -21,7 +21,7 @@ namespace NCore
 
         delete this->remove_input(in1);
 
-        CParameter valve_throughput(E_MEASURE_UNITS::EMU_CONSUMPTION, EMUCONS::emcs_liter_sec, 20);
+        CParameter valve_throughput(E_MEASURE_UNITS::EMU_CONSUMPTION, EMUCONS::emcs_liter_sec, 20, ESP_NONE, Tstring(""));
 
         m_parameters.push_back(valve_throughput);
     }

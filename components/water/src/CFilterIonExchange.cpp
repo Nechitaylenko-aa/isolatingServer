@@ -5,8 +5,8 @@
 #include "../include/CFilterIonExchange.h"
 #include "CContainer.h"
 #include "IGeneralTor.h"
-
-static Tstring  organics = "Organics";
+#include "../../calc/IShadowManager.h"
+#include "../../../include/Logger.h"
 
 namespace NCore
 {
@@ -33,11 +33,11 @@ namespace NCore
         /// Параметры устройства по умолчанию. В дальнейшем они должны браться из оборудования.
         VSubtypes sType;
         m_throughput_capacity = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                               0, EStandardPrefix::ESP_NONE, "загруз.");
+                                               20, EStandardPrefix::ESP_NONE, Tstring ("загруз."));
         m_throughput_capacity->set_value(20);
 
         m_average_filtration = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                              0, EStandardPrefix::ESP_MILLI, "фильтрация");
+                                              150, EStandardPrefix::ESP_MILLI, Tstring ("фильтрация"));
         m_average_filtration->set_value(150);
 
         /// Наполнить параметрами для отображения в свойствах. Эти параметры передаст в GUI визуальный враппер
@@ -114,53 +114,49 @@ namespace NCore
 
     void CFilterIonExchange::calculate_body()
     {
-        // 1. Получаем входные параметры
-        float Q = m_generalTor->hourInputMax()->si_value();
-        float temp = m_body->get_si_temperature();    // °C
-        float pressure = m_body->get_si_pressure();
-        float turbidity_in = 0.0f;
+        Logger &logger = Logger::instance();
+        CParameter* hardness_param = nullptr;
 
-        // 2. Ищем мутность в рабочем теле
         for (uint32_t i = 0; i < m_body->parameters_count(); ++i)
         {
             auto param = m_body->get_parameter(i);
-            if (param->unit_name() == "mutnost")
+            if (param->measure_unit()->measure_unit() == E_MEASURE_UNITS::EMU_HARDNESS)
             {
-                turbidity_in = param->si_value();
+                hardness_param = param;
                 break;
             }
         }
 
-        if (turbidity_in <= 0.0f) return;
-
-        // 3. Расчет площади фильтра
-        float v_filtration = 7.0f;  // м/ч (задаем в параметрах компонента!)
-        float F_required = Q / v_filtration;  // м²
-
-        // 4. Расчет эффективности (эмпирика)
-        float efficiency = 0.75f + (8.0f - v_filtration) * 0.03f;
-        efficiency = std::clamp(efficiency, 0.5f, 0.95f);
-
-        // 5. Выходная мутность
-        float turbidity_out = turbidity_in * (1.0f - efficiency);
-
-        // 6. Обновляем рабочее тело (устанавливаем новую мутность)
-        for (uint32_t i = 0; i < m_body->parameters_count(); ++i)
+        if (!hardness_param)
         {
-            auto param = m_body->get_parameter(i);
-            if (param->unit_name() == organics)
-            {
-                param->set_si_value(turbidity_out);
-                break;
-            }
+            logger.error("CFilterIonExchange: no hardness parameter found in operating body");
+            return;
         }
 
-        SEquipmentRequest req;
-        req.sender = this;
-        req.params = { F_required, Q, pressure };
+        if (m_equipProxy.equip_id == 0)
+        {
+            SEquipmentRequest request = IShadowManager::getEquipRequest(this, m_generalTor, m_body);
+            if (!request.params.empty())
+            {
+                m_info_bus->addRequest(std::move(request));
+            }
+            else
+            {
+                logger.error("CFilterIonExchange: no parameters to request equipment");
+            }
+            return;
+        }
 
-        // Отправляем в шину
-        m_info_bus->addRequest(std::move(req));
+        auto values = IShadowManager::getBodyParams(this, m_equipProxy, m_generalTor, m_body);
+
+        if (!values.empty())
+        {
+            hardness_param->set_si_value(values.front());
+        }
+        else
+        {
+            logger.error("CFilterIonExchange: no calculations result with equipment");
+        }
     }
 
     void CFilterIonExchange::set_equipment(equip::CEquipment *equip)
@@ -179,7 +175,11 @@ namespace NCore
 
     void CFilterIonExchange::set_equipmentProxy(std::vector<SEquipLight> &&items)
     {
+        if (items.empty())
+            return;
 
+        m_equipmentChoice = std::move(items);
+        m_equipProxy = m_equipmentChoice.at(0);
     }
 
     std::vector<SSignalRole> CFilterIonExchange::required_signals() const

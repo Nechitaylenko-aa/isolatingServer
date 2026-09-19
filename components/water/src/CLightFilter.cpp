@@ -36,12 +36,10 @@ namespace NCore
         /// Параметры устройства по умолчанию. В дальнейшем они должны браться из оборудования.
         VSubtypes sType;
         m_throughput_capacity = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                               0, EStandardPrefix::ESP_NONE, "загруз.");
-        m_throughput_capacity->set_value(20);
+                                               20, EStandardPrefix::ESP_NONE, Tstring ("загруз."));
 
         m_average_filtration = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
-                                              0, EStandardPrefix::ESP_MILLI, "фильтрация");
-        m_average_filtration->set_value(150);
+                                              150, EStandardPrefix::ESP_MILLI, Tstring ("фильтрация"));
 
         /// Наполнить параметрами для отображения в свойствах. Эти параметры передаст в GUI визуальный враппер
         m_parameters.push_back(*m_throughput_capacity);
@@ -118,22 +116,28 @@ namespace NCore
     void CLightFilter::calculateInBody()
     {
         Logger &logger = Logger::instance();
+        logger.init("",LOG_DEBUG);
         CParameter* turbidity_param = nullptr;
+        CParameter* chromaticity_param = nullptr;
 
         for (uint32_t i = 0; i < m_body->parameters_count(); ++i)
         {
             auto param = m_body->get_parameter(i);
-            Tstring pName = param->unit_name();
-            if (pName == mutnost)
+            E_MEASURE_UNITS measure_unit = param->measure_unit()->measure_unit();
+
+            if (measure_unit == E_MEASURE_UNITS::EMU_TURBIDITY)
             {
                 turbidity_param = param;
-                break;
+            }
+            else if (measure_unit == E_MEASURE_UNITS::EMU_CHROMATICITY)
+            {
+                chromaticity_param = param;
             }
         }
 
-        if (!turbidity_param)
+        if (!turbidity_param && !chromaticity_param)
         {
-            logger.error("CLightFilter: There is no parameter '" + mutnost + "' in operating body");
+            logger.error("CLightFilter: neither turbidity nor chromaticity parameter found in operating body");
             return;
         }
 
@@ -153,9 +157,10 @@ namespace NCore
 
         auto values = IShadowManager::getBodyParams(this, m_equipProxy, m_generalTor, m_body);
 
-        if (!values.empty())
+        if (values.size() >= 2)
         {
-            turbidity_param->set_si_value(values.front());
+            if (turbidity_param)    turbidity_param->set_si_value(values.at(0));
+            if (chromaticity_param) chromaticity_param->set_si_value(values.at(1));
         }
         else
         {
