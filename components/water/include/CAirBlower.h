@@ -32,7 +32,7 @@ namespace NCore
 
     protected:
         void set_equipment(equip::CEquipment *equip) override {}
-        void set_equipmentProxy(std::vector<SEquipLight> && items) override {}
+        void set_equipmentProxy(std::vector<SEquipLight> && items) override;
 
 
         [[nodiscard]] std::vector<SVariableBehaviorSpec> variable_behaviors() const override;
@@ -43,6 +43,9 @@ namespace NCore
     private:
         uint16_t     m_blower_count{1};
         CParameter * m_nominal_pressure; // паспортное давление станции воздуходувок
+        std::vector<SEquipLight> m_equipmentChoice;
+
+        void calculateInBody();
     };
 }
 

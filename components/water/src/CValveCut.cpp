@@ -3,6 +3,8 @@
 //
 
 #include "CValveCut.h"
+#include "Logger.h"
+#include "../../calc/IShadowManager.h"
 #include <cassert>
 
 namespace NCore
@@ -57,10 +59,41 @@ namespace NCore
         *m_body = *body;
 
         if (sender == m_inputs.front())
+        {
+            calculateInBody();
             return m_outputs.front()->put_ob(m_body, nullptr);
+        }
         if (sender == m_outputs.front())
             m_inputs.front()->put_ob(body, nullptr);
         return nullptr;
+    }
+
+    void CValveCut::calculateInBody()
+    {
+        Logger &logger = Logger::instance();
+
+        if (m_equipProxy.equip_id == 0)
+        {
+            SEquipmentRequest request = IShadowManager::getEquipRequest(this, m_generalTor, m_body);
+            if (!request.params.empty())
+            {
+                m_info_bus->addRequest(std::move(request));
+            }
+            else
+            {
+                logger.error("CValveCut: no parameters to request equipment (pipe not sized yet)");
+            }
+        }
+        // Клапан не меняет тело содержательно — второй проход не нужен.
+    }
+
+    void CValveCut::set_equipmentProxy(std::vector<SEquipLight> &&items)
+    {
+        if (items.empty())
+            return;
+
+        m_equipmentChoice = std::move(items);
+        m_equipProxy = m_equipmentChoice.at(0);
     }
 
     std::vector<SSignalRole> CValveCut::required_signals() const

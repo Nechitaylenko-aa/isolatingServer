@@ -29,6 +29,8 @@ enum class EReportEntryKind : uint8_t
     SectionHeading,  // "2.2. Расчет фильтра осветлительного ФО23"
     Text,            // обычный поясняющий текст
     Formula,         // формула + подставленные значения + результат, нумеруется
+    Specification,   // строка опросного листа: параметр-значение-единица, без формулы
+                      // (осмос/нано/ультра — не подбор из БД, а заявка на приобретение, см. чат)
 };
 
 /** @brief Одна строка отчёта. Для Formula — три текстовых поля вместо одной свободной строки
@@ -59,7 +61,7 @@ public:
     static  NCore::SEquipmentRequest  getEquipRequest(NCore::NComponent * component, IGeneralTor * tor, NCore::COperatingBody *body);
     static  std::vector<float>        getBodyParams(NCore::NComponent *component, NCore::SEquipLight &equip_proxy, IGeneralTor * tor, NCore::COperatingBody *body);
     static  std::vector<SReportEntry>  generateReport(NCore::NComponent * component, IGeneralTor * tor, NCore::COperatingBody *body,
-                                                        EReportAction action, const Tstring &section_number, uint32_t formula_start);
+                                                        EReportAction action, const Tstring &section_number, uint32_t &formula_start);
 
     /** @brief Публичный доступ к тени соседнего компонента — нужен, когда одна тень спрашивает
      *  другую напрямую (см. чат про насос/ёмкость/фильтр), в отличие от getEquipRequest/

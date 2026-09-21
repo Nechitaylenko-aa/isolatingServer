@@ -80,6 +80,38 @@ CShadowLightFilter::collect_tracked_params(NCore::COperatingBody *body, IGeneral
     return tracked;
 }
 
+CShadowLightFilter::SParamWithLimit
+CShadowLightFilter::find_undissolved_iron(NCore::COperatingBody *body, IGeneralTor *tor) const
+{
+    SParamWithLimit result;
+
+    for (uint32_t i = 0; i < body->parameters_count(); ++i)
+    {
+        auto param = body->get_parameter(i);
+        if (param->measure_unit()->measure_unit() != EMU_CONCENTRATION)
+        {
+            continue;
+        }
+
+        // TODO(нет данных): types.h пока не различает растворённое/нерастворённое железо —
+        // общий Fe для обеих форм, см. чат.
+        if (param->measure_unit()->chemicalElement() != EChemicalElement::Fe)
+        {
+            continue;
+        }
+
+        result.param = param;
+        auto range = tor->limit_at(i);
+        if (range && range->limits() && !range->limits()->empty())
+        {
+            result.limits = range;
+        }
+        break;
+    }
+
+    return result;
+}
+
 NCore::SEquipmentRequest
 CShadowLightFilter::getEquipRequest(NCore::COperatingBody *body, IGeneralTor *tor)
 {
@@ -87,12 +119,13 @@ CShadowLightFilter::getEquipRequest(NCore::COperatingBody *body, IGeneralTor *to
     // 1. Получение входных данных
     // ============================================================
     auto tracked = collect_tracked_params(body, tor);
+    auto iron_entry = find_undissolved_iron(body, tor);
 
     float m_Q = tor->hourInputMax()->si_value();  // м³/ч
     float m_pressure_pa = body->get_si_pressure();
     float temp = body->get_si_temperature();        // °C
 
-    bool is_work = false;
+    bool is_work = iron_entry.limits != nullptr;
     for (const auto &kv : tracked)
     {
         if (kv.second.limits)
@@ -158,6 +191,23 @@ CShadowLightFilter::getEquipRequest(NCore::COperatingBody *body, IGeneralTor *to
         }
     }
 
+    // Нерастворённое железо (Fe(OH)3, хлопья после аэратора) — тот же коагулянт, что и для
+    // мутности/цветности (см. чат: технолог подтвердил перенос механизма), но своя, отдельная
+    // проверка — EMU_CONCENTRATION не различает вещества в общей карте tracked (см. .h).
+    if (iron_entry.param && iron_entry.limits)
+    {
+        float iron_value = iron_entry.param->value();
+        if (!iron_entry.limits->is_acceptable(iron_value))
+        {
+            NCore::SReagentRequirement req;
+            req.source = m_component;
+            req.reagent_type = NCore::EReagentType::Coagulant;
+            req.trigger_parameter = EMU_CONCENTRATION;
+            req.required_dose = 0.f;  // TODO(нет данных): формула дозы
+            m_component->info_bus()->addRequirement(std::move(req));
+        }
+    }
+
     // ============================================================
     // 3. Определение нормативной скорости фильтрации
     // ============================================================
@@ -197,8 +247,9 @@ CShadowLightFilter::getCalculationsWithEquip(NCore::SEquipLight & equip_proxy, N
     auto tracked = collect_tracked_params(body, tor);
     const auto &turbidity_entry = tracked[EMU_TURBIDITY];
     const auto &chromaticity_entry = tracked[EMU_CHROMATICITY];
+    auto iron_entry = find_undissolved_iron(body, tor);
 
-    if (!turbidity_entry.param && !chromaticity_entry.param)
+    if (!turbidity_entry.param && !chromaticity_entry.param && !iron_entry.param)
     {
         return res;  // фильтру нечего обрабатывать в этом теле
     }
@@ -309,17 +360,24 @@ CShadowLightFilter::getCalculationsWithEquip(NCore::SEquipLight & equip_proxy, N
             ? turbidity_entry.param->si_value() * (1.0f - efficiency) : 0.f;
     float chromaticity_out = chromaticity_entry.param
             ? chromaticity_entry.param->si_value() * (1.0f - efficiency) : 0.f;
+    float iron_out = iron_entry.param
+            ? iron_entry.param->si_value() * (1.0f - efficiency) : 0.f;
 
     res.push_back(turbidity_out);
     res.push_back(chromaticity_out);
+    res.push_back(iron_out);
 
     m_last_calculation.has_data = true;
     m_last_calculation.has_turbidity = (turbidity_entry.param != nullptr);
     m_last_calculation.has_chromaticity = (chromaticity_entry.param != nullptr);
+    m_last_calculation.has_iron = (iron_entry.param != nullptr);
     m_last_calculation.turbidity_in = turbidity_entry.param ? turbidity_entry.param->si_value() : 0.f;
     m_last_calculation.turbidity_out = turbidity_out;
     m_last_calculation.chromaticity_in = chromaticity_entry.param ? chromaticity_entry.param->si_value() : 0.f;
     m_last_calculation.chromaticity_out = chromaticity_out;
+    m_last_calculation.iron_in = iron_entry.param ? iron_entry.param->si_value() : 0.f;
+    m_last_calculation.iron_out = iron_out;
+    m_last_calculation.iron_unit = iron_entry.param ? iron_entry.param->dimension_si_name() : "";
     m_last_calculation.efficiency = efficiency;
     m_last_calculation.turbidity_unit = turbidity_entry.param ? turbidity_entry.param->dimension_si_name() : "";
     m_last_calculation.chromaticity_unit = chromaticity_entry.param ? chromaticity_entry.param->dimension_si_name() : "";
@@ -386,6 +444,16 @@ std::optional<float> CShadowLightFilter::max_allowed_pressure_pa() const
     return v_threshold_m_s * HYDRAULIC_RESISTANCE_PA_PER_MS;
 }
 
+std::optional<float> CShadowLightFilter::filter_area() const
+{
+    if (!m_last_calculation.has_data || m_last_calculation.filter_area <= 0.f)
+    {
+        return std::nullopt;
+    }
+
+    return m_last_calculation.filter_area;
+}
+
 std::vector<SReportEntry> CShadowLightFilter::generateReport(NCore::COperatingBody *body, IGeneralTor *tor, EReportAction action,
                                                               const Tstring &section_number, uint32_t & formula_start)
 {
@@ -408,7 +476,7 @@ std::vector<SReportEntry> CShadowLightFilter::generateReport(NCore::COperatingBo
         return Tstring(buf);
     };
 
-    uint32_t formula_no = formula_start;
+    
 
     SReportEntry heading;
     heading.kind = EReportEntryKind::SectionHeading;
@@ -425,7 +493,7 @@ std::vector<SReportEntry> CShadowLightFilter::generateReport(NCore::COperatingBo
                        + fmt(m_last_calculation.efficiency) + ")";
         e.result = m_last_calculation.turbidity_out;
         e.unit = m_last_calculation.turbidity_unit;
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 
@@ -439,7 +507,21 @@ std::vector<SReportEntry> CShadowLightFilter::generateReport(NCore::COperatingBo
                        + fmt(m_last_calculation.efficiency) + ")";
         e.result = m_last_calculation.chromaticity_out;
         e.unit = m_last_calculation.chromaticity_unit;
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
+        report.push_back(e);
+    }
+
+    if (m_last_calculation.has_iron)
+    {
+        SReportEntry e;
+        e.kind = EReportEntryKind::Formula;
+        e.parameter_name = "Железо (нерастворённое) на выходе";
+        e.formula_symbolic = "Fe_out = Fe_in * (1 - eta)";
+        e.substituted = "Fe_out = " + fmt(m_last_calculation.iron_in) + " * (1 - "
+                       + fmt(m_last_calculation.efficiency) + ")";
+        e.result = m_last_calculation.iron_out;
+        e.unit = m_last_calculation.iron_unit;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 
@@ -453,7 +535,7 @@ std::vector<SReportEntry> CShadowLightFilter::generateReport(NCore::COperatingBo
                        + fmt(m_last_calculation.filter_area);
         e.result = *backwash;
         e.unit = "м3";
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 

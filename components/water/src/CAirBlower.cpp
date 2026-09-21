@@ -1,5 +1,6 @@
 #include "CAirBlower.h"
 #include "Logger.h"
+#include "../../calc/IShadowManager.h"
 #include "../../CGenericComponent.h"
 #include "../../../automation/CTechnologyBuilder.h"
 #include "../../../automation/codegen/CCodegenShadowsManager.h"
@@ -68,13 +69,12 @@ namespace NCore
 
     COperatingBody *CAirBlower::put_ob(COperatingBody *body, CCap *sender)
     {
-        // Заглушка гидравлики/пневматики (не цель этой сессии) — см. аналогичный
-        // комментарий в CPumpStation::put_ob.
         *m_body = *body;
         m_schName = "ВС" + std::to_string(m_id);
 
         if (sender == m_inputs.front())
         {
+            calculateInBody();
             m_body->set_si_pressure(m_nominal_pressure->si_value());
             return m_outputs.front()->put_ob(m_body, nullptr);
         }
@@ -83,6 +83,44 @@ namespace NCore
             m_inputs.front()->put_ob(m_body, nullptr);
         }
         return nullptr;
+    }
+
+    void CAirBlower::calculateInBody()
+    {
+        Logger &logger = Logger::instance();
+
+        if (m_equipProxy.equip_id == 0)
+        {
+            SEquipmentRequest request = IShadowManager::getEquipRequest(this, m_generalTor, m_body);
+            if (!request.params.empty())
+            {
+                m_info_bus->addRequest(std::move(request));
+            }
+            else
+            {
+                logger.error("CAirBlower: no parameters to request equipment (downstream filter not ready or none found)");
+            }
+            return;
+        }
+
+        auto values = IShadowManager::getBodyParams(this, m_equipProxy, m_generalTor, m_body);
+        if (!values.empty())
+        {
+            m_nominal_pressure->set_si_value(values.front());
+        }
+        else
+        {
+            logger.error("CAirBlower: no calculations result with equipment");
+        }
+    }
+
+    void CAirBlower::set_equipmentProxy(std::vector<SEquipLight> &&items)
+    {
+        if (items.empty())
+            return;
+
+        m_equipmentChoice = std::move(items);
+        m_equipProxy = m_equipmentChoice.at(0);
     }
 
     std::vector<SSignalRole> CAirBlower::required_signals() const

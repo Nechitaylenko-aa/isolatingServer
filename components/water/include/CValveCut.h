@@ -25,12 +25,17 @@ namespace NCore
 
     protected:
         void set_equipment(equip::CEquipment *equip) override {}
-        void set_equipmentProxy(std::vector<SEquipLight> && items) override {}
+        void set_equipmentProxy(std::vector<SEquipLight> && items) override;
 
         [[nodiscard]] std::vector<SSignalRole>           required_signals()      const override;
         [[nodiscard]] std::vector<SCommandRole>          required_commands()     const override;
         [[nodiscard]] std::vector<SAutomationSpec>       automation()             const override;
         [[nodiscard]] std::vector<SDesignConstraintSpec> design_constraints()     const override;
+
+    private:
+        std::vector<SEquipLight> m_equipmentChoice;
+
+        void calculateInBody();
     };
 }
 

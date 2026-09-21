@@ -114,17 +114,42 @@ CShadowWaterCapacity::getCalculationsWithEquip(NCore::SEquipLight &equip_proxy, 
         return res;
     }
 
-    float width    = equip_proxy.params.at(0);
-    float deepness = equip_proxy.params.at(1);
-    float height   = equip_proxy.params.at(2);
-    float volume   = width * deepness * height;
+    auto shape = static_cast<NCore::ETankShape>(equip_proxy.params.at(0));
+    float volume = equip_proxy.params.at(1);   // Vном — от каталога, не пересчитываем
+    float height = equip_proxy.params.at(2);
+    float width = 0.f;      // диаметр (цилиндр/куб) либо X (параллелепипед)
+    float deepness = 0.f;   // Z, только для параллелепипеда
 
+    switch (shape)
+    {
+        case NCore::ETankShape::Cylinder:
+        case NCore::ETankShape::Cube:
+            if (equip_proxy.params.size() < 4)
+            {
+                fprintf(stderr, "CShadowWaterCapacity: cylinder/cube shape needs a 4th field (diameter)\n");
+                return res;
+            }
+            width = equip_proxy.params.at(3);
+            deepness = width;  // для куба X=Z; для цилиндра поле не используется формулой отчёта ниже
+            break;
+        case NCore::ETankShape::Parallelepiped:
+            if (equip_proxy.params.size() < 5)
+            {
+                fprintf(stderr, "CShadowWaterCapacity: parallelepiped shape needs X and Z (5 fields)\n");
+                return res;
+            }
+            width = equip_proxy.params.at(3);
+            deepness = equip_proxy.params.at(4);
+            break;
+    }
+
+    res.push_back(volume);
+    res.push_back(height);
     res.push_back(width);
     res.push_back(deepness);
-    res.push_back(height);
-    res.push_back(volume);
 
     m_last_calculation.has_data = true;
+    m_last_calculation.shape = shape;
     m_last_calculation.width = width;
     m_last_calculation.deepness = deepness;
     m_last_calculation.height = height;
@@ -168,12 +193,26 @@ std::vector<SReportEntry> CShadowWaterCapacity::generateReport(NCore::COperating
     SReportEntry e;
     e.kind = EReportEntryKind::Formula;
     e.parameter_name = "Объём ёмкости";
-    e.formula_symbolic = "V = width * deepness * height";
-    e.substituted = "V = " + fmt(m_last_calculation.width) + " * " + fmt(m_last_calculation.deepness)
-                   + " * " + fmt(m_last_calculation.height);
+    switch (m_last_calculation.shape)
+    {
+        case NCore::ETankShape::Cylinder:
+            e.formula_symbolic = "V = pi/4 * d^2 * H";
+            e.substituted = "V = 0.785 * " + fmt(m_last_calculation.width) + "^2 * " + fmt(m_last_calculation.height);
+            break;
+        case NCore::ETankShape::Cube:
+            e.formula_symbolic = "V = X * X * H (X=Z)";
+            e.substituted = "V = " + fmt(m_last_calculation.width) + " * " + fmt(m_last_calculation.width)
+                           + " * " + fmt(m_last_calculation.height);
+            break;
+        case NCore::ETankShape::Parallelepiped:
+            e.formula_symbolic = "V = X * Z * H";
+            e.substituted = "V = " + fmt(m_last_calculation.width) + " * " + fmt(m_last_calculation.deepness)
+                           + " * " + fmt(m_last_calculation.height);
+            break;
+    }
     e.result = m_last_calculation.volume;
     e.unit = "м3";
-    e.formula_number = formula_start;
+    e.formula_number = formula_start++;
     report.push_back(e);
 
     return report;

@@ -33,7 +33,9 @@ namespace NCore
     private:
         CParameter  * m_volume; // производительность - объем на время
         CParameter  * m_time;   //
+        COperatingBody * m_body_concentrate{nullptr};  // 2-й выход — концентрат (см. .cpp)
 
+        void calculateInBody();
     };
 }
 

@@ -11,15 +11,18 @@
 namespace NCore
 {
     class NComponent;
+    class CConductor;
 
     struct SEquipmentRequest
     {
         NCore::NComponent* sender = nullptr;
+        NCore::CConductor* sender_conductor = nullptr;  // ровно одно из двух — труба не NComponent
         uint64_t id_equip = 0;              // 0 = подбор, >0 = прямой запрос
         std::vector<float> params;          // для подбора или уточнения
         friend bool operator==(const SEquipmentRequest &lhs, const SEquipmentRequest &rhs)
         {
-            return lhs.id_equip == rhs.id_equip && lhs.sender == rhs.sender && lhs.params == rhs.params;
+            return lhs.id_equip == rhs.id_equip && lhs.sender == rhs.sender
+                && lhs.sender_conductor == rhs.sender_conductor && lhs.params == rhs.params;
         }
     };
     struct SEquipLight
@@ -36,6 +39,7 @@ namespace NCore
     struct SEquipmentResponse
     {
         NCore::NComponent* target = nullptr;
+        NCore::CConductor* target_conductor = nullptr;  // ровно одно из двух
         uint64_t id_equip = 0;
         std::vector<uint8_t> rawProxyData;  // сырые байты прокси для компонента
     };

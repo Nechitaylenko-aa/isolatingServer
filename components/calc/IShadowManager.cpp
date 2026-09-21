@@ -12,6 +12,10 @@
 #include "shadows/include/CShadowFilterIonEx.h"
 #include "shadows/include/CShadowWaterCapacity.h"
 #include "shadows/include/CShadowPumpStation.h"
+#include "shadows/include/CShadowThreeWayValve.h"
+#include "shadows/include/CShadowAirBlower.h"
+#include "shadows/include/CShadowValveCut.h"
+#include "shadows/include/CShadowMembraneOsmos.h"
 
 IShadowManager::IShadowManager() = default;
 
@@ -61,7 +65,7 @@ IShadowManager::getBodyParams(NCore::NComponent *component, NCore::SEquipLight &
 
 std::vector<SReportEntry>
 IShadowManager::generateReport(NCore::NComponent *component, IGeneralTor *tor, NCore::COperatingBody *body,
-                                EReportAction action, const Tstring &section_number, uint32_t formula_start)
+                                EReportAction action, const Tstring &section_number, uint32_t &formula_start)
 {
     auto shadow = instance().getShadow(component);
     if (shadow)
@@ -126,7 +130,7 @@ IShadow *IShadowManager::getWaterShadow(NCore::E_WATER_COMPONENTS subtype, NCore
         case NCore::EWB_WATER_FILTER_SORPTION:
             return new CShadowFilterSorption(component);
         case NCore::EWB_MEMBRANE_OSMOS:
-            break;
+            return new CShadowMembraneOsmos(component);
         case NCore::EWB_MEMBRANE_NANO:
             break;
         case NCore::EWB_MEMBRANE_ULTRA:
@@ -137,6 +141,12 @@ IShadow *IShadowManager::getWaterShadow(NCore::E_WATER_COMPONENTS subtype, NCore
             return new CShadowPumpStation(component);
         case NCore::EWB_ACCOUNT_NODE:
             break;
+        case NCore::EWB_VALVE_WATER_THREE_WAY:
+            return new CShadowThreeWayValve(component);
+        case NCore::EWB_AIR_BLOWER:
+            return new CShadowAirBlower(component);
+        case NCore::EWB_VALVE_CUT:
+            return new CShadowValveCut(component);
         case NCore::EWB_COUNT:
             break;
         default:

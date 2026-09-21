@@ -146,7 +146,7 @@ std::vector<SReportEntry> CShadowFilterIonEx::generateReport(NCore::COperatingBo
         return Tstring(buf);
     };
 
-    uint32_t formula_no = formula_start;
+    
 
     SReportEntry heading;
     heading.kind = EReportEntryKind::SectionHeading;
@@ -163,7 +163,7 @@ std::vector<SReportEntry> CShadowFilterIonEx::generateReport(NCore::COperatingBo
                        + fmt(m_last_calculation.efficiency) + ")";
         e.result = m_last_calculation.hardness_out;
         e.unit = m_last_calculation.hardness_unit;
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 
@@ -176,7 +176,7 @@ std::vector<SReportEntry> CShadowFilterIonEx::generateReport(NCore::COperatingBo
         e.substituted = "V = 3.5 * " + fmt(m_last_calculation.resin_volume) + " * 2";
         e.result = *rinse;
         e.unit = "м3";
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 

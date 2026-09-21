@@ -7,6 +7,7 @@
 
 #include "../../IShadow.h"
 #include <optional>
+#include "../../../water/include/CWaterCapacity.h"
 
 namespace NCore
 {
@@ -41,6 +42,7 @@ private:
     struct SLastCalculation
     {
         bool    has_data{false};
+        NCore::ETankShape shape{NCore::ETankShape::Parallelepiped};
         float   width{0.f};
         float   deepness{0.f};
         float   height{0.f};

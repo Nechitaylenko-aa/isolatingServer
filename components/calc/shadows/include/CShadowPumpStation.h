@@ -39,6 +39,7 @@ private:
         float   max_allowed{0.f};    // Па — минимум по фильтрам ниже по потоку (нет предела, если их нет)
         bool    has_upper_bound{false};
         float   selected_pressure{0.f};
+        float   selected_flow{0.f};
     } m_last_calculation;
 
     /** @brief nullopt — сосед найден, но ещё не подобран (жди следующего цикла).

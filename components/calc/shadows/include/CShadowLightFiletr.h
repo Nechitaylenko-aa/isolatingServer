@@ -60,9 +60,20 @@ private:
         bool    has_backwash_intensity{false};
         float   backwash_intensity{0.f};   // i, л/(с·м²) — известна не для всех типов загрузки, см. .cpp
         float   v_max{0.f};                 // м/ч — из выбранного оборудования, нужен насосу
+        bool    has_iron{false};
+        float   iron_in{0.f};
+        float   iron_out{0.f};
+        Tstring iron_unit;
     } m_last_calculation;
 
     [[nodiscard]] std::map<E_MEASURE_UNITS, SParamWithLimit> collect_tracked_params(
+            NCore::COperatingBody * body, IGeneralTor * tor) const;
+
+    /** @brief Нерастворённое железо — EMU_CONCENTRATION вместе с десятком других веществ,
+     *  общий std::map по measure_unit() его не отличит (см. чат). Отдельный явный проход,
+     *  ищет chemicalElement()==Fe. TODO(нет данных): types.h пока не различает
+     *  растворённую/нерастворённую форму — используется общий Fe для обеих. */
+    [[nodiscard]] SParamWithLimit find_undissolved_iron(
             NCore::COperatingBody * body, IGeneralTor * tor) const;
 
 public:
@@ -78,6 +89,10 @@ public:
      *  использовались в getCalculationsWithEquip для предупреждения — не дублирую формулу заново,
      *  см. .cpp. nullopt, пока оборудование не подобрано. */
     [[nodiscard]] std::optional<float> max_allowed_pressure_pa() const;
+
+    /** @brief Площадь фильтрования — нужна воздуходувке (расход воздуха на промывку = i * F).
+     *  nullopt, пока оборудование не подобрано. */
+    [[nodiscard]] std::optional<float> filter_area() const;
 };
 
 

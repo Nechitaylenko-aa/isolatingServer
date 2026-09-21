@@ -149,7 +149,7 @@ std::vector<SReportEntry> CShadowFilterSorption::generateReport(NCore::COperatin
         return Tstring(buf);
     };
 
-    uint32_t formula_no = formula_start;
+    
 
     SReportEntry heading;
     heading.kind = EReportEntryKind::SectionHeading;
@@ -166,7 +166,7 @@ std::vector<SReportEntry> CShadowFilterSorption::generateReport(NCore::COperatin
                        + fmt(m_last_calculation.efficiency) + ")";
         e.result = m_last_calculation.smell_out;
         e.unit = m_last_calculation.smell_unit;
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 
@@ -180,7 +180,7 @@ std::vector<SReportEntry> CShadowFilterSorption::generateReport(NCore::COperatin
                        + fmt(m_last_calculation.efficiency) + ")";
         e.result = m_last_calculation.flavor_out;
         e.unit = m_last_calculation.flavor_unit;
-        e.formula_number = formula_no++;
+        e.formula_number = formula_start++;
         report.push_back(e);
     }
 

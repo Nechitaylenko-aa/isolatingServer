@@ -17,6 +17,8 @@
 
 #include "../include/CMembraneOsmos.h"
 #include "../../../include/Logger.h"
+#include "../../calc/IShadowManager.h"
+#include "CShadowMembraneOsmos.h"
 #include <cassert>
 
 namespace NCore
@@ -37,6 +39,13 @@ namespace NCore
         m_body = body;
         m_inputs.push_back(in);
         m_outputs.push_back(out);
+
+        // 2-й выход — концентрат (реально существует физически, раньше не был выведен,
+        // см. чат). Тот же приём add_ob(..., CT_ADDITIONAL), что и у CWaterCapacity.
+        auto [in2, out2, body2] = add_ob(&ob, CT_ADDITIONAL);
+        m_body_concentrate = body2;
+        delete this->remove_input(in2);
+        m_outputs.push_back(out2);
 
         m_volume = new CParameter(E_MEASURE_UNITS::EMU_VOLUME, EMUVOL::emv_liter,
                                    500, EStandardPrefix::ESP_NONE, Tstring ("производительность"));
@@ -87,22 +96,35 @@ namespace NCore
 
     COperatingBody *CMembraneOsmos::put_ob(COperatingBody *body, CCap *sender)
     {
-        // Заглушка расчёта пермеата (не цель этой сессии) — тождественное протекание,
-        // как у фильтра до появления Shadow-расчёта. Реальный расчёт (recovery ratio,
-        // отбраковка солей и т.п.) — предмет будущего CShadowMembraneOsmos по аналогии
-        // с CShadowLightFilter, не входит в объём сегодняшней задачи (компоненты нужны
-        // только для проверки кандидатов слоя 3/4, не для содержательной гидравлики).
         *m_body = *body;
 
         if (sender == m_inputs.front())
         {
+            calculateInBody();
+            *m_body_concentrate = *m_body;  // TODO(нет данных): состав концентрата не
+                                             // пересчитывается отдельно, см. CShadowMembraneOsmos
+            m_body_concentrate->set_si_volume(0);  // объём не переносим через тело — расход, не объём разовой порции
+
+            m_outputs.at(1)->put_ob(m_body_concentrate, nullptr);
             return m_outputs.front()->put_ob(m_body, nullptr);
         }
-        if (sender == m_outputs.front())
+        if (sender == m_outputs.front() || sender == m_outputs.at(1))
         {
             m_inputs.front()->put_ob(m_body, nullptr);
         }
         return nullptr;
+    }
+
+    void CMembraneOsmos::calculateInBody()
+    {
+        // Не подбор из БД — считает безусловно, без equip_id (см. CShadowMembraneOsmos.h).
+        // Тот же приём каста на конкретную тень, что уже используется у насоса/ёмкости/
+        // воздуходувки — здесь IShadow-интерфейс не подходит (getEquipRequest всегда {}).
+        auto *shadow = IShadowManager::getComponentShadow(this);
+        if (shadow)
+        {
+            static_cast<CShadowMembraneOsmos*>(shadow)->purify(m_body, m_generalTor);
+        }
     }
 
     // ---- Слой 2 автоматизации ---------------------------------------------------------

@@ -54,6 +54,8 @@ namespace NCore
         void  set_schematicName(const Tstring & schName);
         [[nodiscard]] Tstring  schematicName() const;
 
+        IGeneralTor*    tor();
+
         virtual void set_equipment(equip::CEquipment *equip) = 0;
         virtual void set_equipmentProxy(std::vector<SEquipLight> && items) = 0;
         void set_callbackUpdateColor(std::function<void()> handler);

@@ -9,6 +9,12 @@
 
 namespace NCore
 {
+    /** @brief Форма ёмкости — решает каталог, приходит в ответе. */
+    enum class ETankShape : uint8_t
+    {
+        Cylinder, Parallelepiped, Cube
+    };
+
     class CWaterCapacity : public NComponent
     {
     public:
@@ -32,7 +38,7 @@ namespace NCore
 
     protected:
         void set_equipment(equip::CEquipment *equip) override {}
-        void set_equipmentProxy(std::vector<SEquipLight> && items) override {}
+        void set_equipmentProxy(std::vector<SEquipLight> && items) override;
 
     private:
         CParameter  * m_volume;
@@ -40,9 +46,11 @@ namespace NCore
         CParameter  * m_deepness;
         CParameter  * m_height;
         ESignalRole   m_signal_role;
+        std::vector<SEquipLight> m_equipmentChoice;
 
         Tuint64   m_idIn1{0}, m_idIn2;
 
+        void calculateInBody();
     };
 }
 

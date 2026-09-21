@@ -15,6 +15,7 @@
 
 #include "../include/CWaterCapacity.h"
 #include "../../../include/Logger.h"
+#include "../../calc/IShadowManager.h"
 #include <cassert>
 
 namespace NCore
@@ -109,6 +110,7 @@ namespace NCore
 
         if (sender == m_inputs.front())
         {
+            calculateInBody();
             return m_outputs.front()->put_ob(m_body, nullptr);
         }
         if (sender == m_outputs.front())
@@ -116,6 +118,52 @@ namespace NCore
             m_inputs.front()->put_ob(m_body, nullptr);
         }
         return nullptr;
+    }
+
+    void CWaterCapacity::calculateInBody()
+    {
+        Logger &logger = Logger::instance();
+
+        if (m_equipProxy.equip_id == 0)
+        {
+            SEquipmentRequest request = IShadowManager::getEquipRequest(this, m_generalTor, m_body);
+            if (!request.params.empty())
+            {
+                m_info_bus->addRequest(std::move(request));
+            }
+            else
+            {
+                logger.error("CWaterCapacity: no parameters to request equipment");
+            }
+            return;
+        }
+
+        // [0]=Vном, [1]=H, [2]=X/диаметр, [3]=Z (Z не используется для цилиндра/куба)
+        auto values = IShadowManager::getBodyParams(this, m_equipProxy, m_generalTor, m_body);
+
+        if (values.size() >= 3)
+        {
+            m_volume->set_si_value(values.at(0));
+            m_height->set_si_value(values.at(1));
+            m_width->set_si_value(values.at(2));
+            if (values.size() >= 4)
+            {
+                m_deepness->set_si_value(values.at(3));
+            }
+        }
+        else
+        {
+            logger.error("CWaterCapacity: no calculations result with equipment");
+        }
+    }
+
+    void CWaterCapacity::set_equipmentProxy(std::vector<SEquipLight> &&items)
+    {
+        if (items.empty())
+            return;
+
+        m_equipmentChoice = std::move(items);
+        m_equipProxy = m_equipmentChoice.at(0);
     }
 
     // ---- Слой 2 автоматизации ---------------------------------------------------------

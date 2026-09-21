@@ -130,11 +130,16 @@ CShadowPumpStation::getCalculationsWithEquip(NCore::SEquipLight &equip_proxy, NC
 
     float selected_pressure = equip_proxy.params.at(0);  // Па — паспортное давление выбранного насоса
     res.push_back(selected_pressure);
+    if (equip_proxy.params.size() >= 2)
+    {
+        res.push_back(equip_proxy.params.at(1));  // Qном — паспортный расход, отдельно от того, что просили
+    }
 
     auto demand = gather_downstream_demand();
 
     m_last_calculation.has_data = true;
     m_last_calculation.selected_pressure = selected_pressure;
+    m_last_calculation.selected_flow = equip_proxy.params.size() >= 2 ? equip_proxy.params.at(1) : 0.f;
     m_last_calculation.min_required = demand ? demand->min_required : 0.f;
     m_last_calculation.max_allowed = (demand && demand->has_upper_bound) ? demand->max_allowed : 0.f;
     m_last_calculation.has_upper_bound = demand && demand->has_upper_bound;
@@ -172,7 +177,7 @@ std::vector<SReportEntry> CShadowPumpStation::generateReport(NCore::COperatingBo
                     + (m_last_calculation.has_upper_bound ? (", P_max = " + fmt(m_last_calculation.max_allowed)) : Tstring(", P_max = не ограничено"));
     e.result = m_last_calculation.selected_pressure;
     e.unit = "Па";
-    e.formula_number = formula_start;
+    e.formula_number = formula_start++;
     report.push_back(e);
 
     return report;
