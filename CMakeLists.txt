@@ -1,141 +1,101 @@
-cmake_minimum_required(VERSION 3.20)  # Лучше 3.20, как у всех
-
-set(LIB_CORE core)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+cmake_minimum_required(VERSION 3.19)
+project(cli_agent LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
-    set(LIB_CORE ${LIB_CORE}d)
+# --- libclang (для core) ---
+# Авто-детект: Debian/Ubuntu -> /usr/lib/llvm-19, FreeBSD -> /usr/local/llvm19
+if(NOT LIBCLANG_LIBRARY_DIR)
+    if(EXISTS "/usr/lib/llvm-19/lib/libclang.so")
+        set(LIBCLANG_LIBRARY_DIR "/usr/lib/llvm-19/lib")
+    elseif(EXISTS "/usr/lib/llvm-19/lib/libclang-19.so.1")
+        set(LIBCLANG_LIBRARY_DIR "/usr/lib/llvm-19/lib")
+    elseif(EXISTS "/usr/lib/x86_64-linux-gnu/libclang-19.so.19")
+        set(LIBCLANG_LIBRARY_DIR "/usr/lib/x86_64-linux-gnu")
+    else()
+        set(LIBCLANG_LIBRARY_DIR "/usr/local/llvm19/lib")
+    endif()
 endif()
-
-project(${LIB_CORE})
-
-set(CORE_LIB ${PROJECT_NAME} CACHE INTERNAL "")
-
-# --- Пути ---
-set(PUBLIC_HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set(PRIVATE_SRC_DIR   ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-# --- Публичные заголовки ---
-file(GLOB_RECURSE PUBLIC_HEADERS
-        ${PUBLIC_HEADER_DIR}/*.h
+if(NOT LIBCLANG_INCLUDE_DIR)
+    if(EXISTS "/usr/lib/llvm-19/include/clang-c/Index.h")
+        set(LIBCLANG_INCLUDE_DIR "/usr/lib/llvm-19/include")
+    else()
+        set(LIBCLANG_INCLUDE_DIR "/usr/local/llvm19/include")
+    endif()
+endif()
+# Debian/Ubuntu: libclang-19.so.19 лежит в /usr/lib/x86_64-linux-gnu без .so-симлинка без -dev.
+# Поэтому пробуем несколько имён и даём фолбэк на явный путь.
+find_library(LIBCLANG_LIB
+        NAMES clang libclang clang-19 libclang-19
+        PATHS ${LIBCLANG_LIBRARY_DIR} /usr/lib/llvm-19/lib /usr/lib/x86_64-linux-gnu
         )
-include_directories(
-        include
-)
-# --- Исходники core ---
-file(GLOB_RECURSE CORE_SOURCES
-        ${PRIVATE_SRC_DIR}/*.cpp
-        automation/*.cpp
-        automation/*.h
+if(NOT LIBCLANG_LIB AND EXISTS "/usr/lib/x86_64-linux-gnu/libclang-19.so.19")
+    set(LIBCLANG_LIB "/usr/lib/x86_64-linux-gnu/libclang-19.so.19")
+endif()
+if(NOT LIBCLANG_LIB AND EXISTS "/usr/lib/llvm-19/lib/libclang-19.so.1")
+    set(LIBCLANG_LIB "/usr/lib/llvm-19/lib/libclang-19.so.1")
+endif()
+if(NOT LIBCLANG_LIB)
+    message(FATAL_ERROR "libclang not found. Установи libclang-dev или укажи -DLIBCLANG_LIBRARY_DIR=/usr/lib/x86_64-linux-gnu")
+endif()
+message(STATUS "LIBCLANG_LIB=${LIBCLANG_LIB}")
+
+find_package(CURL REQUIRED)
+include_directories(/usr/include)
+
+# --- core: слой 0 (libclang). НИЧЕГО не знает о моделях — ни один файл
+# здесь не инклюдит model_broker.h/orchestrator.h и не линкует CURL. ---
+add_library(core STATIC
+        core/src/clang_index.cpp
+        core/src/query_locate_symbol.cpp
+        core/src/query_class_outline.cpp
+        core/src/query_symbol_refs.cpp
+        core/src/compile_commands.cpp
+        core/src/build_graph.cpp
+        core/src/blast_radius.cpp
+        core/src/project_index.cpp
         )
+target_include_directories(core PUBLIC core/include third_party ${LIBCLANG_INCLUDE_DIR} /usr/local/llvm19/include)
+target_link_libraries(core PUBLIC ${LIBCLANG_LIB})
+set_target_properties(core PROPERTIES BUILD_RPATH "${LIBCLANG_LIBRARY_DIR}")
 
-# --- IPlant фасад (вариант Б) ---
-file(GLOB_RECURSE PLANT_SOURCES
-        plant/*.cpp
-        plant/*.h
+# --- agent: слой 3-5 (модели, оркестратор). НЕ линкует libclang напрямую —
+# зовёт core только через его публичные json-возвращающие функции (queries.h,
+# compile_commands.h, build_graph.h), которые agent/src/orchestrator.cpp
+# инклюдит из core/include. Разделение осталось, просто не через процесс. ---
+add_library(agent STATIC
+        agent/src/model_broker.cpp
+        agent/src/orchestrator.cpp
+        agent/src/handlers.cpp
+        agent/src/ground_service.cpp
+        agent/src/main_model_broker.cpp
+        agent/src/execute_service.cpp
+        agent/src/verify_service.cpp
         )
-
-# --- Компоненты и оборудование ---
-file(GLOB_RECURSE COMPONENT_SOURCES
-        components/*.cpp
-        equipment/*.cpp
-        )
-
-# --- Заголовки компонентов (для установки) ---
-file(GLOB_RECURSE COMPONENT_HEADERS
-        components/*.h
-        equipment/*.h
-        )
-file(GLOB_RECURSE logger
-        ../server/sources/logger-common/logger.cpp
-        )
-
-# --- Сборка библиотеки ---
-add_library(${PROJECT_NAME} STATIC
-        ${PUBLIC_HEADERS}
-        ${COMPONENT_HEADERS}
-        ${CORE_SOURCES}
-        ${COMPONENT_SOURCES}
-        ${PLANT_SOURCES}
-        ${logger}
-        )
-
-# --- Настройка инклудов ---
-target_include_directories(${PROJECT_NAME}
-        PUBLIC
-        $<BUILD_INTERFACE:${PUBLIC_HEADER_DIR}>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plant>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        $<INSTALL_INTERFACE:include>
-        PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/equipment/base/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/equipment/water/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/components/water/include
-
-
-        ${CMAKE_SOURCE_DIR}/libmeasures/include
-        ${CMAKE_SOURCE_DIR}/libmultilang/include
-        #${CMAKE_SOURCE_DIR}/server/sources/logger-common
-
-
-        ${CMAKE_BINARY_DIR}/libmeasures
-        ${CMAKE_BINARY_DIR}/libmultilang
-
-        ../interfaces/include
-        ../saver/include
-        /usr/include
+target_include_directories(agent PUBLIC
+        agent/include
+        third_party
         /usr/local/include
-        ${CMAKE_CURRENT_BINARY_DIR}
         )
+target_link_libraries(agent PUBLIC CURL::libcurl core)
 
-# --- Скрываем символы ---
-set_target_properties(${PROJECT_NAME} PROPERTIES
-        CXX_VISIBILITY_PRESET hidden
-        VISIBILITY_INLINES_HIDDEN ON
-        )
+# --- единый бинарник ---
+add_executable(cli_agent cli/main.cpp)
+target_link_libraries(cli_agent PRIVATE core agent)
 
-# --- Генерируем export header ---
-include(GenerateExportHeader)
-
-GENERATE_EXPORT_HEADER(${PROJECT_NAME}
-        BASE_NAME ${PROJECT_NAME}
-        EXPORT_MACRO_NAME CORE_EXPORT
-        EXPORT_FILE_NAME core_export.h
-        STATIC_DEFINE CORE_STATIC
-        )
-
-# --- Линковка зависимостей ---
-find_package(Threads REQUIRED)
-target_link_libraries(${PROJECT_NAME}
-        PUBLIC
-        ${MEASURE_LIB}
-        ${LIB_LANG}
-        PRIVATE
-        Threads::Threads
-        )
-
-# --- Установка ---
-#install(TARGETS ${PROJECT_NAME}
-#        EXPORT coreTargets
-#        LIBRARY DESTINATION lib
-#        ARCHIVE DESTINATION lib
-#        RUNTIME DESTINATION bin
-#        )
-
-#install(DIRECTORY ${PUBLIC_HEADER_DIR}/
-#        DESTINATION include
-#        FILES_MATCHING PATTERN "*.h"
-#        )
-
-#install(FILES ${CMAKE_CURRENT_BINARY_DIR}/core_export.h
-#        DESTINATION include
-#        )
-
-#install(EXPORT coreTargets
-#        FILE coreTargets.cmake
-#        NAMESPACE core::
-#        DESTINATION lib/cmake/core
-#        )
+# --- тесты (Catch2 3.x, S4.1) — некошерно руками, только assert --- 
+enable_testing()
+list(APPEND CMAKE_PREFIX_PATH "/usr/lib/cmake/Catch2")
+find_package(Catch2 3 QUIET)
+if(Catch2_FOUND)
+    add_executable(agent_tests agent/tests/test_execute_service.cpp)
+    target_link_libraries(agent_tests PRIVATE agent core Catch2::Catch2WithMain)
+    target_include_directories(agent_tests PRIVATE agent/include core/include third_party ${LIBCLANG_INCLUDE_DIR})
+    include(Catch)
+    catch_discover_tests(agent_tests)
+    message(STATUS "Catch2 found — agent_tests enabled")
+else()
+    message(STATUS "Catch2 not found — agent_tests skipped (install libcatch2-dev)")
+endif()

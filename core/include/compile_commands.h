@@ -1,0 +1,46 @@
+#pragma once
+#include "json.hpp"
+#include <string>
+#include <vector>
+#include <optional>
+#include <unordered_map>
+
+namespace cpptool {
+
+using json = nlohmann::json;
+
+// Разбирает compile_commands.json один раз и даёт быстрый поиск по абсолютному
+// пути файла. compile_commands.json хранит "command" одной строкой — здесь она
+// токенизируется в argv-подобный список и из него вычищаются
+// входной/выходной файлы (-o ..., -c <file>), чтобы остались только флаги,
+// пригодные для передачи в clang_parseTranslationUnit.
+class CompileCommandsIndex {
+public:
+    static std::optional<CompileCommandsIndex> load(const std::string& compileCommandsPath);
+
+    // Возвращает флаги для файла (без самого файла и без -o/-c), либо nullopt,
+    // если файла нет в базе — тогда query.file_flags вернёт needs_input,
+    // а не тихо подставит дефолтные флаги.
+    std::optional<std::vector<std::string>> flagsFor(const std::string& absoluteFilePath) const;
+
+    // Эвристика для заголовков (см. ТЗ §12): заголовок сам по себе не имеет
+    // записи в compile_commands.json, только .cpp, который его подключает.
+    // Возвращает флаги первого найденного файла из базы, чей текст содержит
+    // "#include ... <basename заголовка>", и путь этого файла — чтобы вызывающий
+    // код мог честно указать в ответе, что флаги позаимствованы у соседа,
+    // а не найдены напрямую.
+    struct HeaderFlagsResult {
+        std::vector<std::string> flags;
+        std::string resolved_via_file;
+    };
+    std::optional<HeaderFlagsResult> flagsForHeaderViaCompanion(const std::string& headerPath) const;
+
+    size_t size() const { return byFile_.size(); }
+
+private:
+    std::unordered_map<std::string, std::vector<std::string>> byFile_;
+};
+
+json queryFileFlags(const std::string& compileCommandsPath, const std::string& file);
+
+} // namespace cpptool
