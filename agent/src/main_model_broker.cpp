@@ -64,7 +64,7 @@ GenerateResult StubMainModelBroker::generate(const GenerateRequest& req){
         if(!req.file.empty()){
             std::string g = truncateUtf8(req.goalText, 80);
             std::string insert = "\n// stub-main " + req.primitiveStr + ": " + g + "\n";
-            r.actions = json::array({ json{{"file", req.file}, {"oldText", ""}, {"newText", insert}} });
+            r.actions = json::array({ json{{"oldText", ""}, {"newText", insert}} });
         }
     } else {
         r.actions = json::array();
@@ -75,9 +75,13 @@ GenerateResult StubMainModelBroker::generate(const GenerateRequest& req){
 GenerateResult HttpMainModelBroker::generate(const GenerateRequest& req){
     std::string systemPrompt =
         "Ты — C++ ассистент-генератор правок. По примитиву и контексту метода сгенерируй план и точные правки файлов.\n"
-        "Отвечай СТРОГО JSON без markdown: {\"plan\": \"...шаги...\", \"rationale\": \"...\", \"actions\": [{\"file\": \"...абс путь...\", \"oldText\": \"точный кусок для замены или \\\"\" для вставки в конец\", \"newText\": \"...\"}] }\n"
-        "Правила: file бери из запроса, oldText должен точно совпадать с содержимым файла (иначе замена провалится), для вставки ставь oldText=\\\"\\\". Не придумывай файлы.";
+        "Отвечай СТРОГО JSON без markdown: {\"plan\": \"...шаги...\", \"rationale\": \"...\", \"actions\": [{\"oldText\": \"точный кусок для замены или \\\"\" для вставки в конец\", \"newText\": \"...\"}] }\n"
+        "НЕ указывай поле \"file\" — файл уже известен системе (берётся из курсора), ты генерируешь только oldText/newText.\n"
+        "Правила: oldText должен точно совпадать с содержимым файла (иначе замена провалится), для вставки ставь oldText=\"\".";
     std::string userPrompt = "primitive=" + req.primitiveStr + "\ngoal=" + req.goalText + "\nfile=" + req.file + "\nmethod=" + req.methodSignature + "\nusr=" + req.methodUSR + "\nscale=" + req.scaleFacts.dump();
+    // Без фрагмента файла модель не может выдать oldText, точно совпадающий с содержимым:
+    // она его не видела и либо выдумывает несуществующую строку, либо вставляет в конец (oldText:"").
+    if(!req.fileContext.empty()) userPrompt += "\n--- file content (with line numbers) ---\n" + req.fileContext;
     json body = {{"messages", json::array({{{"role","system"},{"content",systemPrompt}}, {{"role","user"},{"content",userPrompt}}})}, {"temperature",0.2}, {"max_tokens",1200}};
     if(!modelName_.empty()) body["model"]=modelName_;
     std::string url = baseUrl_ + "/v1/chat/completions";
@@ -94,9 +98,10 @@ GenerateResult HttpMainModelBroker::generate(const GenerateRequest& req){
     GenerateResult gr; gr.ok=true; gr.planText=inner.value("plan", content); gr.rationale=inner.value("rationale", "");
     if(inner.contains("actions") && inner["actions"].is_array()) gr.actions = inner["actions"];
     else gr.actions = json::array();
-    // валидация actions: отбрасываем без file
+    // валидация actions: путь приходит из Ground, а не от модели — проверяем только
+    // наличие содержимого правки (oldText/newText), поле "file" не требуется.
     json filtered=json::array();
-    for(auto& a: gr.actions) if(a.contains("file") && a["file"].is_string() && !a["file"].get<std::string>().empty()) filtered.push_back(a);
+    for(auto& a: gr.actions) if(a.is_object() && (a.contains("oldText") || a.contains("newText"))) filtered.push_back(a);
     gr.actions = filtered;
     return gr;
 }

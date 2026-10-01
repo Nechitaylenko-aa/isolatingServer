@@ -37,7 +37,11 @@ void printUsage() {
         "      phrases.txt — одна фраза/строку, '#' комментарий. --repeat N — стабильность. --temperature T (по умолчанию 0.1).\n"
         "\n"
         "  Без --model-url используется StubModelBroker (light 8GiB).\n"
-        "  Без --main-model-url используется StubMainModelBroker (plan-заглушка).\n";
+        "  Без --main-model-url используется StubMainModelBroker (plan-заглушка).\n"
+        "\n"
+        "  Бенчмарк классификатора по датасету с expected-метками:\n"
+        "    cli_agent benchmark <dataset.json> [--model-url <url>] [--model-name <n>] [--temperature T] [--json]\n"
+        "      dataset.json — массив объектов {id, goal_text, expected}. Выводит accuracy по примитивам.\n";
 }
 
 // --- разбор аргументов для отладочных query-команд (как раньше в cpp-tool) ---
@@ -206,6 +210,123 @@ int classifyCommand(int argc, char** argv) {
     return 0;
 }
 
+// --- команда benchmark: прогон по датасету с expected-метками ---
+int benchmarkCommand(int argc, char** argv) {
+    if (argc < 3) { printUsage(); return 2; }
+    std::string datasetPath = argv[2];
+    std::string modelUrl, modelName;
+    bool jsonOut = false;
+    double temperature = 0.1;
+    for (int i = 3; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--model-url" && i + 1 < argc) modelUrl = argv[++i];
+        else if (a == "--model-name" && i + 1 < argc) modelName = argv[++i];
+        else if (a == "--temperature" && i + 1 < argc) temperature = std::stod(argv[++i]);
+        else if (a == "--json") jsonOut = true;
+    }
+
+    std::ifstream in(datasetPath);
+    if (!in) { std::cerr << "не удалось открыть " << datasetPath << "\n"; return 2; }
+    json dataset;
+    try { in >> dataset; }
+    catch (const std::exception& e) { std::cerr << "dataset.json не распарсился: " << e.what() << "\n"; return 2; }
+    if (!dataset.is_array()) { std::cerr << "dataset.json должен быть массивом [{id,goal_text,expected}]\n"; return 2; }
+
+    std::unique_ptr<cppagent::ModelBroker> model;
+    if (modelUrl.empty()) model = std::make_unique<cppagent::StubModelBroker>();
+    else model = std::make_unique<cppagent::LightModelBroker>(modelUrl, modelName, temperature);
+
+    std::map<std::string,int> perClassCorrect, perClassTotal;
+    int totalCorrect = 0, totalRun = 0;
+    int unavailableCount = 0;
+    json rows = json::array();
+
+    for (auto& item : dataset) {
+        if (!item.contains("goal_text") || !item.contains("expected")) continue;
+        std::string goalText = item["goal_text"].get<std::string>();
+        std::string expected = item["expected"].get<std::string>();
+        std::string id = item.value("id", "");
+
+        cppagent::PrimitiveGuess g = model->classifyIntent(goalText);
+        std::string got = g.modelUnavailable ? "UNAVAILABLE" : g.primitiveStr;
+
+        if (g.modelUnavailable) {
+            ++unavailableCount;
+            if (!jsonOut)
+                std::cerr << "[UNAVAIL] " << id << ": " << g.rationale << "\n";
+            if (unavailableCount >= 3) {
+                std::cerr << "Модель недоступна (3 подряд), прерываем.\n";
+                break;
+            }
+            continue;
+        }
+
+        bool correct = (got == expected);
+        ++totalRun;
+        if (correct) ++totalCorrect;
+        perClassTotal[expected]++;
+        if (correct) perClassCorrect[expected]++;
+
+        json row;
+        row["id"] = id;
+        row["goal_text"] = goalText;
+        row["expected"] = expected;
+        row["got"] = got;
+        row["correct"] = correct;
+        row["confidence"] = g.confidence;
+        row["alternative"] = g.alternativePrimitiveStr;
+        row["rationale"] = g.rationale;
+        rows.push_back(row);
+
+        if (!jsonOut) {
+            std::cout << (correct ? "[OK ] " : "[ERR] ")
+                      << std::left << std::setw(16) << id
+                      << " expected=" << std::left << std::setw(14) << expected
+                      << " got=" << std::left << std::setw(14) << got
+                      << " conf=" << std::fixed << std::setprecision(2) << g.confidence
+                      << "\n";
+        }
+    }
+
+    json summary;
+    summary["total"] = totalRun;
+    summary["correct"] = totalCorrect;
+    summary["accuracy"] = totalRun > 0 ? double(totalCorrect) / double(totalRun) : 0.0;
+    summary["unavailable"] = unavailableCount;
+    json perClass = json::object();
+    for (auto& [prim, tot] : perClassTotal) {
+        int cor = perClassCorrect.count(prim) ? perClassCorrect[prim] : 0;
+        perClass[prim] = {
+            {"correct", cor},
+            {"total", tot},
+            {"accuracy", tot > 0 ? double(cor)/double(tot) : 0.0}
+        };
+    }
+    summary["per_class"] = perClass;
+
+    if (jsonOut) {
+        json out;
+        out["summary"] = summary;
+        out["rows"] = rows;
+        std::cout << out.dump(2) << std::endl;
+    } else {
+        std::cout << "\n=== ИТОГО: " << totalCorrect << "/" << totalRun
+                  << " (" << std::fixed << std::setprecision(1)
+                  << (totalRun > 0 ? 100.0*totalCorrect/totalRun : 0.0) << "%) ===";
+        if (unavailableCount > 0) std::cout << " unavailable=" << unavailableCount;
+        std::cout << "\n";
+        std::cout << "\nПо примитивам:\n";
+        for (auto& [prim, tot] : perClassTotal) {
+            int cor = perClassCorrect.count(prim) ? perClassCorrect[prim] : 0;
+            std::cout << "  " << std::left << std::setw(16) << prim
+                      << cor << "/" << tot
+                      << " (" << std::fixed << std::setprecision(0)
+                      << (tot > 0 ? 100.0*cor/tot : 0.0) << "%)\n";
+        }
+    }
+    return (totalRun > 0 && double(totalCorrect)/double(totalRun) >= 0.8) ? 0 : 1;
+}
+
 // --- команда run: запуск оркестратора ---
 int runAgentCommand(int argc, char** argv) {
     if (argc < 3) { printUsage(); return 2; }
@@ -275,6 +396,7 @@ int main(int argc, char** argv) {
     if (command == "run") return runAgentCommand(argc, argv);
     if (command == "undo") return undoCommand(argc, argv);
     if (command == "classify") return classifyCommand(argc, argv);
+    if (command == "benchmark") return benchmarkCommand(argc, argv);
 
     static const std::vector<std::string> queryCommands =
         {"locate_symbol", "class_outline", "symbol_refs", "file_flags", "build_graph"};

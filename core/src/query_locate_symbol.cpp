@@ -84,11 +84,15 @@ json queryLocateSymbol(const std::string& file, unsigned line, unsigned col,
     };
 
     if (!clang_Cursor_isNull(enclosingFunction)) {
+        CXCursorKind fk = clang_getCursorKind(enclosingFunction);
+        bool isMethod = (fk == CXCursor_CXXMethod);
         result["enclosing_method"] = {
             {"usr", cursorUSR(enclosingFunction)},
             {"signature", buildMethodSignature(enclosingFunction)},
             {"file", cursorFile(enclosingFunction)},
-            {"line", cursorLine(enclosingFunction)}
+            {"line", cursorLine(enclosingFunction)},
+            {"is_virtual",      isMethod && static_cast<bool>(clang_CXXMethod_isVirtual(enclosingFunction))},
+            {"is_pure_virtual", isMethod && static_cast<bool>(clang_CXXMethod_isPureVirtual(enclosingFunction))}
         };
     } else {
         result["enclosing_method"] = nullptr;
@@ -106,6 +110,51 @@ json queryLocateSymbol(const std::string& file, unsigned line, unsigned col,
     auto diags = unit->diagnostics();
     if (!diags.empty()) result["diagnostics"] = diags;
 
+    return result;
+}
+
+namespace {
+struct FindByUsrCtx {
+    std::string usr;
+    CXCursor found = clang_getNullCursor();
+    bool foundIsDefinition = false;
+};
+
+CXChildVisitResult findByUsrVisitor(CXCursor cursor, CXCursor /*parent*/, CXClientData clientData) {
+    auto* ctx = static_cast<FindByUsrCtx*>(clientData);
+    if (ctx->foundIsDefinition) return CXChildVisit_Continue; // лучше уже не найти
+    std::string u = cursorUSR(cursor);
+    if (!u.empty() && u == ctx->usr) {
+        bool isDef = clang_isCursorDefinition(cursor);
+        if (isDef || clang_Cursor_isNull(ctx->found)) {
+            ctx->found = cursor;
+            ctx->foundIsDefinition = isDef;
+        }
+    }
+    return CXChildVisit_Recurse;
+}
+} // namespace
+
+json queryLocateByUSR(const std::string& file, const std::string& usr,
+                      const std::vector<std::string>& flags) {
+    if (usr.empty())
+        return json{{"ok", false}, {"error", {{"code", "usr_empty"}, {"message", "пустой USR"}}}};
+    auto unit = ParsedUnit::parse(file, flags);
+    if (!unit)
+        return json{{"ok", false}, {"error", {{"code", "parse_failed"}, {"message", "clang не смог разобрать TU"}}}};
+
+    FindByUsrCtx ctx;
+    ctx.usr = usr;
+    clang_visitChildren(unit->rootCursor(), findByUsrVisitor, &ctx);
+    if (clang_Cursor_isNull(ctx.found))
+        return json{{"ok", false}, {"error", {{"code", "usr_not_found"}, {"message", "символ с таким USR не найден в файле (переименован или удалён?)"}}}};
+
+    json result;
+    result["ok"] = true;
+    result["file"] = file;
+    result["line"] = cursorLine(ctx.found);
+    result["column"] = cursorColumn(ctx.found);
+    result["is_definition"] = ctx.foundIsDefinition;
     return result;
 }
 

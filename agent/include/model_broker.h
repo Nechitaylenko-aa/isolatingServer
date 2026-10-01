@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include "task_classification.h"
 
 namespace cppagent {
 
@@ -19,6 +20,23 @@ struct PrimitiveGuess {
     // У Light — то что вернула модель в JSON, по умолчанию 1.0 если не прислала.
     double confidence = 1.0;
     std::string alternativePrimitiveStr; // второй по вероятности примитив, если confidence низкая (может быть пустым)
+    // Отдельное от confidence измерение: confidence — уверенность в ВЫБОРЕ примитива,
+    // goalIsSpecific — есть ли в goal_text конкретный объект правки и критерий "готово".
+    // Модель может быть на 100% уверена, что "сделай лучше" — это SANDBOX_FIX (правка),
+    // и одновременно там нет ЧТО улучшать — это и есть дыра: неполный запрос исполняется как полный.
+    // true по умолчанию — чтобы Stub (не умеет оценивать) не блокировал ничего сам по себе.
+    bool goalIsSpecific = true;
+
+    // Слой 1: детализация задачи — что конкретно хочет юзер.
+    // Классифицируется МОДЕЛЬЮ в том же вызове, что и primitive (отдельного похода нет).
+    Detail detail = Detail::GENERAL_QUESTION;
+    std::string detailStr = "GENERAL_QUESTION";
+
+    // Слой 0: привязана ли задача к курсору вообще. Если NOT_NEEDED — Ground
+    // не вызывается совсем (экономия libclang); если NEEDED_MISSING — сразу
+    // needs_input, без бессмысленной попытки парсить несуществующий курсор.
+    CursorBinding cursorBinding = CursorBinding::NEEDED_PRESENT;
+    std::string cursorBindingStr = "NEEDED_PRESENT";
 };
 
 // Абстракция роли "модель, которая классифицирует намерение". Реальная

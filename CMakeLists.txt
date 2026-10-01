@@ -52,6 +52,9 @@ add_library(core STATIC
         core/src/query_locate_symbol.cpp
         core/src/query_class_outline.cpp
         core/src/query_symbol_refs.cpp
+        core/src/query_virtual_overrides.cpp
+        core/src/query_clangd_implementations.cpp
+        core/src/query_find_implementors.cpp
         core/src/compile_commands.cpp
         core/src/build_graph.cpp
         core/src/blast_radius.cpp
@@ -70,6 +73,7 @@ add_library(agent STATIC
         agent/src/orchestrator.cpp
         agent/src/handlers.cpp
         agent/src/ground_service.cpp
+        agent/src/task_classification.cpp
         agent/src/main_model_broker.cpp
         agent/src/execute_service.cpp
         agent/src/verify_service.cpp
@@ -90,7 +94,10 @@ enable_testing()
 list(APPEND CMAKE_PREFIX_PATH "/usr/lib/cmake/Catch2")
 find_package(Catch2 3 QUIET)
 if(Catch2_FOUND)
-    add_executable(agent_tests agent/tests/test_execute_service.cpp)
+    add_executable(agent_tests 
+        agent/tests/test_execute_service.cpp
+        agent/tests/test_orchestrator_integration.cpp
+    )
     target_link_libraries(agent_tests PRIVATE agent core Catch2::Catch2WithMain)
     target_include_directories(agent_tests PRIVATE agent/include core/include third_party ${LIBCLANG_INCLUDE_DIR})
     include(Catch)

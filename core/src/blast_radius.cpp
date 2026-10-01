@@ -23,7 +23,10 @@ json queryBlastRadius(const std::string& file,
         if(outline.contains("error")) return outline;
         if(refs.contains("error")) return refs;
     }
-    bool quarry=(pm>=15)||(refsInTU>=5);
+    // pm (методы класса) — характеристика класса, не правки. Убираем как
+    // самостоятельный критерий: 15-методный класс с 1 ссылкой — это sandbox.
+    // Single-TU: нет данных о размере проекта, используем только абсолютный порог refs.
+    bool quarry=(refsInTU>=8);
     return json{{"ok",true},{"suggested_mode",quarry?"quarry":"sandbox"},{"facts",json{{"public_methods_in_class",pm},{"refs_found_in_same_tu",refsInTU},{"class_outline_ok",outlineOk},{"symbol_refs_ok",refsOk},{"scope","single_tu"},{"note","blast_radius v1 single-TU"}}},{"outline",outline},{"refs",refs}};
 }
 
@@ -66,7 +69,22 @@ json queryBlastRadiusCross(const std::string& compileCommandsPath,
     if(className.empty() && methodUSR.empty())
         return json{{"ok",false},{"error",{{"code","blast_radius_no_inputs"},{"message","ни className ни methodUSR не заданы"}}}};
 
-    bool quarry=(pm>=15)||(totalRefs>=5);
+    // Адаптивные пороги — зеркало логики оркестратора (defaultAbs/defaultRel).
+    // pm (методы класса) убран: это свойство класса, а не масштаб конкретной правки.
+    // quarry = правка затронет много мест В ПРОЕКТЕ: абсолютно много refs ИЛИ
+    // относительно много файлов (доля затронутых файлов от всех).
+    int absThreshold;
+    if(total <= 5)        absThreshold = 8;
+    else if(total <= 20)  absThreshold = 15;
+    else if(total <= 100) absThreshold = 30;
+    else                  absThreshold = 60;
+    double relThreshold;
+    if(total <= 3)        relThreshold = 1.01; // отключаем relative на крошечных проектах
+    else if(total <= 10)  relThreshold = 0.5;
+    else if(total <= 50)  relThreshold = 0.3;
+    else                  relThreshold = 0.15;
+    double frac = (total > 0) ? (double)distinctFiles / total : 0.0;
+    bool quarry = (totalRefs >= absThreshold) || (total > 3 && frac >= relThreshold);
     json facts=json{
         {"public_methods_in_class",pm},
         {"refs_found_total",totalRefs},

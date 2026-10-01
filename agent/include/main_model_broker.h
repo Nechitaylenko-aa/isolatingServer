@@ -17,6 +17,9 @@ struct GenerateRequest {
     std::string methodUSR;
     json scaleFacts; // из blast_radius cross-TU
     std::string explicitMode;
+    // Фрагмент файла вокруг курсора (нумерация строк + текст). Без него модель не может
+    // выдать oldText, точно совпадающий с содержимым, — и выдумывает несуществующий текст.
+    std::string fileContext;
 };
 
 struct GenerateResult {

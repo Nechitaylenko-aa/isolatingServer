@@ -5,7 +5,8 @@
 namespace cppagent {
 using json = nlohmann::json;
 struct VerifyResult {
-    bool ok{false};
+    bool ok{false};      // проверка реально прошла и прошла успешно
+    bool skipped{false}; // проверять было нечего (buildDir не разрешился) — это НЕ успех
     std::string log;
     std::string error;
 };
