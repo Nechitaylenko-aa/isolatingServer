@@ -1,0 +1,9 @@
+9:CTuCache does not invalidate an unrelated TU
+10:CTuCache invalidates on compiler flags change
+11:CTuCache invalidates the TU that includes the edited header
+16:CTuCache scans project once, then serves from cache
+17:CTuCache sees a new reference added via the header-including TU
+18:CTuCache survives reopen of the database
+19:CTuCache treats a deleted tracked header as a dirty TU, not a crash
+20:CTuCache wipes everything when libclang version in meta differs
+21:CTuCache wipes everything when schema version differs

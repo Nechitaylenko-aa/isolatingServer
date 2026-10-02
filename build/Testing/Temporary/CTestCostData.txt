@@ -1,0 +1,313 @@
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+fnv1a_64 0 0
+hash_file 0 0
+hash_file 0 0
+hash_flags 0 0
+hash_string 0 0
+hash_string 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+GroundService: 0 0
+HttpMainModelBroker: 0 0
+LightModelBroker: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+StubModelBroker: 0 0
+StubModelBroker: 0 0
+primitiveFromString: 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+fnv1a_64 0 0
+hash_file 0 0
+hash_file 0 0
+hash_flags 0 0
+hash_string 0 0
+hash_string 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+GroundService: 0 0
+HttpMainModelBroker: 0 0
+LightModelBroker: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+StubModelBroker: 0 0
+StubModelBroker: 0 0
+primitiveFromString: 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CDbManager 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+CTuCache 0 0
+fnv1a_64 0 0
+hash_file 0 0
+hash_file 0 0
+hash_flags 0 0
+hash_string 0 0
+hash_string 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+ExecuteService 0 0
+GroundService: 0 0
+HttpMainModelBroker: 0 0
+LightModelBroker: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+Orchestrator: 0 0
+StubModelBroker: 0 0
+StubModelBroker: 0 0
+primitiveFromString: 0 0
+CDbManager creates database file and accepts DDL 1 0.0987511
+CDbManager enables WAL journal mode 1 0.0481335
+CDbManager move transfers the connection 1 0.135711
+CDbManager persists across reopen 1 0.112485
+CDbManager prepares and binds values 1 0.105404
+CDbManager reports error instead of crashing on bad path 1 0.0128076
+CDbManager rolls back an aborted transaction 1 0.097948
+CDbManager statement reset allows reuse 1 0.101368
+CTuCache does not invalidate an unrelated TU 1 0.104969
+CTuCache invalidates on compiler flags change 1 0.152521
+CTuCache invalidates the TU that includes the edited header 1 0.110632
+CTuCache opening the same fresh database twice does not loop or wipe 1 0.113065
+CTuCache opens and creates schema 1 0.0970367
+CTuCache reports a project-level error when compile_commands is missing 1 0.10222
+CTuCache returns zero refs for unknown USR without error 1 0.101871
+CTuCache scans project once, then serves from cache 1 0.112794
+CTuCache sees a new reference added via the header-including TU 1 0.12256
+CTuCache survives reopen of the database 1 0.119359
+CTuCache treats a deleted tracked header as a dirty TU, not a crash 1 0.102713
+CTuCache wipes everything when libclang version in meta differs 1 0.216552
+CTuCache wipes everything when schema version differs 1 0.212009
+fnv1a_64 matches known vectors 1 0.0147065
+hash_file on missing file is empty, not a valid hash 1 0.0129503
+hash_file reads actual content 1 0.0113083
+hash_flags separates arguments 1 0.0159687
+hash_string differs for UTF-8 multibyte input 1 0.0128967
+hash_string returns stable 16-char hex 1 0.0138674
+ExecuteService apply: empty edits -> ok no checkpoint 1 0.0135008
+ExecuteService apply: empty oldText reports insert 1 0.014857
+ExecuteService apply: exact match reports exact 1 0.014955
+ExecuteService apply: failure on second edit must not leave first file changed 1 0.0139487
+ExecuteService apply: file not found -> fail 1 0.0146121
+ExecuteService apply: fuzzy match on whitespace differences 1 0.0147228
+ExecuteService apply: fuzzy prefix match when model collapses newlines 1 0.0145614
+ExecuteService apply: hintLine 0 keeps first-occurrence behaviour 1 0.0152487
+ExecuteService apply: insert when oldText empty 1 0.0150779
+ExecuteService apply: multi-file 1 0.0134206
+ExecuteService apply: oldText not found -> fail 1 0.01614
+ExecuteService apply: picks occurrence nearest to hintLine, not first 1 0.0161369
+ExecuteService apply: preserves relative inner indent in multi-line newText 1 0.0153572
+ExecuteService apply: reindents newText when model drops leading indent 1 0.0154747
+ExecuteService apply: removes excess indent when oldText over-indented 1 0.0137265
+ExecuteService apply: replace oldText 1 0.0133946
+ExecuteService undo: unknown id -> fail 1 0.0144313
+GroundService: USR anchor survives line shifts 1 2.22709
+HttpMainModelBroker: generate plan with real model 1 0.018122
+LightModelBroker: classify with real model 1 0.0151609
+Orchestrator: 'только проверь' vetoes write primitive 1 0.716256
+Orchestrator: INFRA must report failure on real non-zero build 1 0.0227623
+Orchestrator: INFRA without cursor 1 0.668484
+Orchestrator: InfraHandler build with real buildDir 1 0.0161491
+Orchestrator: InfraHandler graph targets 1 0.0131583
+Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds) 1 2.88146
+Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds 1 3.97986
+Orchestrator: SANDBOX_FIX with Stub models 1 2.81918
+Orchestrator: UNDERSTAND with Stub model 1 0.69617
+Orchestrator: blast_radius wide warning 1 2.7746
+Orchestrator: clarification cycle blast_radius -> cancel 1 0.181012
+Orchestrator: clarification cycle blast_radius -> proceed -> answer 1 4.02909
+Orchestrator: clarification cycle depth protection 1 0.186646
+Orchestrator: clarification replay protection 1 0.18116
+Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor) 1 0.663285
+Orchestrator: dead model + clarification proceed -> writes 1 3.01925
+Orchestrator: dead model + clarification wait -> error model_unavailable_wait 1 0.178431
+Orchestrator: dead model + question -> answer via stub UNDERSTAND 1 0.668075
+Orchestrator: dead model + write phrase -> needs_input model-unavailable 1 0.173813
+Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND 1 0.703616
+Orchestrator: failed main plan must not produce green verify 1 2.53452
+Orchestrator: full cycle SANDBOX_FIX with real models 1 0.187207
+Orchestrator: full cycle UNDERSTAND with real light model 1 0.701925
+Orchestrator: needs_input on low confidence (manual simulation) 1 3.32875
+Orchestrator: vague goal answered -> goal_text replaced and proceeds 1 3.07594
+Orchestrator: vague goal for UNDERSTAND -> no blocking 1 0.69381
+Orchestrator: vague goal for write primitive -> needs_input goal-vague 1 0.179137
+Orchestrator: write goal WITHOUT no-edit phrase is not vetoed 1 2.82824
+StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND 1 0.0164467
+StubModelBroker: capitalized Cyrillic write verb still writes 1 0.0147012
+primitiveFromString: model casing/whitespace are tolerated 1 0.0131071
+---

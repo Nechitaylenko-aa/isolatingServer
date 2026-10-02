@@ -27,6 +27,12 @@ public:
     // если что-то пошло не так из-за неверных флагов.
     std::vector<std::string> diagnostics() const;
 
+    // Все файлы, реально открытые препроцессором в этом TU (транзитивно, включая
+    // сам TU). Нужен кэшу: без этого списка правка любого заголовка не
+    // инвалидирует запись, и кэш молча отдаёт устаревшие refs.
+    // Требует CXTranslationUnit_DetailedPreprocessingRecord (см. parse()).
+    std::vector<std::string> inclusions() const;
+
 private:
     ParsedUnit(CXIndex idx, CXTranslationUnit tu) : idx_(idx), tu_(tu) {}
     CXIndex idx_ = nullptr;
@@ -47,5 +53,11 @@ unsigned cursorColumn(CXCursor c);
 // Строит человекочитаемую сигнатуру метода/функции:
 // "static time_t calculateNextMinute(const EventEntry &, time_t) const"
 std::string buildMethodSignature(CXCursor methodCursor);
+
+// Версия libclang, которой распарсен TU (например "clang version 22.1.2").
+// Идёт в кэш: формат USR генерируется конкретной версией clang, и после смены
+// версии старые ключи перестают находиться — это тихий отказ (refs = 0 вместо
+// ошибки), поэтому версия обязана ломать валидность кэша целиком.
+std::string clangVersion();
 
 } // namespace cpptool

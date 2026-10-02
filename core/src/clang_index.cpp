@@ -1,4 +1,5 @@
 #include "clang_index.h"
+#include <algorithm>
 #include <sstream>
 
 namespace cpptool {
@@ -63,6 +64,33 @@ std::vector<std::string> ParsedUnit::diagnostics() const {
     }
     return out;
 }
+
+namespace {
+
+// clang_getInclusions зовёт visitor на КАЖДОЕ включение, а не на каждый файл:
+// один и тот же заголовок, включённый дважды (в разных ветках #if), придёт
+// несколько раз. Дедуп нужен, иначе в tu_dep будет мусор и лишние строки.
+void inclusionsVisitor(CXFile includedFile, CXSourceLocation* /*stack*/,
+                       unsigned /*len*/, CXClientData clientData) {
+    auto* out = static_cast<std::vector<std::string>*>(clientData);
+    CXString name = clang_getFileName(includedFile);
+    const char* cstr = clang_getCString(name);
+    if (cstr != nullptr && cstr[0] != '\0')
+        out->emplace_back(cstr);
+    clang_disposeString(name);
+}
+
+} // anon
+
+std::vector<std::string> ParsedUnit::inclusions() const {
+    std::vector<std::string> out;
+    clang_getInclusions(tu_, inclusionsVisitor, &out);
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
+std::string clangVersion() { return cxStringToStd(clang_getClangVersion()); }
 
 std::string cursorUSR(CXCursor c) { return cxStringToStd(clang_getCursorUSR(c)); }
 std::string cursorSpelling(CXCursor c) { return cxStringToStd(clang_getCursorSpelling(c)); }

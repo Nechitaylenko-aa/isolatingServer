@@ -166,23 +166,24 @@ std::unique_ptr<PrimitiveHandler> makeHandler(Primitive p) {
 }
 
 // UNDERSTAND: Intake -> Ground -> Report (read-only, запрет на запись)
-// Поведение ветвится по DetailKind, который buildGroundLight вычислил детерминированно:
-//   NONE              — обычный метод, показываем сигнатуру
-//   VIRTUAL_WITH_BASE — virtual с телом в базе, base + все overrides
-//   PURE_VIRTUAL      — pure virtual, только реализации в потомках
-//   HEADER_NOT_IN_CC  — .h не в compile_commands, нашли через queryFindImplementors
+// Поведение ветвится по Action = selectAction(primitive, Detail, CursorContext) —
+// слои 1-4 из arch.md, см. task_classification.h. Раньше ветвилось по
+// DetailKind (4 значения, только virtual/pure-virtual/header-fallback) и
+// игнорировало, что именно просил юзер (Detail) — отсюда и была дыра:
+// "покажи метод" на виртуальном методе показывало все overrides, даже если
+// юзера интересовала только сигнатура.
 json UnderstandHandler::handle(const HandlerContext& ctx) {
     const auto& ground = ctx.ground;
     std::string file = ctx.task.contains("cursor") ? ctx.task["cursor"].value("file", "") : "";
 
-    if (ground.enclosingMethod.is_null()) {
+    if (ground.enclosingMethod.is_null() && ground.cursorContext == CursorContext::NO_CONTEXT) {
         return json{
             {"protocol_version","1.0"},
             {"type","answer"},
             {"answered_by", answeredBy(ctx)},
             {"primitive", ctx.primitiveStr},
             {"answer", {{"text", "UNDERSTAND: под курсором не нашёлся метод/функция. rationale: " + ctx.guess.rationale}, {"refs", json::array()}}},
-            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail_kind", "none"}}}
+            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"cursor_context", "no_context"}}}
         };
     }
 
@@ -193,51 +194,116 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
         {"line", ground.enclosingMethod.value("line", 0)}
     }});
 
-    std::string text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
-    std::string detailKindStr = "none";
+    Action action = selectAction(ctx.primitiveStr, ctx.guess.detail, ground.cursorContext);
+    std::string ctxStr = cursorContextToString(ground.cursorContext);
+    std::string text;
 
-    switch (ground.detailKind) {
-
-    case DetailKind::HEADER_NOT_IN_CC:
-    case DetailKind::PURE_VIRTUAL:
-    case DetailKind::VIRTUAL_WITH_BASE: {
-        // Все три случая: у нас есть virtualOverrides — показываем реализации.
-        // HEADER_NOT_IN_CC и PURE_VIRTUAL: только реализации в потомках (база пустая).
-        // VIRTUAL_WITH_BASE: база имеет тело, но нас просят про все overrides.
-        detailKindStr = (ground.detailKind == DetailKind::HEADER_NOT_IN_CC) ? "header_not_in_cc"
-                      : (ground.detailKind == DetailKind::PURE_VIRTUAL)     ? "pure_virtual"
-                                                                             : "virtual_with_base";
+    // Общий кусок "показать overrides" нужен трём разным Action — вынесен,
+    // чтобы не плодить копии одного и того же текста.
+    auto appendOverrides = [&](std::string& t) {
         if (ground.virtualOverridesChecked && ground.virtualOverrides.value("ok", false)) {
             auto& overrides = ground.virtualOverrides["overrides"];
             if (overrides.is_array() && !overrides.empty()) {
-                text += " Найдено реализаций: " + std::to_string(overrides.size()) + ":";
+                t += " Найдено реализаций: " + std::to_string(overrides.size()) + ":";
                 for (auto& ov : overrides) {
                     std::string ovSig  = ov.value("signature", "?");
                     std::string ovFile = ov.value("file", "");
                     int         ovLine = ov.value("line", 0);
-                    text += " [" + ovSig + " @ " + ovFile + ":" + std::to_string(ovLine) + "]";
+                    t += " [" + ovSig + " @ " + ovFile + ":" + std::to_string(ovLine) + "]";
                     refs.push_back(json{{"usr", ov.value("usr","")}, {"file", ovFile}, {"line", ovLine}});
                 }
                 int scanned = ground.virtualOverrides.value("files_scanned", 0);
                 int total   = ground.virtualOverrides.value("files_total",   0);
                 if (scanned > 0 || total > 0)
-                    text += " (" + std::to_string(scanned) + "/" + std::to_string(total) + " TU просканировано)";
+                    t += " (" + std::to_string(scanned) + "/" + std::to_string(total) + " TU просканировано)";
             } else {
                 int scanned = ground.virtualOverrides.value("files_scanned", 0);
                 int total   = ground.virtualOverrides.value("files_total",   0);
-                text += " Реализаций в проекте не найдено ("
-                      + std::to_string(scanned) + "/" + std::to_string(total) + " TU просканировано).";
+                t += " Реализаций в проекте не найдено (" + std::to_string(scanned) + "/" + std::to_string(total) + " TU просканировано).";
             }
         } else if (ground.virtualOverridesChecked) {
-            text += " Поиск реализаций завершился с ошибкой: "
-                  + ground.virtualOverrides.value("error", json::object()).value("message", "unknown");
+            t += " Поиск реализаций завершился с ошибкой: " + ground.virtualOverrides.value("error", json::object()).value("message", "unknown");
         }
-        break;
-    }
+    };
 
-    case DetailKind::NONE:
+    switch (action) {
+
+    case Action::QUERY_LOCATE_ONLY:
+        text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
+        break;
+
+    case Action::QUERY_FIND_IMPLEMENTORS:
+    case Action::QUERY_VIRTUAL_OVERRIDES:
+        text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
+        appendOverrides(text);
+        break;
+
+    case Action::NOT_IMPLEMENTED_YET:
+        // Честно: Detail распознан, механизм для него ещё не написан — не
+        // угадываем и не подменяем сигнатурой, которая не отвечает на вопрос.
+        return json{
+            {"protocol_version","1.0"},
+            {"type","answer"},
+            {"answered_by", answeredBy(ctx)},
+            {"primitive", ctx.primitiveStr},
+            {"answer", {{"text", "UNDERSTAND: запрос понят как " + detailToString(ctx.guess.detail) +
+                                  ", но механизм для него ещё не реализован (Категория B, см. arch.md). "
+                                  "Сигнатура под курсором: " + sig}, {"refs", refs}}},
+            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", "NOT_IMPLEMENTED_YET"}}}
+        };
+
+    case Action::REFUSE_TOO_BROAD:
+        return json{
+            {"protocol_version","1.0"},
+            {"type","answer"},
+            {"answered_by", answeredBy(ctx)},
+            {"primitive", ctx.primitiveStr},
+            {"answer", {{"text", "UNDERSTAND: " + detailToString(ctx.guess.detail) + " признан превышающим возможности "
+                                  "текущего анализа (Категория C, см. arch.md) — явный отказ вместо недостоверного ответа."}, {"refs", json::array()}}},
+            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", "REFUSE_TOO_BROAD"}}}
+        };
+
+    case Action::DELEGATE_TO_MAIN:
+        // TODO (следующий шаг, не этот): UnderstandHandler пока не вызывает
+        // mainModel для read-only reasoning — callMain() в этом файле уже
+        // есть и используется SandboxFix/QuarryDesign/TestGen/Experiment,
+        // но только вместе с Execute/Verify. Сюда нужен read-only вызов без
+        // записи на диск. Пока — честно говорим, что не реализовано, а не
+        // отвечаем сигнатурой метода на вопрос вроде "можно ли это слить".
+        return json{
+            {"protocol_version","1.0"},
+            {"type","answer"},
+            {"answered_by", answeredBy(ctx)},
+            {"primitive", ctx.primitiveStr},
+            {"answer", {{"text", "UNDERSTAND: " + detailToString(ctx.guess.detail) + " требует reasoning "
+                                  "основной модели (DELEGATE_TO_MAIN), но read-only вызов main-модели из "
+                                  "UnderstandHandler ещё не реализован. Сигнатура под курсором: " + sig}, {"refs", refs}}},
+            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", "DELEGATE_TO_MAIN"}, {"todo", "read-only callMain для UNDERSTAND не реализован"}}}
+        };
+
+    case Action::NEEDS_INPUT_RELEVANCE:
+    case Action::NEEDS_INPUT_CURSOR:
+        // ВАЖНО (сказано честно, не спрятано только в код-комментарии):
+        // этот needs_input НЕ проходит через orchestrator::decorateNeedsInput
+        // (он оборачивает только то, что рождается внутри run(), не то, что
+        // возвращает handler->handle()) — значит у него нет history_entry/
+        // depth-лимита, и orchestrator не распознает ответ на него через
+        // clarification_history. Рабочий прототип, не законченная интеграция.
+        return json{
+            {"protocol_version","1.0"},
+            {"type","needs_input"},
+            {"needs_input", {
+                {"question_id", "understand-relevance-1"},
+                {"text", "Место под курсором (" + ctxStr + ") не похоже на то, что описывает задача (" +
+                         detailToString(ctx.guess.detail) + "). Уточните, что нужно."},
+                {"options", json::array()},
+                {"free_text_allowed", true}
+            }},
+            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", actionToString(action)}, {"integration_note", "needs_input из handler не декорируется orchestrator'ом — см. комментарий в коде"}}}
+        };
+
     default:
-        // Обычный метод — sig уже в text, refs уже содержит точку курсора.
+        text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
         break;
     }
 
@@ -251,7 +317,9 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
             {"primitive",      ctx.primitiveStr},
             {"rationale",      ctx.guess.rationale},
             {"state_machine",  "UNDERSTAND"},
-            {"detail_kind",    detailKindStr},
+            {"detail",         detailToString(ctx.guess.detail)},
+            {"cursor_context", ctxStr},
+            {"action",         actionToString(action)},
             {"enclosing_class", ground.enclosingClass}
         }}
     };

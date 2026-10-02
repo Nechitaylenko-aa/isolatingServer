@@ -1,5 +1,5 @@
 #include "blast_radius.h"
-#include "project_index.h"
+#include "tu_cache.h"
 #include "queries.h"
 #include <filesystem>
 
@@ -49,15 +49,20 @@ json queryBlastRadiusCross(const std::string& compileCommandsPath,
     bool refsOk=true;
     std::string refsError;
     if(!methodUSR.empty() && !compileCommandsPath.empty()){
+        // Кэш живёт рядом с compile_commands.json: build-каталог проекта.
+        std::filesystem::path ccDir = std::filesystem::path(compileCommandsPath).parent_path();
         std::string cp = cachePath;
-        if(cp.empty()){
-            std::filesystem::path dir = std::filesystem::path(compileCommandsPath).parent_path();
-            cp = (dir / ".cpp-tool-cache" / "index.json").string();
+        if(cp.empty())
+            cp = (ccDir / ".cpp-tool-cache" / "index.db").string();
+        CTuCache cache(cp);
+        if(!cache.opened()){
+            refsOk=false;
+            refsError="не удалось открыть кэш " + cp + ": " + cache.open_error();
+        } else {
+            auto res = cache.get_refs_for_usr(compileCommandsPath, methodUSR);
+            if(!res.ok){ refsOk=false; refsError=res.error; }
+            else { totalRefs=res.totalRefs; distinctFiles=res.distinctFilesWithRefs; fromCache=res.fromCache; scanned=res.filesScanned; total=res.filesTotal; }
         }
-        ProjectIndex idx(compileCommandsPath, cp);
-        auto res = idx.totalRefsForUSR(methodUSR);
-        if(!res.ok){ refsOk=false; refsError=res.error; }
-        else { totalRefs=res.totalRefs; distinctFiles=res.distinctFilesWithRefs; fromCache=res.fromCache; scanned=res.filesScanned; total=res.filesTotal; }
     } else if(!methodUSR.empty()){
         // нет compile_commands — фолбэк на single TU
         json refs = querySymbolRefs(methodUSR, file, flags);
@@ -91,7 +96,7 @@ json queryBlastRadiusCross(const std::string& compileCommandsPath,
         {"distinct_files_with_refs",distinctFiles},
         {"total_files_in_project",total},
         {"refs_from_cache",fromCache},{"refs_files_scanned",scanned},{"refs_files_total",total},
-        {"class_outline_ok",outlineOk},{"symbol_refs_ok",refsOk},{"scope","cross_tu_cached"},{"note","blast_radius cross-TU via ProjectIndex (L1 mem + L2 JsonFileStore)"}
+        {"class_outline_ok",outlineOk},{"symbol_refs_ok",refsOk},{"scope","cross_tu_cached"},{"note","blast_radius cross-TU via CTuCache (SQLite)"}
     };
     if(!refsError.empty()) facts["refs_error"]=refsError;
 

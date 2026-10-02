@@ -64,6 +64,33 @@ std::optional<std::vector<std::string>> CompileCommandsIndex::flagsFor(const std
     return it->second;
 }
 
+std::string CompileCommandsIndex::common_source_root() const {
+    namespace fs = std::filesystem;
+    if (byFile_.empty()) return "";
+
+    // Предок ли candidate для path — по границе каталога: без неё /proj/app-mock
+    // считался бы вложенным в /proj/app.
+    auto is_ancestor = [](const fs::path& candidate, const fs::path& path) {
+        if (candidate.empty() || path.empty()) return false;
+        const std::string c = candidate.string();
+        const std::string p = path.string();
+        if (c == p) return true;
+        if (p.size() <= c.size()) return false;
+        if (p.compare(0, c.size(), c) != 0) return false;
+        return p[c.size()] == '/';
+    };
+
+    fs::path common = fs::path(byFile_.begin()->first).parent_path();
+    for (const auto& [file, flags_] : byFile_) {
+        (void)flags_;
+        const fs::path parent = fs::path(file).parent_path();
+        while (!common.empty() && !is_ancestor(common, parent))
+            common = common.parent_path();
+        if (common.empty()) return "";
+    }
+    return common.string();
+}
+
 std::optional<CompileCommandsIndex::HeaderFlagsResult>
 CompileCommandsIndex::flagsForHeaderViaCompanion(const std::string& headerPath) const {
     // basename заголовка — то, что реально пишут в #include, путь к каталогу

@@ -1,0 +1,5 @@
+if(EXISTS "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests-b12d07c_tests.cmake")
+  include("/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests-b12d07c_tests.cmake")
+else()
+  add_test(core_tests_NOT_BUILT-b12d07c core_tests_NOT_BUILT-b12d07c)
+endif()

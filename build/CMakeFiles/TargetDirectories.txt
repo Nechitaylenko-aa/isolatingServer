@@ -1,0 +1,8 @@
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/core.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/agent.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/cli_agent.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/core_tests.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/agent_tests.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/test.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/edit_cache.dir
+/home/artem/projects/outer/AI-agent/cpp-tool/build/CMakeFiles/rebuild_cache.dir

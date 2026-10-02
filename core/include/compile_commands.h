@@ -37,6 +37,18 @@ public:
 
     size_t size() const { return byFile_.size(); }
 
+    // Список всех записей базы: путь файла -> флаги компиляции.
+    // Нужен кэшу TU: чтобы собрать агрегат по проекту, ему нужен полный
+    // перечень .cpp, а не поиск по одному известному имени.
+    const std::unordered_map<std::string, std::vector<std::string>>& files() const { return byFile_; }
+
+    // Общий каталог-предок всех исходников базы — то, что для кэша является
+    // «project root». Брать в этом качестве каталог самого compile_commands.json
+    // нельзя: CMake кладёт его в build/, а исходники лежат рядом с build/, и
+    // тогда ни один заголовок проекта не попал бы в отслеживаемые.
+    // Возвращает пустую строку, если база пуста или общего предка нет.
+    std::string common_source_root() const;
+
 private:
     std::unordered_map<std::string, std::vector<std::string>> byFile_;
 };

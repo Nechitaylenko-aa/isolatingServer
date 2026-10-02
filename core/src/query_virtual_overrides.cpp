@@ -62,8 +62,8 @@ json queryVirtualOverrides(const std::string& compileCommandsPath,
         return json{{"ok", false}, {"error", {{"code", "compile_commands_failed"},
             {"message", "не удалось загрузить compile_commands.json: " + compileCommandsPath}}}};
 
-    // Список (file, flags) — как в ProjectIndex::totalRefsForUSR: читаем json напрямую,
-    // т.к. byFile_ у CompileCommandsIndex приватный.
+    // Список (file, flags) — читаем json напрямую, т.к. набор файлов
+    // compile_commands.json не отдаёт ничем, кроме files() за O(n) обхода.
     std::vector<std::pair<std::string, std::vector<std::string>>> files;
     {
         std::ifstream in(compileCommandsPath);

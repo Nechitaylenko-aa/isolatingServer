@@ -12,9 +12,10 @@ json queryBlastRadius(const std::string& file,
                       const std::string& methodUSR,
                       const std::vector<std::string>& flags);
 
-// Кросс-TU с кэшем через ProjectIndex (L1 mem + L2 JsonFileStore).
-// compileCommandsPath — путь к compile_commands.json, cachePath — путь к кэшу (напр. build/.cpp-tool-cache/index.json).
-// Если cachePath пустой — берётся <dir_of_compileCommands>/.cpp-tool-cache/index.json.
+// Кросс-TU с постоянным кэшем на SQLite (CTuCache).
+// compileCommandsPath — путь к compile_commands.json, cachePath — путь к файлу БД
+// (напр. build/.cpp-tool-cache/index.db).
+// Если cachePath пустой — берётся <dir_of_compileCommands>/.cpp-tool-cache/index.db.
 json queryBlastRadiusCross(const std::string& compileCommandsPath,
                            const std::string& file,
                            const std::string& className,

@@ -1,0 +1,1664 @@
+Start testing: Oct 02 15:23 +05
+----------------------------------------------------------
+1/78 Testing: CDbManager creates database file and accepts DDL
+1/78 Test: CDbManager creates database file and accepts DDL
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager creates database file and accepts DDL"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager creates database file and accepts DDL" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager creates database file and accepts DDL"
+Randomness seeded to: 1935566369
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager creates database file and accepts DDL" end time: Oct 02 15:23 +05
+"CDbManager creates database file and accepts DDL" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/78 Testing: CDbManager enables WAL journal mode
+2/78 Test: CDbManager enables WAL journal mode
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager enables WAL journal mode"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager enables WAL journal mode" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager enables WAL journal mode"
+Randomness seeded to: 1444928886
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager enables WAL journal mode" end time: Oct 02 15:23 +05
+"CDbManager enables WAL journal mode" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/78 Testing: CDbManager move transfers the connection
+3/78 Test: CDbManager move transfers the connection
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager move transfers the connection"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager move transfers the connection" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager move transfers the connection"
+Randomness seeded to: 2898789006
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager move transfers the connection" end time: Oct 02 15:23 +05
+"CDbManager move transfers the connection" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/78 Testing: CDbManager persists across reopen
+4/78 Test: CDbManager persists across reopen
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager persists across reopen"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager persists across reopen" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager persists across reopen"
+Randomness seeded to: 1249092162
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager persists across reopen" end time: Oct 02 15:23 +05
+"CDbManager persists across reopen" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/78 Testing: CDbManager prepares and binds values
+5/78 Test: CDbManager prepares and binds values
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager prepares and binds values"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager prepares and binds values" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager prepares and binds values"
+Randomness seeded to: 3665138872
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager prepares and binds values" end time: Oct 02 15:23 +05
+"CDbManager prepares and binds values" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/78 Testing: CDbManager reports error instead of crashing on bad path
+6/78 Test: CDbManager reports error instead of crashing on bad path
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager reports error instead of crashing on bad path"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager reports error instead of crashing on bad path" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager reports error instead of crashing on bad path"
+Randomness seeded to: 1516286658
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager reports error instead of crashing on bad path" end time: Oct 02 15:23 +05
+"CDbManager reports error instead of crashing on bad path" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/78 Testing: CDbManager rolls back an aborted transaction
+7/78 Test: CDbManager rolls back an aborted transaction
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager rolls back an aborted transaction"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager rolls back an aborted transaction" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager rolls back an aborted transaction"
+Randomness seeded to: 972193078
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager rolls back an aborted transaction" end time: Oct 02 15:23 +05
+"CDbManager rolls back an aborted transaction" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/78 Testing: CDbManager statement reset allows reuse
+8/78 Test: CDbManager statement reset allows reuse
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CDbManager statement reset allows reuse"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CDbManager statement reset allows reuse" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CDbManager statement reset allows reuse"
+Randomness seeded to: 3568781970
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CDbManager statement reset allows reuse" end time: Oct 02 15:23 +05
+"CDbManager statement reset allows reuse" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/78 Testing: CTuCache does not invalidate an unrelated TU
+9/78 Test: CTuCache does not invalidate an unrelated TU
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache does not invalidate an unrelated TU"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache does not invalidate an unrelated TU" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache does not invalidate an unrelated TU"
+Randomness seeded to: 3755903193
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache does not invalidate an unrelated TU" end time: Oct 02 15:23 +05
+"CTuCache does not invalidate an unrelated TU" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/78 Testing: CTuCache invalidates on compiler flags change
+10/78 Test: CTuCache invalidates on compiler flags change
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache invalidates on compiler flags change"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache invalidates on compiler flags change" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache invalidates on compiler flags change"
+Randomness seeded to: 3820895336
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache invalidates on compiler flags change" end time: Oct 02 15:23 +05
+"CTuCache invalidates on compiler flags change" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/78 Testing: CTuCache invalidates the TU that includes the edited header
+11/78 Test: CTuCache invalidates the TU that includes the edited header
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache invalidates the TU that includes the edited header"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache invalidates the TU that includes the edited header" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache invalidates the TU that includes the edited header"
+Randomness seeded to: 980776727
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache invalidates the TU that includes the edited header" end time: Oct 02 15:23 +05
+"CTuCache invalidates the TU that includes the edited header" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/78 Testing: CTuCache opening the same fresh database twice does not loop or wipe
+12/78 Test: CTuCache opening the same fresh database twice does not loop or wipe
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache opening the same fresh database twice does not loop or wipe"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache opening the same fresh database twice does not loop or wipe" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache opening the same fresh database twice does not loop or wipe"
+Randomness seeded to: 1955499004
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache opening the same fresh database twice does not loop or wipe" end time: Oct 02 15:23 +05
+"CTuCache opening the same fresh database twice does not loop or wipe" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/78 Testing: CTuCache opens and creates schema
+13/78 Test: CTuCache opens and creates schema
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache opens and creates schema"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache opens and creates schema" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache opens and creates schema"
+Randomness seeded to: 1467446537
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache opens and creates schema" end time: Oct 02 15:23 +05
+"CTuCache opens and creates schema" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/78 Testing: CTuCache reports a project-level error when compile_commands is missing
+14/78 Test: CTuCache reports a project-level error when compile_commands is missing
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache reports a project-level error when compile_commands is missing"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache reports a project-level error when compile_commands is missing" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache reports a project-level error when compile_commands is missing"
+Randomness seeded to: 323833467
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache reports a project-level error when compile_commands is missing" end time: Oct 02 15:23 +05
+"CTuCache reports a project-level error when compile_commands is missing" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/78 Testing: CTuCache returns zero refs for unknown USR without error
+15/78 Test: CTuCache returns zero refs for unknown USR without error
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache returns zero refs for unknown USR without error"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache returns zero refs for unknown USR without error" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache returns zero refs for unknown USR without error"
+Randomness seeded to: 2150966394
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache returns zero refs for unknown USR without error" end time: Oct 02 15:23 +05
+"CTuCache returns zero refs for unknown USR without error" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/78 Testing: CTuCache scans project once, then serves from cache
+16/78 Test: CTuCache scans project once, then serves from cache
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache scans project once\, then serves from cache"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache scans project once, then serves from cache" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache scans project once\, then serves from cache"
+Randomness seeded to: 2524697638
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache scans project once, then serves from cache" end time: Oct 02 15:23 +05
+"CTuCache scans project once, then serves from cache" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/78 Testing: CTuCache sees a new reference added via the header-including TU
+17/78 Test: CTuCache sees a new reference added via the header-including TU
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache sees a new reference added via the header-including TU"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache sees a new reference added via the header-including TU" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache sees a new reference added via the header-including TU"
+Randomness seeded to: 859831255
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache sees a new reference added via the header-including TU" end time: Oct 02 15:23 +05
+"CTuCache sees a new reference added via the header-including TU" time elapsed: 00:00:00
+----------------------------------------------------------
+
+18/78 Testing: CTuCache survives reopen of the database
+18/78 Test: CTuCache survives reopen of the database
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache survives reopen of the database"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache survives reopen of the database" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache survives reopen of the database"
+Randomness seeded to: 2295615105
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache survives reopen of the database" end time: Oct 02 15:23 +05
+"CTuCache survives reopen of the database" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/78 Testing: CTuCache treats a deleted tracked header as a dirty TU, not a crash
+19/78 Test: CTuCache treats a deleted tracked header as a dirty TU, not a crash
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache treats a deleted tracked header as a dirty TU\, not a crash"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache treats a deleted tracked header as a dirty TU, not a crash" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache treats a deleted tracked header as a dirty TU\, not a crash"
+Randomness seeded to: 3429409613
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache treats a deleted tracked header as a dirty TU, not a crash" end time: Oct 02 15:23 +05
+"CTuCache treats a deleted tracked header as a dirty TU, not a crash" time elapsed: 00:00:00
+----------------------------------------------------------
+
+20/78 Testing: CTuCache wipes everything when libclang version in meta differs
+20/78 Test: CTuCache wipes everything when libclang version in meta differs
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache wipes everything when libclang version in meta differs"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache wipes everything when libclang version in meta differs" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache wipes everything when libclang version in meta differs"
+Randomness seeded to: 941239213
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+<end of output>
+Test time =   0.22 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache wipes everything when libclang version in meta differs" end time: Oct 02 15:23 +05
+"CTuCache wipes everything when libclang version in meta differs" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/78 Testing: CTuCache wipes everything when schema version differs
+21/78 Test: CTuCache wipes everything when schema version differs
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "CTuCache wipes everything when schema version differs"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"CTuCache wipes everything when schema version differs" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "CTuCache wipes everything when schema version differs"
+Randomness seeded to: 2807535976
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+<end of output>
+Test time =   0.21 sec
+----------------------------------------------------------
+Test Passed.
+"CTuCache wipes everything when schema version differs" end time: Oct 02 15:23 +05
+"CTuCache wipes everything when schema version differs" time elapsed: 00:00:00
+----------------------------------------------------------
+
+22/78 Testing: fnv1a_64 matches known vectors
+22/78 Test: fnv1a_64 matches known vectors
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "fnv1a_64 matches known vectors"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"fnv1a_64 matches known vectors" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "fnv1a_64 matches known vectors"
+Randomness seeded to: 4107231546
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"fnv1a_64 matches known vectors" end time: Oct 02 15:23 +05
+"fnv1a_64 matches known vectors" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/78 Testing: hash_file on missing file is empty, not a valid hash
+23/78 Test: hash_file on missing file is empty, not a valid hash
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "hash_file on missing file is empty\, not a valid hash"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"hash_file on missing file is empty, not a valid hash" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "hash_file on missing file is empty\, not a valid hash"
+Randomness seeded to: 1094817139
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"hash_file on missing file is empty, not a valid hash" end time: Oct 02 15:23 +05
+"hash_file on missing file is empty, not a valid hash" time elapsed: 00:00:00
+----------------------------------------------------------
+
+24/78 Testing: hash_file reads actual content
+24/78 Test: hash_file reads actual content
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "hash_file reads actual content"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"hash_file reads actual content" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "hash_file reads actual content"
+Randomness seeded to: 2017084752
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"hash_file reads actual content" end time: Oct 02 15:23 +05
+"hash_file reads actual content" time elapsed: 00:00:00
+----------------------------------------------------------
+
+25/78 Testing: hash_flags separates arguments
+25/78 Test: hash_flags separates arguments
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "hash_flags separates arguments"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"hash_flags separates arguments" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "hash_flags separates arguments"
+Randomness seeded to: 873069458
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"hash_flags separates arguments" end time: Oct 02 15:23 +05
+"hash_flags separates arguments" time elapsed: 00:00:00
+----------------------------------------------------------
+
+26/78 Testing: hash_string differs for UTF-8 multibyte input
+26/78 Test: hash_string differs for UTF-8 multibyte input
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "hash_string differs for UTF-8 multibyte input"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"hash_string differs for UTF-8 multibyte input" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "hash_string differs for UTF-8 multibyte input"
+Randomness seeded to: 2165394706
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"hash_string differs for UTF-8 multibyte input" end time: Oct 02 15:23 +05
+"hash_string differs for UTF-8 multibyte input" time elapsed: 00:00:00
+----------------------------------------------------------
+
+27/78 Testing: hash_string returns stable 16-char hex
+27/78 Test: hash_string returns stable 16-char hex
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests" "hash_string returns stable 16-char hex"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"hash_string returns stable 16-char hex" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "hash_string returns stable 16-char hex"
+Randomness seeded to: 2777516230
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"hash_string returns stable 16-char hex" end time: Oct 02 15:23 +05
+"hash_string returns stable 16-char hex" time elapsed: 00:00:00
+----------------------------------------------------------
+
+28/78 Testing: ExecuteService apply: empty edits -> ok no checkpoint
+28/78 Test: ExecuteService apply: empty edits -> ok no checkpoint
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: empty edits -> ok no checkpoint"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: empty edits -> ok no checkpoint" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: empty edits -> ok no checkpoint"
+Randomness seeded to: 2599868032
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: empty edits -> ok no checkpoint" end time: Oct 02 15:23 +05
+"ExecuteService apply: empty edits -> ok no checkpoint" time elapsed: 00:00:00
+----------------------------------------------------------
+
+29/78 Testing: ExecuteService apply: empty oldText reports insert
+29/78 Test: ExecuteService apply: empty oldText reports insert
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: empty oldText reports insert"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: empty oldText reports insert" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: empty oldText reports insert"
+Randomness seeded to: 3974731271
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: empty oldText reports insert" end time: Oct 02 15:23 +05
+"ExecuteService apply: empty oldText reports insert" time elapsed: 00:00:00
+----------------------------------------------------------
+
+30/78 Testing: ExecuteService apply: exact match reports exact
+30/78 Test: ExecuteService apply: exact match reports exact
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: exact match reports exact"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: exact match reports exact" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: exact match reports exact"
+Randomness seeded to: 530023994
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: exact match reports exact" end time: Oct 02 15:23 +05
+"ExecuteService apply: exact match reports exact" time elapsed: 00:00:00
+----------------------------------------------------------
+
+31/78 Testing: ExecuteService apply: failure on second edit must not leave first file changed
+31/78 Test: ExecuteService apply: failure on second edit must not leave first file changed
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: failure on second edit must not leave first file changed"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: failure on second edit must not leave first file changed" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: failure on second edit must not leave first file changed"
+Randomness seeded to: 3645110014
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: failure on second edit must not leave first file changed" end time: Oct 02 15:23 +05
+"ExecuteService apply: failure on second edit must not leave first file changed" time elapsed: 00:00:00
+----------------------------------------------------------
+
+32/78 Testing: ExecuteService apply: file not found -> fail
+32/78 Test: ExecuteService apply: file not found -> fail
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: file not found -> fail"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: file not found -> fail" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: file not found -> fail"
+Randomness seeded to: 832059625
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: file not found -> fail" end time: Oct 02 15:23 +05
+"ExecuteService apply: file not found -> fail" time elapsed: 00:00:00
+----------------------------------------------------------
+
+33/78 Testing: ExecuteService apply: fuzzy match on whitespace differences
+33/78 Test: ExecuteService apply: fuzzy match on whitespace differences
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: fuzzy match on whitespace differences"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: fuzzy match on whitespace differences" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: fuzzy match on whitespace differences"
+Randomness seeded to: 1315588056
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: fuzzy match on whitespace differences" end time: Oct 02 15:23 +05
+"ExecuteService apply: fuzzy match on whitespace differences" time elapsed: 00:00:00
+----------------------------------------------------------
+
+34/78 Testing: ExecuteService apply: fuzzy prefix match when model collapses newlines
+34/78 Test: ExecuteService apply: fuzzy prefix match when model collapses newlines
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: fuzzy prefix match when model collapses newlines"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: fuzzy prefix match when model collapses newlines" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: fuzzy prefix match when model collapses newlines"
+Randomness seeded to: 2573997164
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: fuzzy prefix match when model collapses newlines" end time: Oct 02 15:23 +05
+"ExecuteService apply: fuzzy prefix match when model collapses newlines" time elapsed: 00:00:00
+----------------------------------------------------------
+
+35/78 Testing: ExecuteService apply: hintLine 0 keeps first-occurrence behaviour
+35/78 Test: ExecuteService apply: hintLine 0 keeps first-occurrence behaviour
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: hintLine 0 keeps first-occurrence behaviour"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: hintLine 0 keeps first-occurrence behaviour" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: hintLine 0 keeps first-occurrence behaviour"
+Randomness seeded to: 2071998415
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: hintLine 0 keeps first-occurrence behaviour" end time: Oct 02 15:23 +05
+"ExecuteService apply: hintLine 0 keeps first-occurrence behaviour" time elapsed: 00:00:00
+----------------------------------------------------------
+
+36/78 Testing: ExecuteService apply: insert when oldText empty
+36/78 Test: ExecuteService apply: insert when oldText empty
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: insert when oldText empty"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: insert when oldText empty" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: insert when oldText empty"
+Randomness seeded to: 1006083689
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: insert when oldText empty" end time: Oct 02 15:23 +05
+"ExecuteService apply: insert when oldText empty" time elapsed: 00:00:00
+----------------------------------------------------------
+
+37/78 Testing: ExecuteService apply: multi-file
+37/78 Test: ExecuteService apply: multi-file
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: multi-file"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: multi-file" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: multi-file"
+Randomness seeded to: 3299605701
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: multi-file" end time: Oct 02 15:23 +05
+"ExecuteService apply: multi-file" time elapsed: 00:00:00
+----------------------------------------------------------
+
+38/78 Testing: ExecuteService apply: oldText not found -> fail
+38/78 Test: ExecuteService apply: oldText not found -> fail
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: oldText not found -> fail"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: oldText not found -> fail" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: oldText not found -> fail"
+Randomness seeded to: 776317381
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: oldText not found -> fail" end time: Oct 02 15:23 +05
+"ExecuteService apply: oldText not found -> fail" time elapsed: 00:00:00
+----------------------------------------------------------
+
+39/78 Testing: ExecuteService apply: picks occurrence nearest to hintLine, not first
+39/78 Test: ExecuteService apply: picks occurrence nearest to hintLine, not first
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: picks occurrence nearest to hintLine\, not first"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: picks occurrence nearest to hintLine, not first" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: picks occurrence nearest to hintLine\, not first"
+Randomness seeded to: 2960168999
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: picks occurrence nearest to hintLine, not first" end time: Oct 02 15:23 +05
+"ExecuteService apply: picks occurrence nearest to hintLine, not first" time elapsed: 00:00:00
+----------------------------------------------------------
+
+40/78 Testing: ExecuteService apply: preserves relative inner indent in multi-line newText
+40/78 Test: ExecuteService apply: preserves relative inner indent in multi-line newText
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: preserves relative inner indent in multi-line newText"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: preserves relative inner indent in multi-line newText" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: preserves relative inner indent in multi-line newText"
+Randomness seeded to: 3135555404
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: preserves relative inner indent in multi-line newText" end time: Oct 02 15:23 +05
+"ExecuteService apply: preserves relative inner indent in multi-line newText" time elapsed: 00:00:00
+----------------------------------------------------------
+
+41/78 Testing: ExecuteService apply: reindents newText when model drops leading indent
+41/78 Test: ExecuteService apply: reindents newText when model drops leading indent
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: reindents newText when model drops leading indent"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: reindents newText when model drops leading indent" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: reindents newText when model drops leading indent"
+Randomness seeded to: 4025829323
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: reindents newText when model drops leading indent" end time: Oct 02 15:23 +05
+"ExecuteService apply: reindents newText when model drops leading indent" time elapsed: 00:00:00
+----------------------------------------------------------
+
+42/78 Testing: ExecuteService apply: removes excess indent when oldText over-indented
+42/78 Test: ExecuteService apply: removes excess indent when oldText over-indented
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: removes excess indent when oldText over-indented"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: removes excess indent when oldText over-indented" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: removes excess indent when oldText over-indented"
+Randomness seeded to: 422287937
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: removes excess indent when oldText over-indented" end time: Oct 02 15:23 +05
+"ExecuteService apply: removes excess indent when oldText over-indented" time elapsed: 00:00:00
+----------------------------------------------------------
+
+43/78 Testing: ExecuteService apply: replace oldText
+43/78 Test: ExecuteService apply: replace oldText
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService apply: replace oldText"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService apply: replace oldText" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService apply: replace oldText"
+Randomness seeded to: 2831935993
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService apply: replace oldText" end time: Oct 02 15:23 +05
+"ExecuteService apply: replace oldText" time elapsed: 00:00:00
+----------------------------------------------------------
+
+44/78 Testing: ExecuteService undo: unknown id -> fail
+44/78 Test: ExecuteService undo: unknown id -> fail
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "ExecuteService undo: unknown id -> fail"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"ExecuteService undo: unknown id -> fail" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "ExecuteService undo: unknown id -> fail"
+Randomness seeded to: 1262255873
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ExecuteService undo: unknown id -> fail" end time: Oct 02 15:23 +05
+"ExecuteService undo: unknown id -> fail" time elapsed: 00:00:00
+----------------------------------------------------------
+
+45/78 Testing: GroundService: USR anchor survives line shifts
+45/78 Test: GroundService: USR anchor survives line shifts
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "GroundService: USR anchor survives line shifts"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"GroundService: USR anchor survives line shifts" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "GroundService: USR anchor survives line shifts"
+Randomness seeded to: 2600916486
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+<end of output>
+Test time =   2.23 sec
+----------------------------------------------------------
+Test Passed.
+"GroundService: USR anchor survives line shifts" end time: Oct 02 15:23 +05
+"GroundService: USR anchor survives line shifts" time elapsed: 00:00:02
+----------------------------------------------------------
+
+46/78 Testing: HttpMainModelBroker: generate plan with real model
+46/78 Test: HttpMainModelBroker: generate plan with real model
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "HttpMainModelBroker: generate plan with real model"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"HttpMainModelBroker: generate plan with real model" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "HttpMainModelBroker: generate plan with real model"
+Randomness seeded to: 3522639534
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+agent_tests is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+HttpMainModelBroker: generate plan with real model
+-------------------------------------------------------------------------------
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:507
+...............................................................................
+
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:522: 
+warning:
+  Main model unavailable: сеть: Could not connect to server
+
+===============================================================================
+test cases: 1 | 1 passed
+assertions: - none -
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"HttpMainModelBroker: generate plan with real model" end time: Oct 02 15:23 +05
+"HttpMainModelBroker: generate plan with real model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+47/78 Testing: LightModelBroker: classify with real model
+47/78 Test: LightModelBroker: classify with real model
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "LightModelBroker: classify with real model"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"LightModelBroker: classify with real model" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "LightModelBroker: classify with real model"
+Randomness seeded to: 2534266665
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+agent_tests is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+LightModelBroker: classify with real model
+-------------------------------------------------------------------------------
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:491
+...............................................................................
+
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:499: 
+warning:
+  Light model unavailable: модель недоступна (сеть: Could not connect to
+  server)
+
+===============================================================================
+test cases: 1 | 1 passed
+assertions: - none -
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"LightModelBroker: classify with real model" end time: Oct 02 15:23 +05
+"LightModelBroker: classify with real model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+48/78 Testing: Orchestrator: 'только проверь' vetoes write primitive
+48/78 Test: Orchestrator: 'только проверь' vetoes write primitive
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: 'только проверь' vetoes write primitive"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: 'только проверь' vetoes write primitive" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: 'только проверь' vetoes write primitive"
+Randomness seeded to: 1337112311
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.72 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: 'только проверь' vetoes write primitive" end time: Oct 02 15:23 +05
+"Orchestrator: 'только проверь' vetoes write primitive" time elapsed: 00:00:00
+----------------------------------------------------------
+
+49/78 Testing: Orchestrator: INFRA must report failure on real non-zero build
+49/78 Test: Orchestrator: INFRA must report failure on real non-zero build
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: INFRA must report failure on real non-zero build"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: INFRA must report failure on real non-zero build" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: INFRA must report failure on real non-zero build"
+Randomness seeded to: 51405426
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: INFRA must report failure on real non-zero build" end time: Oct 02 15:23 +05
+"Orchestrator: INFRA must report failure on real non-zero build" time elapsed: 00:00:00
+----------------------------------------------------------
+
+50/78 Testing: Orchestrator: INFRA without cursor
+50/78 Test: Orchestrator: INFRA without cursor
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: INFRA without cursor"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: INFRA without cursor" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: INFRA without cursor"
+Randomness seeded to: 3461096474
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.67 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: INFRA without cursor" end time: Oct 02 15:23 +05
+"Orchestrator: INFRA without cursor" time elapsed: 00:00:00
+----------------------------------------------------------
+
+51/78 Testing: Orchestrator: InfraHandler build with real buildDir
+51/78 Test: Orchestrator: InfraHandler build with real buildDir
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: InfraHandler build with real buildDir"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: InfraHandler build with real buildDir" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: InfraHandler build with real buildDir"
+Randomness seeded to: 2284877237
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+agent_tests is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Orchestrator: InfraHandler build with real buildDir
+-------------------------------------------------------------------------------
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:369
+...............................................................................
+
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:376: 
+warning:
+  compile_commands.json not found at /home/artem/projects/outer/AI-agent/cpp-
+  tool/cmake-build-debug/../cmake-build-debug/compile_commands.json, skipping
+  InfraHandler build test
+
+===============================================================================
+test cases: 1 | 1 passed
+assertions: - none -
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: InfraHandler build with real buildDir" end time: Oct 02 15:23 +05
+"Orchestrator: InfraHandler build with real buildDir" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/78 Testing: Orchestrator: InfraHandler graph targets
+52/78 Test: Orchestrator: InfraHandler graph targets
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: InfraHandler graph targets"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: InfraHandler graph targets" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: InfraHandler graph targets"
+Randomness seeded to: 3230561050
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+agent_tests is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Orchestrator: InfraHandler graph targets
+-------------------------------------------------------------------------------
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:393
+...............................................................................
+
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:397: 
+warning:
+  compile_commands.json not found, skipping InfraHandler graph test
+
+===============================================================================
+test cases: 1 | 1 passed
+assertions: - none -
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: InfraHandler graph targets" end time: Oct 02 15:23 +05
+"Orchestrator: InfraHandler graph targets" time elapsed: 00:00:00
+----------------------------------------------------------
+
+53/78 Testing: Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)
+53/78 Test: Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)"
+Randomness seeded to: 1654607387
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   2.88 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)" end time: Oct 02 15:23 +05
+"Orchestrator: SANDBOX_FIX on tiny project passes without confirmation (adaptive thresholds)" time elapsed: 00:00:02
+----------------------------------------------------------
+
+54/78 Testing: Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds
+54/78 Test: Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds"
+Randomness seeded to: 1652014106
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   3.98 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds" end time: Oct 02 15:23 +05
+"Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with explicit low thresholds" time elapsed: 00:00:03
+----------------------------------------------------------
+
+55/78 Testing: Orchestrator: SANDBOX_FIX with Stub models
+55/78 Test: Orchestrator: SANDBOX_FIX with Stub models
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: SANDBOX_FIX with Stub models"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: SANDBOX_FIX with Stub models" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: SANDBOX_FIX with Stub models"
+Randomness seeded to: 204855258
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   2.82 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: SANDBOX_FIX with Stub models" end time: Oct 02 15:23 +05
+"Orchestrator: SANDBOX_FIX with Stub models" time elapsed: 00:00:02
+----------------------------------------------------------
+
+56/78 Testing: Orchestrator: UNDERSTAND with Stub model
+56/78 Test: Orchestrator: UNDERSTAND with Stub model
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: UNDERSTAND with Stub model"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: UNDERSTAND with Stub model" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: UNDERSTAND with Stub model"
+Randomness seeded to: 1081806929
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   0.70 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: UNDERSTAND with Stub model" end time: Oct 02 15:23 +05
+"Orchestrator: UNDERSTAND with Stub model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+57/78 Testing: Orchestrator: blast_radius wide warning
+57/78 Test: Orchestrator: blast_radius wide warning
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: blast_radius wide warning"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: blast_radius wide warning" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: blast_radius wide warning"
+Randomness seeded to: 329226668
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   2.77 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: blast_radius wide warning" end time: Oct 02 15:23 +05
+"Orchestrator: blast_radius wide warning" time elapsed: 00:00:02
+----------------------------------------------------------
+
+58/78 Testing: Orchestrator: clarification cycle blast_radius -> cancel
+58/78 Test: Orchestrator: clarification cycle blast_radius -> cancel
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: clarification cycle blast_radius -> cancel"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: clarification cycle blast_radius -> cancel" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: clarification cycle blast_radius -> cancel"
+Randomness seeded to: 2227960093
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: clarification cycle blast_radius -> cancel" end time: Oct 02 15:23 +05
+"Orchestrator: clarification cycle blast_radius -> cancel" time elapsed: 00:00:00
+----------------------------------------------------------
+
+59/78 Testing: Orchestrator: clarification cycle blast_radius -> proceed -> answer
+59/78 Test: Orchestrator: clarification cycle blast_radius -> proceed -> answer
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: clarification cycle blast_radius -> proceed -> answer"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: clarification cycle blast_radius -> proceed -> answer" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: clarification cycle blast_radius -> proceed -> answer"
+Randomness seeded to: 510178684
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+<end of output>
+Test time =   4.03 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: clarification cycle blast_radius -> proceed -> answer" end time: Oct 02 15:23 +05
+"Orchestrator: clarification cycle blast_radius -> proceed -> answer" time elapsed: 00:00:04
+----------------------------------------------------------
+
+60/78 Testing: Orchestrator: clarification cycle depth protection
+60/78 Test: Orchestrator: clarification cycle depth protection
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: clarification cycle depth protection"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: clarification cycle depth protection" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: clarification cycle depth protection"
+Randomness seeded to: 3760743751
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.19 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: clarification cycle depth protection" end time: Oct 02 15:23 +05
+"Orchestrator: clarification cycle depth protection" time elapsed: 00:00:00
+----------------------------------------------------------
+
+61/78 Testing: Orchestrator: clarification replay protection
+61/78 Test: Orchestrator: clarification replay protection
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: clarification replay protection"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: clarification replay protection" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: clarification replay protection"
+Randomness seeded to: 4063988601
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: clarification replay protection" end time: Oct 02 15:23 +05
+"Orchestrator: clarification replay protection" time elapsed: 00:00:00
+----------------------------------------------------------
+
+62/78 Testing: Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)
+62/78 Test: Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)"
+Randomness seeded to: 3137878669
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.66 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)" end time: Oct 02 15:23 +05
+"Orchestrator: dead model + INFRA phrase -> answer via stub (no missing_cursor)" time elapsed: 00:00:00
+----------------------------------------------------------
+
+63/78 Testing: Orchestrator: dead model + clarification proceed -> writes
+63/78 Test: Orchestrator: dead model + clarification proceed -> writes
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: dead model + clarification proceed -> writes"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: dead model + clarification proceed -> writes" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: dead model + clarification proceed -> writes"
+Randomness seeded to: 554090680
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   3.02 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: dead model + clarification proceed -> writes" end time: Oct 02 15:23 +05
+"Orchestrator: dead model + clarification proceed -> writes" time elapsed: 00:00:03
+----------------------------------------------------------
+
+64/78 Testing: Orchestrator: dead model + clarification wait -> error model_unavailable_wait
+64/78 Test: Orchestrator: dead model + clarification wait -> error model_unavailable_wait
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: dead model + clarification wait -> error model_unavailable_wait"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: dead model + clarification wait -> error model_unavailable_wait" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: dead model + clarification wait -> error model_unavailable_wait"
+Randomness seeded to: 2712507373
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: dead model + clarification wait -> error model_unavailable_wait" end time: Oct 02 15:23 +05
+"Orchestrator: dead model + clarification wait -> error model_unavailable_wait" time elapsed: 00:00:00
+----------------------------------------------------------
+
+65/78 Testing: Orchestrator: dead model + question -> answer via stub UNDERSTAND
+65/78 Test: Orchestrator: dead model + question -> answer via stub UNDERSTAND
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: dead model + question -> answer via stub UNDERSTAND"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: dead model + question -> answer via stub UNDERSTAND" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: dead model + question -> answer via stub UNDERSTAND"
+Randomness seeded to: 4024590776
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.67 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: dead model + question -> answer via stub UNDERSTAND" end time: Oct 02 15:23 +05
+"Orchestrator: dead model + question -> answer via stub UNDERSTAND" time elapsed: 00:00:00
+----------------------------------------------------------
+
+66/78 Testing: Orchestrator: dead model + write phrase -> needs_input model-unavailable
+66/78 Test: Orchestrator: dead model + write phrase -> needs_input model-unavailable
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: dead model + write phrase -> needs_input model-unavailable"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: dead model + write phrase -> needs_input model-unavailable" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: dead model + write phrase -> needs_input model-unavailable"
+Randomness seeded to: 2024860743
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.17 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: dead model + write phrase -> needs_input model-unavailable" end time: Oct 02 15:23 +05
+"Orchestrator: dead model + write phrase -> needs_input model-unavailable" time elapsed: 00:00:00
+----------------------------------------------------------
+
+67/78 Testing: Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND
+67/78 Test: Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND"
+Randomness seeded to: 3286526618
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+<end of output>
+Test time =   0.70 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND" end time: Oct 02 15:23 +05
+"Orchestrator: explicit 'без правок' vetoes write primitive -> UNDERSTAND" time elapsed: 00:00:00
+----------------------------------------------------------
+
+68/78 Testing: Orchestrator: failed main plan must not produce green verify
+68/78 Test: Orchestrator: failed main plan must not produce green verify
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: failed main plan must not produce green verify"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: failed main plan must not produce green verify" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: failed main plan must not produce green verify"
+Randomness seeded to: 3108871114
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   2.53 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: failed main plan must not produce green verify" end time: Oct 02 15:23 +05
+"Orchestrator: failed main plan must not produce green verify" time elapsed: 00:00:02
+----------------------------------------------------------
+
+69/78 Testing: Orchestrator: full cycle SANDBOX_FIX with real models
+69/78 Test: Orchestrator: full cycle SANDBOX_FIX with real models
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: full cycle SANDBOX_FIX with real models"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: full cycle SANDBOX_FIX with real models" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: full cycle SANDBOX_FIX with real models"
+Randomness seeded to: 930440557
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+agent_tests is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Orchestrator: full cycle SANDBOX_FIX with real models
+-------------------------------------------------------------------------------
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:561
+...............................................................................
+
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:590: FAILED:
+  REQUIRE( outcome.value("type", "") == "answer" )
+with expansion:
+  "needs_input" == "answer"
+
+===============================================================================
+test cases: 1 | 1 failed as expected
+assertions: 1 | 1 failed as expected
+
+<end of output>
+Test time =   0.19 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: full cycle SANDBOX_FIX with real models" end time: Oct 02 15:23 +05
+"Orchestrator: full cycle SANDBOX_FIX with real models" time elapsed: 00:00:00
+----------------------------------------------------------
+
+70/78 Testing: Orchestrator: full cycle UNDERSTAND with real light model
+70/78 Test: Orchestrator: full cycle UNDERSTAND with real light model
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: full cycle UNDERSTAND with real light model"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: full cycle UNDERSTAND with real light model" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: full cycle UNDERSTAND with real light model"
+Randomness seeded to: 1967856726
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+agent_tests is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Orchestrator: full cycle UNDERSTAND with real light model
+-------------------------------------------------------------------------------
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:531
+...............................................................................
+
+/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp:558: FAILED:
+  CHECK( outcome["answered_by"].value("role", "") == "light" )
+with expansion:
+  "deterministic_fallback" == "light"
+
+===============================================================================
+test cases: 1 | 1 failed as expected
+assertions: 3 | 2 passed | 1 failed as expected
+
+<end of output>
+Test time =   0.70 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: full cycle UNDERSTAND with real light model" end time: Oct 02 15:23 +05
+"Orchestrator: full cycle UNDERSTAND with real light model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+71/78 Testing: Orchestrator: needs_input on low confidence (manual simulation)
+71/78 Test: Orchestrator: needs_input on low confidence (manual simulation)
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: needs_input on low confidence (manual simulation)"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: needs_input on low confidence (manual simulation)" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: needs_input on low confidence (manual simulation)"
+Randomness seeded to: 3122181800
+===============================================================================
+All tests passed (1 assertion in 1 test case)
+
+<end of output>
+Test time =   3.33 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: needs_input on low confidence (manual simulation)" end time: Oct 02 15:23 +05
+"Orchestrator: needs_input on low confidence (manual simulation)" time elapsed: 00:00:03
+----------------------------------------------------------
+
+72/78 Testing: Orchestrator: vague goal answered -> goal_text replaced and proceeds
+72/78 Test: Orchestrator: vague goal answered -> goal_text replaced and proceeds
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: vague goal answered -> goal_text replaced and proceeds"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: vague goal answered -> goal_text replaced and proceeds" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: vague goal answered -> goal_text replaced and proceeds"
+Randomness seeded to: 345579747
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+<end of output>
+Test time =   3.08 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: vague goal answered -> goal_text replaced and proceeds" end time: Oct 02 15:23 +05
+"Orchestrator: vague goal answered -> goal_text replaced and proceeds" time elapsed: 00:00:03
+----------------------------------------------------------
+
+73/78 Testing: Orchestrator: vague goal for UNDERSTAND -> no blocking
+73/78 Test: Orchestrator: vague goal for UNDERSTAND -> no blocking
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: vague goal for UNDERSTAND -> no blocking"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: vague goal for UNDERSTAND -> no blocking" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: vague goal for UNDERSTAND -> no blocking"
+Randomness seeded to: 3253137140
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+<end of output>
+Test time =   0.69 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: vague goal for UNDERSTAND -> no blocking" end time: Oct 02 15:23 +05
+"Orchestrator: vague goal for UNDERSTAND -> no blocking" time elapsed: 00:00:00
+----------------------------------------------------------
+
+74/78 Testing: Orchestrator: vague goal for write primitive -> needs_input goal-vague
+74/78 Test: Orchestrator: vague goal for write primitive -> needs_input goal-vague
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: vague goal for write primitive -> needs_input goal-vague"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: vague goal for write primitive -> needs_input goal-vague" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: vague goal for write primitive -> needs_input goal-vague"
+Randomness seeded to: 957674286
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: vague goal for write primitive -> needs_input goal-vague" end time: Oct 02 15:23 +05
+"Orchestrator: vague goal for write primitive -> needs_input goal-vague" time elapsed: 00:00:00
+----------------------------------------------------------
+
+75/78 Testing: Orchestrator: write goal WITHOUT no-edit phrase is not vetoed
+75/78 Test: Orchestrator: write goal WITHOUT no-edit phrase is not vetoed
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "Orchestrator: write goal WITHOUT no-edit phrase is not vetoed"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"Orchestrator: write goal WITHOUT no-edit phrase is not vetoed" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "Orchestrator: write goal WITHOUT no-edit phrase is not vetoed"
+Randomness seeded to: 1743510347
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   2.83 sec
+----------------------------------------------------------
+Test Passed.
+"Orchestrator: write goal WITHOUT no-edit phrase is not vetoed" end time: Oct 02 15:23 +05
+"Orchestrator: write goal WITHOUT no-edit phrase is not vetoed" time elapsed: 00:00:02
+----------------------------------------------------------
+
+76/78 Testing: StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND
+76/78 Test: StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND"
+Randomness seeded to: 3518045628
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND" end time: Oct 02 15:23 +05
+"StubModelBroker: capitalized Cyrillic reading verb -> UNDERSTAND" time elapsed: 00:00:00
+----------------------------------------------------------
+
+77/78 Testing: StubModelBroker: capitalized Cyrillic write verb still writes
+77/78 Test: StubModelBroker: capitalized Cyrillic write verb still writes
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "StubModelBroker: capitalized Cyrillic write verb still writes"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"StubModelBroker: capitalized Cyrillic write verb still writes" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "StubModelBroker: capitalized Cyrillic write verb still writes"
+Randomness seeded to: 3291349560
+===============================================================================
+All tests passed (1 assertion in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"StubModelBroker: capitalized Cyrillic write verb still writes" end time: Oct 02 15:23 +05
+"StubModelBroker: capitalized Cyrillic write verb still writes" time elapsed: 00:00:00
+----------------------------------------------------------
+
+78/78 Testing: primitiveFromString: model casing/whitespace are tolerated
+78/78 Test: primitiveFromString: model casing/whitespace are tolerated
+Command: "/home/artem/projects/outer/AI-agent/cpp-tool/build/agent_tests" "primitiveFromString: model casing/whitespace are tolerated"
+Directory: /home/artem/projects/outer/AI-agent/cpp-tool/build
+"primitiveFromString: model casing/whitespace are tolerated" start time: Oct 02 15:23 +05
+Output:
+----------------------------------------------------------
+Filters: "primitiveFromString: model casing/whitespace are tolerated"
+Randomness seeded to: 4293169854
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"primitiveFromString: model casing/whitespace are tolerated" end time: Oct 02 15:23 +05
+"primitiveFromString: model casing/whitespace are tolerated" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 02 15:23 +05

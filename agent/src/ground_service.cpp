@@ -9,6 +9,50 @@
 namespace cppagent {
 
 namespace {
+
+// Слой 2 (arch.md): где мы физически находимся в коде. Чисто детерминированная
+// функция от фактов, которые Ground уже собрал — ничего не парсит заново.
+//
+// Эвристика, а не факт (помечено явно, не выдаётся за достоверное): pimpl
+// определяется по суффиксу "Impl" в имени класса. Ложноположительные случаи
+// возможны (класс просто называется *Impl не из-за идиомы pimpl) — это не
+// хуже старого DetailKind, который pimpl вообще не различал, но и не лучше,
+// чем оно могло бы быть при реальном структурном анализе (отдельный класс
+// с теми же именами методов без наследования). Уточнить при необходимости.
+CursorContext computeCursorContext(const GroundResult& g, const std::string& file) {
+    auto endsWith = [](const std::string& s, const std::string& suffix) {
+        return s.size() >= suffix.size() &&
+               s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    bool isHeaderFile = endsWith(file, ".h") || endsWith(file, ".hpp") || endsWith(file, ".hh");
+
+    if (g.enclosingMethod.is_null()) {
+        if (!g.ok) return CursorContext::NO_CONTEXT;
+        if (!isHeaderFile) return CursorContext::NO_CONTEXT; // .cpp вне метода — некуда отнести точнее
+        std::string kind = g.locate.value("cursor", json::object()).value("kind", "");
+        if (kind.find("ClassDecl") != std::string::npos || kind.find("StructDecl") != std::string::npos)
+            return CursorContext::INTERFACE_CLASS_DECL;
+        if (kind.find("EnumDecl") != std::string::npos || kind.find("TypedefDecl") != std::string::npos ||
+            kind.find("VarDecl") != std::string::npos  || kind.find("FieldDecl") != std::string::npos)
+            return CursorContext::PLAIN_HEADER;
+        return CursorContext::CC_FOREST; // пробел/комментарий/между классами в .h — наименее специфичный остаток
+    }
+
+    bool isPureVirtual = g.enclosingMethod.value("is_pure_virtual", false);
+    bool isVirtual      = g.enclosingMethod.value("is_virtual", false);
+    if (isPureVirtual) return CursorContext::PURE_VIRTUAL_METHOD;
+    if (isVirtual)     return CursorContext::VIRTUAL_METHOD_WITH_BODY;
+
+    if (g.enclosingClass.is_null()) return CursorContext::FREE_FUNCTION;
+
+    std::string className = g.enclosingClass.value("name", "");
+    if (endsWith(className, "Impl")) return CursorContext::PIMPL_IMPL; // approx, см. комментарий выше
+
+    std::string methodFile = g.enclosingMethod.value("file", "");
+    bool bodyInCpp = endsWith(methodFile, ".cpp") || endsWith(methodFile, ".cc") || endsWith(methodFile, ".cxx");
+    return bodyInCpp ? CursorContext::CONCRETE_METHOD_IMPL : CursorContext::NON_VIRTUAL_METHOD;
+}
+
 // Если enclosingMethod — виртуальный, ищем ВСЕ переопределения базового метода,
 // а не только потомков текущего. Курсор может стоять на CMySQLModel::execSQL_read,
 // но нам нужен и CPostgresModel::execSQL_read — они siblings (оба переопределяют
@@ -95,7 +139,7 @@ GroundResult GroundService::buildGround(const std::string& file, int line, int c
     std::string usr = g.enclosingMethod.is_null()?"":g.enclosingMethod.value("usr","");
     std::string className;
     if(!g.enclosingClass.is_null()) className=g.enclosingClass.value("name","");
-    // S3 cross-TU с кэшем: ProjectIndex (L1 mem + L2 JsonFileStore)
+    // S3 cross-TU с постоянным кэшем: CTuCache (SQLite)
     json br = cpptool::queryBlastRadiusCross(compileCommandsPath_, file, className, usr, flags);
     if(br.value("ok",false)){
         g.suggestedMode = br.value("suggested_mode","sandbox");
@@ -107,13 +151,7 @@ GroundResult GroundService::buildGround(const std::string& file, int line, int c
         g.scaleFacts=json{{"error",br.value("error",json::object())},{"note","blast_radius failed, fallback sandbox"}};
     }
     fillVirtualOverridesIfNeeded(g, compileCommandsPath_, this);
-    // Compute DetailKind deterministically.
-    if (!g.enclosingMethod.is_null()) {
-        bool isPureVirtual = g.enclosingMethod.value("is_pure_virtual", false);
-        bool isVirtual     = g.enclosingMethod.value("is_virtual", false);
-        if (isPureVirtual)   g.detailKind = DetailKind::PURE_VIRTUAL;
-        else if (isVirtual)  g.detailKind = DetailKind::VIRTUAL_WITH_BASE;
-    }
+    g.cursorContext = computeCursorContext(g, file);
     return g;
 }
 
@@ -179,7 +217,7 @@ GroundResult GroundService::buildGroundLight(const std::string& file, int line, 
                     {"descendants", implRes.value("descendants",0)},
                     {"files_scanned", implRes.value("files_scanned",0)}};
                 g.virtualOverridesChecked = true;
-                g.detailKind = DetailKind::HEADER_NOT_IN_CC;
+                g.cursorContext = CursorContext::PURE_VIRTUAL_METHOD; // fallback всегда моделирует этот случай
                 return g;
             }
         }
@@ -193,13 +231,7 @@ GroundResult GroundService::buildGroundLight(const std::string& file, int line, 
     g.suggestedMode="sandbox";
     g.scaleFacts=json{{"note","light ground: blast_radius not computed"}};
     fillVirtualOverridesIfNeeded(g, compileCommandsPath_, this);
-    // Compute DetailKind deterministically.
-    if (!g.enclosingMethod.is_null()) {
-        bool isPureVirtual = g.enclosingMethod.value("is_pure_virtual", false);
-        bool isVirtual     = g.enclosingMethod.value("is_virtual", false);
-        if (isPureVirtual)   g.detailKind = DetailKind::PURE_VIRTUAL;
-        else if (isVirtual)  g.detailKind = DetailKind::VIRTUAL_WITH_BASE;
-    }
+    g.cursorContext = computeCursorContext(g, file);
     return g;
 }
 

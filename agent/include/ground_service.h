@@ -1,23 +1,12 @@
 #pragma once
 #include "json.hpp"
+#include "task_classification.h"
 #include <string>
 #include <vector>
 
 namespace cppagent {
 
 using json = nlohmann::json;
-
-// Детализация задачи внутри Primitive::UNDERSTAND.
-// Вычисляется детерминированно по трём входам:
-//   1. is_pure_virtual / is_virtual у enclosingMethod
-//   2. файл присутствует в compile_commands.json или нет
-//   3. наличие результатов virtualOverrides
-enum class DetailKind {
-    NONE,              // обычный метод, не virtual
-    VIRTUAL_WITH_BASE, // virtual с реализацией в базе (base + overrides)
-    PURE_VIRTUAL,      // pure virtual — только реализации в потомках
-    HEADER_NOT_IN_CC,  // .h не в compile_commands, fallback queryFindImplementors
-};
 
 struct GroundResult {
     json locate;          // полный ответ queryLocateSymbol (или {ok:false, error:...})
@@ -30,7 +19,11 @@ struct GroundResult {
     // эти два случая различает вызывающий код по virtualOverridesChecked.
     json virtualOverrides{json{{{"ok", false}}}};
     bool virtualOverridesChecked{false}; // true если enclosingMethod был виртуальным и поиск запускался
-    DetailKind detailKind{DetailKind::NONE}; // детализация для UnderstandHandler
+    // Слой 2 (ТЗ, arch.md): где мы физически находимся в коде. Вычисляется
+    // детерминированно из тех же фактов, что раньше шли в DetailKind (его
+    // заменяет — DetailKind было 4 значения только под UNDERSTAND/virtual-кейсы,
+    // CursorContext — 10 значений, общих для всех Primitive и всех Detail).
+    CursorContext cursorContext{CursorContext::NO_CONTEXT};
     json scaleFacts;      // DeterministicScale.facts (approx пока)
     std::string suggestedMode{"sandbox"}; // "sandbox"|"quarry" от estimateScaleApprox
     bool ok{false};       // true если locate ok
