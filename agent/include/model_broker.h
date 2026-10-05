@@ -1,6 +1,8 @@
 #pragma once
+#include <memory>
 #include <string>
 #include "task_classification.h"
+#include "api_ai.h"
 
 namespace cppagent {
 
@@ -71,8 +73,11 @@ public:
 class LightModelBroker : public ModelBroker {
 public:
     // baseUrl без завершающего слэша, например "http://127.0.0.1:8080"
-    explicit LightModelBroker(std::string baseUrl, std::string modelName = "", double temperature = 0.1)
-        : baseUrl_(std::move(baseUrl)), modelName_(std::move(modelName)), temperature_(temperature) {}
+    explicit LightModelBroker(std::string baseUrl, std::string modelName = "", double temperature = 0.1);
+    // Инъекция произвольного провайдера (тесты — FakeApi; потом Claude/remote).
+    explicit LightModelBroker(std::shared_ptr<IApiAI> api, double temperature = 0.1,
+                              std::string modelName = "")
+        : api_(std::move(api)), modelName_(std::move(modelName)), temperature_(temperature) {}
 
     PrimitiveGuess classifyIntent(const std::string& goalText) override;
     std::string roleName() const override { return "light"; }
@@ -80,7 +85,7 @@ public:
     double temperature() const { return temperature_; }
 
 private:
-    std::string baseUrl_;
+    std::shared_ptr<IApiAI> api_;
     std::string modelName_;
     double temperature_;
 };

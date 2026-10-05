@@ -1,5 +1,9 @@
 #include "task_classification.h"
 
+#include <cctype>
+#include <string>
+#include <vector>
+
 namespace cppagent {
 
 std::string detailToString(Detail d) {
@@ -95,11 +99,30 @@ std::string actionToString(Action a) {
     case Action::QUERY_LOCATE_ONLY: return "QUERY_LOCATE_ONLY";
     case Action::QUERY_FIND_IMPLEMENTORS: return "QUERY_FIND_IMPLEMENTORS";
     case Action::QUERY_VIRTUAL_OVERRIDES: return "QUERY_VIRTUAL_OVERRIDES";
+    case Action::QUERY_CALL_CHAIN: return "QUERY_CALL_CHAIN";
+    case Action::QUERY_CALL_SUBTREE: return "QUERY_CALL_SUBTREE";
+    case Action::QUERY_DEPENDENCY_MAP: return "QUERY_DEPENDENCY_MAP";
+    case Action::QUERY_TODO_SCAN: return "QUERY_TODO_SCAN";
+    case Action::QUERY_DOC_CHECK: return "QUERY_DOC_CHECK";
+    case Action::QUERY_CODE_SMELL: return "QUERY_CODE_SMELL";
+    case Action::QUERY_TYPE_USAGE: return "QUERY_TYPE_USAGE";
+    case Action::QUERY_COMPLEXITY: return "QUERY_COMPLEXITY";
+    case Action::QUERY_DUPLICATES: return "QUERY_DUPLICATES";
     case Action::NOT_IMPLEMENTED_YET: return "NOT_IMPLEMENTED_YET";
     case Action::DELEGATE_TO_MAIN: return "DELEGATE_TO_MAIN";
     case Action::REFUSE_TOO_BROAD: return "REFUSE_TOO_BROAD";
     case Action::NEEDS_INPUT_RELEVANCE: return "NEEDS_INPUT_RELEVANCE";
     case Action::NEEDS_INPUT_CURSOR: return "NEEDS_INPUT_CURSOR";
+    }
+    return "UNKNOWN";
+}
+
+std::string relevanceToString(Relevance r) {
+    switch (r) {
+    case Relevance::ENTRY_POINT_EXACT: return "ENTRY_POINT_EXACT";
+    case Relevance::ENTRY_POINT_NEARBY: return "ENTRY_POINT_NEARBY";
+    case Relevance::UNRELATED: return "UNRELATED";
+    case Relevance::AMBIGUOUS: return "AMBIGUOUS";
     }
     return "UNKNOWN";
 }
@@ -169,6 +192,7 @@ Detail detailFromString(const std::string& s, bool& ok) {
 
 
 namespace {
+
 bool isMethodContext(CursorContext c) {
     switch (c) {
     case CursorContext::PURE_VIRTUAL_METHOD:
@@ -182,12 +206,108 @@ bool isMethodContext(CursorContext c) {
         return false;
     }
 }
+
+// Detail-ы, которые по смыслу привязаны к КОНКРЕТНОМУ методу под курсором.
+// Для них "место = другой метод" уже сигнал несогласованности (слой 3).
+bool detailRequiresMethod(Detail d) {
+    switch (d) {
+    case Detail::SIMPLE_READ:
+    case Detail::FIND_IMPLEMENTATIONS:
+    case Detail::CALL_CHAIN:
+    case Detail::CALL_GRAPH_SUBTREE:
+    case Detail::DATA_FLOW:
+    case Detail::LIFECYCLE_TRACE:
+    case Detail::COMPARE_IMPLS:
+    case Detail::VIRTUAL_REFACTOR_SIM:
+    case Detail::FEASIBILITY_CHECK:
+    case Detail::LOCAL_FIX:
+    case Detail::RENAME:
+    case Detail::SIGNATURE_CHANGE:
+    case Detail::ADD_OVERRIDE:
+    case Detail::EXTRACT_METHOD:
+    case Detail::INLINE_METHOD:
+    case Detail::MOVE_METHOD:
+    case Detail::DEAD_CODE_REMOVAL:
+    case Detail::BENCHMARK:
+    case Detail::THREADING_SAFE:
+        return true;
+    default:
+        return false;
+    }
 }
 
-Relevance computeRelevance(Detail detail, CursorContext ctx) {
-    if (ctx == CursorContext::NO_CONTEXT) return Relevance::UNRELATED;
+// "c:@S@Calculator@F@add#I#I#" -> "add". Пустая строка, если USR без @F@.
+std::string methodNameFromUsr(const std::string& usr) {
+    const std::string kF = "@F@";
+    auto p = usr.find(kF);
+    if (p == std::string::npos) return "";
+    p += kF.size();
+    auto h = usr.find('#', p);
+    if (h == std::string::npos) h = usr.size();
+    return usr.substr(p, h - p);
+}
+
+// Имена, использованные в goal_text как вызов/reference: identifier, сразу за
+// которым (после пробелов) идёт '('. Сознательно узко: слова без скобок
+// (int/long/имена классов) НЕ считаются упоминанием метода, поэтому ложных
+// UNRELATED почти нет. Это приближение, а не разбор естественного языка.
+std::vector<std::string> callLikeMethodNames(const std::string& goalText) {
+    static const char* kKeywords[] = {
+        "if", "for", "while", "switch", "return", "sizeof", "catch", "throw",
+        "new", "delete", "decltype", "static_cast", "dynamic_cast", "const_cast",
+        "reinterpret_cast", "typeid", "alignof", "noexcept", "operator"
+    };
+    std::vector<std::string> out;
+    size_t i = 0, n = goalText.size();
+    while (i < n) {
+        unsigned char c = static_cast<unsigned char>(goalText[i]);
+        if (std::isalpha(c) || c == '_') {
+            size_t s = i;
+            while (i < n) {
+                unsigned char d = static_cast<unsigned char>(goalText[i]);
+                if (std::isalnum(d) || d == '_') ++i;
+                else break;
+            }
+            std::string name = goalText.substr(s, i - s);
+            size_t j = i;
+            while (j < n && goalText[j] == ' ') ++j;
+            if (j < n && goalText[j] == '(') {
+                bool kw = false;
+                for (const char* k : kKeywords) if (name == k) { kw = true; break; }
+                if (!kw) out.push_back(name);
+            }
+        } else {
+            ++i;
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+Relevance computeRelevance(Detail detail, CursorContext ctx,
+                           const std::string& goalText,
+                           const std::string& enclosingMethodUsr) {
+    // arch.md: GENERAL_QUESTION — курсор неважен НЕЗАВИСИМО от контекста,
+    // поэтому этот приоритет ВЫШЕ проверки NO_CONTEXT (общий вопрос "как
+    // работает подсистема X" не должен требовать курсора).
     if (detail == Detail::GENERAL_QUESTION) return Relevance::ENTRY_POINT_NEARBY;
-    if (isMethodContext(ctx)) return Relevance::ENTRY_POINT_EXACT;
+    if (ctx == CursorContext::NO_CONTEXT) return Relevance::UNRELATED;
+    if (isMethodContext(ctx)) {
+        // Детерминированный сигнал "не то место": задача явно вызывает/называет
+        // ДРУГОЙ метод, чем тот, под которым стоит курсор. Если имя текущего
+        // метода в тексте тоже присутствует — место считаем релевантным.
+        if (!enclosingMethodUsr.empty() && detailRequiresMethod(detail)) {
+            const std::string current = methodNameFromUsr(enclosingMethodUsr);
+            std::vector<std::string> named = callLikeMethodNames(goalText);
+            if (!current.empty() && !named.empty()) {
+                bool mentionsCurrent = false;
+                for (const auto& nm : named) if (nm == current) { mentionsCurrent = true; break; }
+                if (!mentionsCurrent) return Relevance::UNRELATED;
+            }
+        }
+        return Relevance::ENTRY_POINT_EXACT;
+    }
     if (ctx == CursorContext::INTERFACE_CLASS_DECL ||
         ctx == CursorContext::CC_FOREST ||
         ctx == CursorContext::PLAIN_HEADER)
@@ -195,7 +315,12 @@ Relevance computeRelevance(Detail detail, CursorContext ctx) {
     return Relevance::AMBIGUOUS;
 }
 
-Action selectAction(const std::string& primitiveStr, Detail detail, CursorContext ctx) {
+Action selectAction(const std::string& primitiveStr, Detail detail, CursorContext ctx,
+                    Relevance relevance) {
+    // Слой 3 как модификатор слоя 4 (arch.md): если место не относится к задаче —
+    // спрашиваем юзера, что бы ни дала таблица (primitive, detail) ниже.
+    if (relevance == Relevance::UNRELATED || relevance == Relevance::AMBIGUOUS)
+        return Action::NEEDS_INPUT_RELEVANCE;
     if (primitiveStr == "UNDERSTAND" || primitiveStr == "EXPERIMENT") {
         switch (detail) {
         case Detail::SIMPLE_READ:
@@ -214,20 +339,39 @@ Action selectAction(const std::string& primitiveStr, Detail detail, CursorContex
         case Detail::GENERAL_QUESTION:
             return Action::DELEGATE_TO_MAIN;
         case Detail::CALL_CHAIN:
+            return isMethodContext(ctx) ? Action::QUERY_CALL_CHAIN : Action::NEEDS_INPUT_RELEVANCE;
         case Detail::CALL_GRAPH_SUBTREE:
+            return isMethodContext(ctx) ? Action::QUERY_CALL_SUBTREE : Action::NEEDS_INPUT_RELEVANCE;
         case Detail::DEPENDENCY_MAP:
-        case Detail::DATA_FLOW:
+            // Зависимости — всегда есть: файл (курсор) или headless по цели.
+            return Action::QUERY_DEPENDENCY_MAP;
+        case Detail::TODO_SCAN:
+            return Action::QUERY_TODO_SCAN;
+        case Detail::DOC_CHECK:
+            return Action::QUERY_DOC_CHECK;
+        case Detail::CODE_SMELL:
+            return isMethodContext(ctx) ? Action::QUERY_CODE_SMELL : Action::NEEDS_INPUT_RELEVANCE;
         case Detail::TYPE_USAGE:
+            // Тип/класс -> refs по USR класса; на методе — по USR метода.
+            return (isMethodContext(ctx) ||
+                    ctx == CursorContext::INTERFACE_CLASS_DECL) ? Action::QUERY_TYPE_USAGE
+                                                                : Action::NEEDS_INPUT_RELEVANCE;
+        case Detail::COMPLEXITY_HOTSPOT:
+            return Action::QUERY_COMPLEXITY;
+        case Detail::DUPLICATE_FIND:
+            return Action::QUERY_DUPLICATES;
+        // Смысловой анализ (трассировка потока данных/жизненного цикла, сравнение
+        // реализаций, генерация доков) — read-only reasoning основной модели.
+        case Detail::DATA_FLOW:
         case Detail::LIFECYCLE_TRACE:
         case Detail::COMPARE_IMPLS:
-        case Detail::CODE_SMELL:
-        case Detail::DUPLICATE_FIND:
-        case Detail::COMPLEXITY_HOTSPOT:
-        case Detail::TODO_SCAN:
         case Detail::DOC_GEN:
-        case Detail::DOC_CHECK:
         case Detail::DOC_SUMMARY:
-            return Action::NOT_IMPLEMENTED_YET;
+            return Action::DELEGATE_TO_MAIN;
+        // Категория C: задачи, требующие широкого/глубокого анализа. Раньше все
+        // они отказывались (REFUSE_TOO_BROAD). Теперь отдаём read-only основной
+        // модели (DELEGATE_TO_MAIN) — она честно пробует, а при неудаче явно
+        // сообщает, что не справилась (modelfail), вместо молчаливого отказа.
         case Detail::SECURITY_AUDIT:
         case Detail::INPUT_VALIDATION:
         case Detail::THREADING_SAFE:
@@ -235,7 +379,7 @@ Action selectAction(const std::string& primitiveStr, Detail detail, CursorContex
         case Detail::API_MIGRATION:
         case Detail::PORT_PLATFORM:
         case Detail::EXCEEDS_LOCAL_AI:
-            return Action::REFUSE_TOO_BROAD;
+            return Action::DELEGATE_TO_MAIN;
         default:
             return Action::NOT_IMPLEMENTED_YET;
         }

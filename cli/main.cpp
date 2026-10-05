@@ -1,7 +1,10 @@
 #include "queries.h"
+#include "tu_cache.h"
 #include "compile_commands.h"
 #include "build_graph.h"
 #include "orchestrator.h"
+#include "config_reader.h"
+#include "model_profile.h"
 #include "model_broker.h"
 #include "main_model_broker.h"
 #include "execute_service.h"
@@ -10,6 +13,8 @@
 #include <sstream>
 #include <memory>
 #include <map>
+#include <cstdlib>
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -19,15 +24,21 @@ void printUsage() {
     std::cerr <<
         "Использование:\n"
         "  Отладочные запросы слоя 0 (без модели):\n"
-        "    cli_agent locate_symbol <file> <line> <col> [--cc <compile_commands.json>] [-- <clang-flags...>]\n"
-        "    cli_agent class_outline <file> <class_name> [--cc <compile_commands.json>] [-- <clang-flags...>]\n"
+        "    cli_agent locate_symbol <file> <line> <col> --cc <compile_commands.json>\n"
+        "    cli_agent class_outline <file> <class_name> --cc <compile_commands.json>\n"
         "    cli_agent symbol_refs <usr> <file> [--cc <compile_commands.json>] [-- <clang-flags...>]\n"
         "    cli_agent file_flags <compile_commands.json> <file>\n"
         "    cli_agent build_graph <build_dir>\n"
         "\n"
         "  Запуск агента (Intake -> Ground -> Clarify|Report -> Plan -> Execute -> Verify):\n"
-        "    cli_agent run <task.json|-> --cc <compile_commands.json> [--model-url <url>] [--model-name <name>]\n"
+        "    cli_agent run <task.json|-> [--project <root>] [--cc <compile_commands.json>] [--db <file>]\n"
+        "                                 [--config <dir>] [--model-url <url>] [--model-name <name>]\n"
         "                                 [--main-model-url <url>] [--main-model-name <name>]\n"
+        "      Конфиг cf-agent (agent.conf-стиль) и маппинг проектов:\n"
+        "        --config <dir>   каталог конфига (по умолчанию ~/.cf_agent, env CF_AGENT_CONF_DIR)\n"
+        "        --project <root> корень проекта; build/cc/db разрешаются из ~/.cf_agent/projects\n"
+        "        --cc <file>      прямой путь к compile_commands.json (override, как раньше)\n"
+        "        --db <file>      явный файл кэша SQLite (override)\n"
         "\n"
         "  Откат правок по checkpointId:\n"
         "    cli_agent undo <checkpointId>\n"
@@ -83,11 +94,32 @@ int runQueryCommand(const std::string& command, int argc, char** argv) {
 
     QueryArgs a = parseQueryArgs(argc, argv, 2);
 
+    // locate_symbol/class_outline теперь обслуживаются CTuCache (SQLite):
+    // сами разрешают флаги компиляции внутри ensure_project_indexed, им
+    // достаточно --cc. "--" clang-flags и ручной queryFileFlags для них
+    // больше не нужны — это пройденный этап (прямой парсинг убран).
+    if (command == "locate_symbol" || command == "class_outline") {
+        if (a.compileCommandsPath.empty()) {
+            std::cerr << "locate_symbol/class_outline теперь требуют --cc <compile_commands.json> (кэш-бэкенд)\n";
+            printUsage();
+            return 2;
+        }
+        json result;
+        if (command == "locate_symbol") {
+            if (a.positional.size() != 3) { printUsage(); return 2; }
+            result = cpptool::queryLocateSymbol(a.positional[0], std::stoul(a.positional[1]),
+                                                 std::stoul(a.positional[2]), a.compileCommandsPath);
+        } else {
+            if (a.positional.size() != 2) { printUsage(); return 2; }
+            result = cpptool::queryClassOutline(a.positional[1], a.compileCommandsPath, a.positional[0]);
+        }
+        std::cout << result.dump(2) << std::endl;
+        return result.value("ok", false) ? 0 : 1;
+    }
+
     std::string fileForFlags;
     if (command == "symbol_refs") {
         if (a.positional.size() >= 2) fileForFlags = a.positional[1];
-    } else if (!a.positional.empty()) {
-        fileForFlags = a.positional[0];
     }
 
     std::vector<std::string> flags;
@@ -104,13 +136,7 @@ int runQueryCommand(const std::string& command, int argc, char** argv) {
     flags.insert(flags.end(), a.clangFlags.begin(), a.clangFlags.end());
 
     json result;
-    if (command == "locate_symbol") {
-        if (a.positional.size() != 3) { printUsage(); return 2; }
-        result = cpptool::queryLocateSymbol(a.positional[0], std::stoul(a.positional[1]), std::stoul(a.positional[2]), flags);
-    } else if (command == "class_outline") {
-        if (a.positional.size() != 2) { printUsage(); return 2; }
-        result = cpptool::queryClassOutline(a.positional[0], a.positional[1], flags);
-    } else if (command == "symbol_refs") {
+    if (command == "symbol_refs") {
         if (a.positional.size() != 2) { printUsage(); return 2; }
         result = cpptool::querySymbolRefs(a.positional[0], a.positional[1], flags);
     } else {
@@ -331,16 +357,48 @@ int benchmarkCommand(int argc, char** argv) {
 int runAgentCommand(int argc, char** argv) {
     if (argc < 3) { printUsage(); return 2; }
     std::string taskPath = argv[2];
-    std::string ccPath, modelUrl, modelName, mainUrl, mainName;
+    std::string ccPath, projectPath, dbPath, configDir;
+    std::string modelUrl, modelName, mainUrl, mainName;
     for (int i = 3; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--cc" && i + 1 < argc) ccPath = argv[++i];
+        else if (a == "--project" && i + 1 < argc) projectPath = argv[++i];
+        else if (a == "--db" && i + 1 < argc) dbPath = argv[++i];
+        else if (a == "--config" && i + 1 < argc) configDir = argv[++i];
         else if (a == "--model-url" && i + 1 < argc) modelUrl = argv[++i];
         else if (a == "--model-name" && i + 1 < argc) modelName = argv[++i];
         else if (a == "--main-model-url" && i + 1 < argc) mainUrl = argv[++i];
         else if (a == "--main-model-name" && i + 1 < argc) mainName = argv[++i];
     }
-    if (ccPath.empty()) { printUsage(); return 2; }
+    if (configDir.empty()) {
+        const char* env = std::getenv("CF_AGENT_CONF_DIR");
+        if (env) configDir = env;
+    }
+
+    // Конфиг cf-agent: модели/БД/build. --cc остаётся прямым override.
+    cppagent::CConfigReader cfg = cppagent::CConfigReader::loadOrCreate(configDir);
+    cppagent::ProjectResolution res = cfg.resolve(ccPath, projectPath, dbPath);
+    if (!res.ok) {
+        std::cerr << "cf-agent: " << res.error << "\n";
+        std::cerr << "  укажите --cc <compile_commands.json> или --project <root>\n";
+        return 2;
+    }
+    ccPath = res.compileCommands;
+    // Единый файл БД на процесс (детерминированный путь из конфига).
+    cpptool::set_cache_file(res.dbFile);
+    if (!std::filesystem::exists(ccPath))
+        std::cerr << "cf-agent: предупреждение — compile_commands.json ещё нет (" << ccPath
+                  << "); INFRA сможет его сгенерировать\n";
+
+    // Модели: явные флаги сильнее конфига.
+    if (modelUrl.empty() && cfg.config().light.configured()) {
+        modelUrl = cfg.config().light.url;
+        if (modelName.empty()) modelName = cfg.config().light.name;
+    }
+    if (mainUrl.empty() && cfg.config().main.configured()) {
+        mainUrl = cfg.config().main.url;
+        if (mainName.empty()) mainName = cfg.config().main.name;
+    }
 
     std::string raw;
     if (taskPath == "-") {
@@ -365,7 +423,38 @@ int runAgentCommand(int argc, char** argv) {
     if (!mainUrl.empty()) mainModel = std::make_unique<cppagent::HttpMainModelBroker>(mainUrl, mainName);
     // если mainUrl пустой — orchestrator использует StubMainModelBroker внутри handlers
 
-    cppagent::Orchestrator orchestrator(*model, ccPath, mainModel.get());
+    // remote (сильнейшая модель): строим из конфига, если задан URL.
+    // apiType выбирает провайдера: "openai-compat" -> CApiOpenAI
+    // ("claude" -> CApiAnthropic, когда появится).
+    std::unique_ptr<cppagent::MainModelBroker> remoteModel;
+    std::shared_ptr<cppagent::IApiAI> remoteApi;
+    if (cfg.config().remote.configured()) {
+        const auto& rem = cfg.config().remote;
+        remoteApi = std::make_shared<cppagent::CApiOpenAI>(rem.url, rem.name, rem.apiKey);
+        remoteModel = std::make_unique<cppagent::HttpMainModelBroker>(remoteApi, rem.name);
+    }
+
+    // Профиль локальной модели: FAIL-CLOSED — способность подтверждается пробой.
+    // Проба кэшируется в ~/.cf_agent/models/*.profile и выполняется один раз.
+    bool localCapable = false;
+    if (!mainUrl.empty()) {
+        std::string profDir = cppagent::ModelProfile::defaultDir();
+        std::string pname = mainName.empty() ? ("main@" + mainUrl) : mainName;
+        cppagent::ModelProfile prof = cppagent::ModelProfile::load(profDir, pname);
+        if (!prof.probed) {
+            auto localApi = std::make_shared<cppagent::CApiOpenAI>(mainUrl, mainName);
+            prof = cppagent::ModelProfile::probe(*localApi, pname, profDir, remoteApi.get());
+        }
+        localCapable = prof.capableCoding;
+        if (!cfg.config().remote.configured())
+            std::cerr << "cf-agent: профиль local(" << pname << "): "
+                      << (localCapable ? "тянет кодинг" : "не подтверждён") << "\n";
+    }
+
+    cppagent::Orchestrator orchestrator(*model, ccPath, mainModel.get(), remoteModel.get(),
+                                        localCapable, 3,
+                                        cfg.config().allowRead, cfg.config().allowWrite,
+                                        cfg.config().allowExec);
     json outcome = orchestrator.run(turn["task"]);
 
     std::cout << outcome.dump(2) << std::endl;

@@ -1,4 +1,5 @@
 #include "handlers.h"
+#include "queries.h"
 #include <filesystem>
 #include <algorithm>
 #include <array>
@@ -44,12 +45,96 @@ std::string readFileSnippet(const std::string& file, int line, int radius){
     return os.str();
 }
 
+// Точный диапазон строк [fromLine..toLine] с нумерацией — extent метода из
+// libclang-кэша. В отличие от окна ±radius не пере/недо-добирает.
+std::string readFileLines(const std::string& file, int fromLine, int toLine){
+    if(file.empty() || fromLine <= 0 || toLine < fromLine) return "";
+    std::ifstream in(file);
+    if(!in) return "";
+    std::vector<std::string> lines;
+    std::string l;
+    while(std::getline(in, l)) lines.push_back(l);
+    if(lines.empty()) return "";
+    size_t from = static_cast<size_t>(fromLine);
+    size_t to = std::min(lines.size(), static_cast<size_t>(toLine));
+    if(from > lines.size()) return "";
+    std::ostringstream os;
+    for(size_t i = from; i <= to; ++i)
+        os << i << ": " << lines[i-1] << "\n";
+    return os.str();
+}
+
+// Компактная структура класса (объявление + базы + публичные сигнатуры) для
+// read-only reasoning в DELEGATE_TO_MAIN. Это сигнатуры и иерархия, БЕЗ тел —
+// ровно то, что нужно для вопроса "как устроено", и дешевле по токенам, чем
+// локальное окно вокруг курсора.
+// Детерминированная эвристика качества по телу метода (детерминизм — сильная
+// сторона агента: не гадаем, а называем конкретные факты). Это НЕ глубокий
+// анализ: длина, вложенность, длина строк, "голые" new/delete, catch(...).
+json codeSmellHeuristic(const HandlerContext& ctx){
+    json findings = json::array();
+    const auto& m = ctx.ground.enclosingMethod;
+    if(m.is_null()) return findings;
+    int s = m.value("start_line", 0), e = m.value("end_line", 0);
+    std::string f = m.value("file", "");
+    if(s <= 0 || e < s || f.empty()) return findings;
+    std::ifstream in(f);
+    if(!in) return findings;
+    std::vector<std::string> lines; std::string l;
+    while(std::getline(in, l)) lines.push_back(l);
+    if((size_t)s > lines.size()) return findings;
+    size_t from = s, to = std::min(lines.size(), (size_t)e);
+    int bodyLines = 0, maxIndent = 0, longLines = 0, rawNew = 0, rawDelete = 0, catchAll = 0;
+    for(size_t i = from; i <= to; ++i){
+        const std::string& t = lines[i-1];
+        size_t first = t.find_first_not_of(" \t");
+        if(first == std::string::npos) continue;
+        ++bodyLines;
+        int indent = (int)first; if(indent > maxIndent) maxIndent = indent;
+        if(t.size() > 120) ++longLines;
+        if(t.find("new ") != std::string::npos) ++rawNew;
+        if(t.find("delete ") != std::string::npos) ++rawDelete;
+        if(t.find("catch(...)") != std::string::npos || t.find("catch (...)") != std::string::npos) ++catchAll;
+    }
+    if(bodyLines > 50) findings.push_back({{"kind","long_method"},{"detail","тело ~" + std::to_string(bodyLines) + " строк (>50) — кандидат на декомпозицию"}});
+    if(maxIndent >= 20) findings.push_back({{"kind","deep_nesting"},{"detail","глубокий отступ (" + std::to_string(maxIndent) + ") — вероятна сложная вложенность"}});
+    if(longLines > 0)   findings.push_back({{"kind","long_lines"},{"detail",std::to_string(longLines) + " строк длиннее 120 символов"}});
+    if(rawNew > 0 || rawDelete > 0) findings.push_back({{"kind","raw_memory"},{"detail","ручное new/delete (" + std::to_string(rawNew) + "/" + std::to_string(rawDelete) + ") — рассмотреть RAII/умные указатели"}});
+    if(catchAll > 0)    findings.push_back({{"kind","catch_all"},{"detail","catch(...) глушит исключения (" + std::to_string(catchAll) + ")"}});
+    return findings;
+}
+
+std::string classStructureFor(const HandlerContext& ctx){
+    if(ctx.ground.enclosingClass.is_null()) return "";
+    std::string cname = ctx.ground.enclosingClass.value("name","");
+    if(cname.empty()) return "";
+    json co = cpptool::queryClassOutline(cname, ctx.compileCommandsPath);
+    if(!co.value("ok", false)) return "";
+    std::string out = "class " + cname;
+    auto bases = co.value("base_classes", json::array());
+    if(bases.is_array() && !bases.empty()){
+        out += " : ";
+        for(size_t i=0;i<bases.size();++i){ if(i) out += ", "; out += bases[i].get<std::string>(); }
+    }
+    out += " {\npublic:\n";
+    for(auto& m : co.value("public_methods", json::array()))
+        out += "    " + m.value("signature", "?") + ";\n";
+    out += "};\n";
+    return out;
+}
+
 int cursorLineOf(const HandlerContext& ctx){ return ctx.task.contains("cursor") ? ctx.task["cursor"].value("line", 0) : 0; }
 
 // Курсор мог устареть между постановкой задачи и текущим состоянием файла: locate не находит метод,
 // sig становится "?", blast_radius теряет вход и откатывается в sandbox. Раньше это было видно
 // только как "?" в тексте — добавляем явное предупреждение (и в текст, и структурно).
-bool groundLostMethod(const HandlerContext& ctx){ return ctx.ground.enclosingMethod.is_null(); }
+bool groundLostMethod(const HandlerContext& ctx){
+    // Слой 0: если задача по природе не привязана к месту (NOT_NEEDED),
+    // отсутствие метода под курсором — норма, а не деградация: не шумим
+    // предупреждением "курсор устарел".
+    if (ctx.guess.cursorBinding == CursorBinding::NOT_NEEDED) return false;
+    return ctx.ground.enclosingMethod.is_null();
+}
 std::string groundNote(const HandlerContext& ctx){
     if(groundLostMethod(ctx))
         return " [warning: метод под курсором не разрешён — возможно, устарел cursor.line; правка идёт по oldText]";
@@ -62,9 +147,22 @@ json groundWarnings(const HandlerContext& ctx){
     return w;
 }
 
-json callMain(const HandlerContext& ctx, const std::string& file, const std::string& sig, const std::string& usr){
+json callMain(const HandlerContext& ctx, const std::string& file, const std::string& sig, const std::string& usr,
+              const std::string& contextOverride = ""){
     GenerateRequest req{ctx.primitiveStr, ctx.task.value("goal_text",""), file, sig, usr, ctx.ground.scaleFacts, ctx.explicitMode};
-    req.fileContext = readFileSnippet(file, cursorLineOf(ctx), 40);
+    if(!contextOverride.empty()){
+        // Явно заданный контекст (напр. структура класса для read-only reasoning).
+        req.fileContext = contextOverride;
+    } else if(!ctx.ground.enclosingMethod.is_null()){
+        // Точный extent метода из кэша (start_line..end_line) — ровно тело,
+        // без переизбытка/недобора фиксированного окна.
+        int s = ctx.ground.enclosingMethod.value("start_line", 0);
+        int e = ctx.ground.enclosingMethod.value("end_line", 0);
+        std::string mfile = ctx.ground.enclosingMethod.value("file", file);
+        if(s > 0 && e >= s) req.fileContext = readFileLines(mfile, s, e);
+    }
+    if(req.fileContext.empty())
+        req.fileContext = readFileSnippet(file, cursorLineOf(ctx), 40);
     GenerateResult res;
     if(ctx.mainModel) res = ctx.mainModel->generate(req);
     else { StubMainModelBroker stub; res = stub.generate(req); }
@@ -176,25 +274,31 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
     const auto& ground = ctx.ground;
     std::string file = ctx.task.contains("cursor") ? ctx.task["cursor"].value("file", "") : "";
 
-    if (ground.enclosingMethod.is_null() && ground.cursorContext == CursorContext::NO_CONTEXT) {
-        return json{
-            {"protocol_version","1.0"},
-            {"type","answer"},
-            {"answered_by", answeredBy(ctx)},
-            {"primitive", ctx.primitiveStr},
-            {"answer", {{"text", "UNDERSTAND: под курсором не нашёлся метод/функция. rationale: " + ctx.guess.rationale}, {"refs", json::array()}}},
-            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"cursor_context", "no_context"}}}
-        };
+    // Раньше здесь был ранний return при NO_CONTEXT — он МАСКИРОВАЛ слой 3:
+    // computeRelevance для NO_CONTEXT всегда UNRELATED, которое по arch.md
+    // обязано превратиться в NEEDS_INPUT_RELEVANCE. Теперь NO_CONTEXT проходит
+    // через ту же таблицу, что и все остальные контексты (arch.md: слой 3 -> 4).
+    std::string enclosingUsr = ground.enclosingMethod.is_null() ? "" : ground.enclosingMethod.value("usr", "");
+    std::string sig = ground.enclosingMethod.is_null() ? "?" : ground.enclosingMethod.value("signature", "?");
+    json refs = json::array();
+    if (!ground.enclosingMethod.is_null()) {
+        refs.push_back(json{
+            {"usr",  enclosingUsr},
+            {"file", file},
+            {"line", ground.enclosingMethod.value("line", 0)}
+        });
     }
 
-    std::string sig = ground.enclosingMethod.value("signature", "?");
-    json refs = json::array({ json{
-        {"usr",  ground.enclosingMethod.value("usr", "")},
-        {"file", file},
-        {"line", ground.enclosingMethod.value("line", 0)}
-    }});
-
-    Action action = selectAction(ctx.primitiveStr, ctx.guess.detail, ground.cursorContext);
+    // Слой 0 важнее слоя 1 для решений о месте: если задача NOT_NEEDED (курсор
+    // в принципе не нужен), любое "место" нерелевантно, и method-bound Detail
+    // (модель иногда возвращает SIMPLE_READ на общий вопрос) не должен форсить
+    // needs_input. Трактyeм detail как GENERAL_QUESTION -> NEARBY -> DELEGATE_TO_MAIN.
+    Detail effectiveDetail = ctx.guess.detail;
+    if (ctx.guess.cursorBinding == CursorBinding::NOT_NEEDED && effectiveDetail != Detail::GENERAL_QUESTION)
+        effectiveDetail = Detail::GENERAL_QUESTION;
+    Relevance relevance = computeRelevance(effectiveDetail, ground.cursorContext,
+                                           ctx.task.value("goal_text",""), enclosingUsr);
+    Action action = selectAction(ctx.primitiveStr, effectiveDetail, ground.cursorContext, relevance);
     std::string ctxStr = cursorContextToString(ground.cursorContext);
     std::string text;
 
@@ -229,7 +333,11 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
     switch (action) {
 
     case Action::QUERY_LOCATE_ONLY:
-        text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
+        if (ground.enclosingMethod.is_null())
+            text = "UNDERSTAND: под курсором не нашёлся метод/функция (" + ctxStr + "). "
+                   "Код на диске не меняется. rationale: " + ctx.guess.rationale;
+        else
+            text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
         break;
 
     case Action::QUERY_FIND_IMPLEMENTORS:
@@ -237,6 +345,192 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
         text = "UNDERSTAND: " + sig + ". Код на диске не меняется. rationale: " + ctx.guess.rationale;
         appendOverrides(text);
         break;
+
+    case Action::QUERY_CALL_CHAIN:
+    case Action::QUERY_CALL_SUBTREE: {
+        bool incoming = (action == Action::QUERY_CALL_CHAIN);
+        json res = incoming
+            ? cpptool::queryCallChain(enclosingUsr, ctx.compileCommandsPath)
+            : cpptool::queryCallSubtree(enclosingUsr, ctx.compileCommandsPath);
+        std::string head = incoming ? "UNDERSTAND (кто вызывает " + sig + ")"
+                                    : "UNDERSTAND (кого вызывает " + sig + ")";
+        if (res.value("ok", false)) {
+            auto& list = res["calls"];
+            if (list.is_array() && !list.empty()) {
+                text = head + ": найдено " + std::to_string(list.size()) + ":";
+                for (auto& c : list) {
+                    std::string cSig = c.value("signature", "?");
+                    std::string cFile = c.value("file", "");
+                    int cLine = c.value("line", 0);
+                    int callLine = c.value("call_line", 0);
+                    text += " [" + cSig + " @ " + cFile + ":" + std::to_string(cLine);
+                    if (callLine > 0) text += " (вызов на " + std::to_string(callLine) + ")";
+                    text += "]";
+                    refs.push_back(json{{"usr", c.value("usr","")}, {"file", cFile}, {"line", cLine}});
+                }
+                text += ". Код на диске не меняется.";
+            } else {
+                text = head + ": в проекте не найдено. Код на диске не меняется.";
+            }
+        } else {
+            std::string msg = res.value("error", json::object()).value("message", "ошибка query");
+            text = head + ": ошибка — " + msg;
+        }
+        break;
+    }
+
+    case Action::QUERY_DEPENDENCY_MAP: {
+        json res = cpptool::queryDependencyMap(file, ctx.compileCommandsPath);
+        if (res.value("ok", false)) {
+            auto deps = res.value("dependencies", json::array());
+            auto rev  = res.value("dependents", json::array());
+            if (!ground.enclosingClass.is_null()) {
+                text = "UNDERSTAND: зависимости. Класс " + ground.enclosingClass.value("name","") +
+                       ": подключается " + std::to_string(rev.size()) + " файл(ами), подключает " +
+                       std::to_string(deps.size()) + " файл(ов). Код на диске не меняется.";
+            } else {
+                text = "UNDERSTAND: зависимости файла " + file + ": подключается " + std::to_string(rev.size()) +
+                       ", подключает " + std::to_string(deps.size()) + ". Код на диске не меняется.";
+            }
+            auto refsAdd = [&](const json& arr){ for (auto& f : arr) refs.push_back(json{{"file", f.get<std::string>()}, {"line", 0}}); };
+            refsAdd(rev); refsAdd(deps);
+        } else {
+            text = "UNDERSTAND: не удалось построить карту зависимостей — " +
+                   res.value("error", json::object()).value("message", "ошибка");
+        }
+        break;
+    }
+
+    case Action::QUERY_TODO_SCAN: {
+        std::string classUsr = ground.enclosingClass.is_null() ? "" : ground.enclosingClass.value("usr","");
+        // Если курсор в файле — сканируем файл, иначе весь класс.
+        std::string scopeFile = (!file.empty() && ground.enclosingClass.is_null()) ? file : "";
+        json res = cpptool::queryTodoScan(ctx.compileCommandsPath, scopeFile, classUsr);
+        if (res.value("ok", false)) {
+            auto& markers = res["markers"];
+            text = "UNDERSTAND: TODO/FIXME/HACK/XXX — найдено " + std::to_string(markers.size()) + ".";
+            for (auto& m : markers) {
+                text += " [" + m.value("marker","?") + " " + m.value("file","") + ":" +
+                        std::to_string(m.value("line",0)) + "]";
+                refs.push_back(json{{"file", m.value("file","")}, {"line", m.value("line",0)}});
+            }
+            text += " Код на диске не меняется.";
+        } else {
+            text = "UNDERSTAND: TODO-скан не удался — " + res.value("error", json::object()).value("message", "ошибка");
+        }
+        break;
+    }
+
+    case Action::QUERY_DOC_CHECK: {
+        std::string classUsr = ground.enclosingClass.is_null() ? "" : ground.enclosingClass.value("usr","");
+        std::string scopeFile = (!file.empty() && ground.enclosingClass.is_null()) ? file : "";
+        json res = cpptool::queryDocCheck(ctx.compileCommandsPath, scopeFile, classUsr);
+        if (res.value("ok", false)) {
+            auto& und = res["undocumented"];
+            auto& chk = res["checked"];
+            text = "UNDERSTAND: doc-комментарии — проверено " + std::to_string(chk.size()) +
+                   " файл(ов), без заголовочного doc: " + std::to_string(und.size()) + ".";
+            for (auto& u : und) {
+                text += " [" + u.value("file","") + "]";
+                refs.push_back(json{{"file", u.value("file","")}, {"line", u.value("line",0)}});
+            }
+            text += " Код на диске не меняется.";
+        } else {
+            text = "UNDERSTAND: DOC_CHECK не удался — " + res.value("error", json::object()).value("message", "ошибка");
+        }
+        break;
+    }
+
+    case Action::QUERY_CODE_SMELL: {
+        json findings = codeSmellHeuristic(ctx);
+        // Плюс метрика тела (длина/вложенность/строки) через queryComplexityHotspot
+        // для точного extent метода — единый источник метрик.
+        if (!ground.enclosingMethod.is_null()) {
+            std::string mfile = ground.enclosingMethod.value("file", file);
+            json ch = cpptool::queryComplexityHotspot(ctx.compileCommandsPath, mfile, "");
+            if (ch.value("ok", false)) {
+                for (auto& h : ch["hotspots"]) {
+                    if (h.value("usr", "") != enclosingUsr) continue;
+                    int nest = h.value("max_nesting", 0);
+                    int bl = h.value("body_lines", 0);
+                    if (nest >= 4) findings.push_back({{"kind","nesting"},{"detail","вложенность скобок до " + std::to_string(nest)}});
+                    if (bl > 50) findings.push_back({{"kind","length"},{"detail","тело ~" + std::to_string(bl) + " строк"}});
+                    break;
+                }
+            }
+        }
+        if (findings.empty()) {
+            text = "UNDERSTAND: " + sig + " — явных эвристических запахов не найдено.";
+        } else {
+            text = "UNDERSTAND: " + sig + " — эвристические находки (" + std::to_string(findings.size()) + "):";
+            for (auto& f : findings) text += " [" + f.value("kind","?") + ": " + f.value("detail","") + "]";
+        }
+        text += " Код на диске не меняется.";
+        break;
+    }
+
+    case Action::QUERY_TYPE_USAGE: {
+        // Тип/класс под курсором: используем USR класса, если он есть.
+        std::string typeUsr = !ground.enclosingClass.is_null()
+                                ? ground.enclosingClass.value("usr","") : enclosingUsr;
+        json res = cpptool::queryTypeUsage(typeUsr, ctx.compileCommandsPath);
+        if (res.value("ok", false)) {
+            auto locs = res.value("locations", json::array());
+            text = "UNDERSTAND: тип используется в " + std::to_string(locs.size()) + " мест(ах).";
+            int shown = 0;
+            for (auto& l : locs) {
+                if (shown++ >= 20) { text += " …"; break; }
+                text += " [" + l.value("file","") + ":" + std::to_string(l.value("line",0)) + "]";
+                refs.push_back(json{{"file", l.value("file","")}, {"line", l.value("line",0)}});
+            }
+            text += " Код на диске не меняется.";
+        } else {
+            text = "UNDERSTAND: TYPE_USAGE не удался — " + res.value("error", json::object()).value("message", "ошибка");
+        }
+        break;
+    }
+
+    case Action::QUERY_COMPLEXITY: {
+        std::string scopeFile = (!file.empty() && ground.enclosingClass.is_null()) ? file : "";
+        std::string classUsr = ground.enclosingClass.is_null() ? "" : ground.enclosingClass.value("usr","");
+        json res = cpptool::queryComplexityHotspot(ctx.compileCommandsPath, scopeFile, classUsr);
+        if (res.value("ok", false)) {
+            auto& hs = res["hotspots"];
+            text = "UNDERSTAND: хотспоты сложности (" + std::to_string(hs.size()) + "):";
+            int shown = 0;
+            for (auto& h : hs) {
+                if (shown++ >= 5) break;
+                text += " [" + h.value("signature","?") + " score=" + std::to_string(h.value("score",0)) +
+                        " lines=" + std::to_string(h.value("body_lines",0)) +
+                        " nest=" + std::to_string(h.value("max_nesting",0)) +
+                        " @" + h.value("file","") + ":" + std::to_string(h.value("line",0)) + "]";
+                refs.push_back(json{{"file", h.value("file","")}, {"line", h.value("line",0)}});
+            }
+            text += " Код на диске не меняется.";
+        } else {
+            text = "UNDERSTAND: COMPLEXITY не удался — " + res.value("error", json::object()).value("message", "ошибка");
+        }
+        break;
+    }
+
+    case Action::QUERY_DUPLICATES: {
+        std::string scopeFile = (!file.empty() && ground.enclosingClass.is_null()) ? file : "";
+        std::string classUsr = ground.enclosingClass.is_null() ? "" : ground.enclosingClass.value("usr","");
+        json res = cpptool::queryDuplicateFind(ctx.compileCommandsPath, scopeFile, classUsr);
+        if (res.value("ok", false)) {
+            auto& g = res["groups"];
+            text = "UNDERSTAND: групп с одинаковой сигнатурой (кандидаты в дубли): " + std::to_string(g.size()) + ".";
+            for (auto& grp : g) {
+                text += " [" + grp.value("signature","?") + " — " + std::to_string(grp["members"].size()) + " шт]";
+                for (auto& mem : grp["members"])
+                    refs.push_back(json{{"file", mem.value("file","")}, {"line", mem.value("line",0)}});
+            }
+            text += " Код на диске не меняется.";
+        } else {
+            text = "UNDERSTAND: DUPLICATE_FIND не удался — " + res.value("error", json::object()).value("message", "ошибка");
+        }
+        break;
+    }
 
     case Action::NOT_IMPLEMENTED_YET:
         // Честно: Detail распознан, механизм для него ещё не написан — не
@@ -263,23 +557,54 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
             {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", "REFUSE_TOO_BROAD"}}}
         };
 
-    case Action::DELEGATE_TO_MAIN:
-        // TODO (следующий шаг, не этот): UnderstandHandler пока не вызывает
-        // mainModel для read-only reasoning — callMain() в этом файле уже
-        // есть и используется SandboxFix/QuarryDesign/TestGen/Experiment,
-        // но только вместе с Execute/Verify. Сюда нужен read-only вызов без
-        // записи на диск. Пока — честно говорим, что не реализовано, а не
-        // отвечаем сигнатурой метода на вопрос вроде "можно ли это слить".
-        return json{
+    case Action::DELEGATE_TO_MAIN: {
+        // Read-only reasoning: зовём main-модель БЕЗ Execute/Verify — ни один
+        // файл на диске не меняется. Раньше была честная заглушка "не
+        // реализовано"; теперь слой 4 реально дотягивается до main-модели.
+        // Сюда попадают GENERAL_QUESTION / VIRTUAL_REFACTOR_SIM / FEASIBILITY_CHECK.
+        // Для вопроса "как устроено" структура класса (сигнатуры+иерархия) важнее
+        // одного тела — и дешевле по токенам, чем локальное окно.
+        json plan = callMain(ctx, file, sig, enclosingUsr, classStructureFor(ctx));
+        json answer;
+        answer["warnings"] = groundWarnings(ctx);
+        answer["refs"] = refs;
+        // Роль отвечающего — "main" (не light/stub): ответ даёт основная модель
+        // (или deterministic_fallback, если она недоступна).
+        bool delegatedOk = !planFailed(plan);
+        std::string byRole = ctx.guess.modelUnavailable ? "deterministic_fallback" : "main";
+        if (delegatedOk) {
+            answer["text"] = plan.value("plan", "");
+            answer["rationale"] = plan.value("rationale", "");
+        } else {
+            answer["text"] = "UNDERSTAND: " + detailToString(ctx.guess.detail) +
+                             " требует reasoning основной модели, но она не справилась: " +
+                             plan.value("error", "main model unavailable") +
+                             ". Сигнатура под курсором: " + sig;
+            answer["error"] = plan.value("error", "main model unavailable");
+        }
+        json out = json{
             {"protocol_version","1.0"},
             {"type","answer"},
-            {"answered_by", answeredBy(ctx)},
+            {"answered_by", json{{"role", byRole}}},
             {"primitive", ctx.primitiveStr},
-            {"answer", {{"text", "UNDERSTAND: " + detailToString(ctx.guess.detail) + " требует reasoning "
-                                  "основной модели (DELEGATE_TO_MAIN), но read-only вызов main-модели из "
-                                  "UnderstandHandler ещё не реализован. Сигнатура под курсором: " + sig}, {"refs", refs}}},
-            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", "DELEGATE_TO_MAIN"}, {"todo", "read-only callMain для UNDERSTAND не реализован"}}}
+            {"answer", answer},
+            {"debug_facts", {
+                {"primitive", ctx.primitiveStr},
+                {"rationale", ctx.guess.rationale},
+                {"state_machine", "UNDERSTAND"},
+                {"detail", detailToString(ctx.guess.detail)},
+                {"cursor_context", ctxStr},
+                {"relevance", relevanceToString(relevance)},
+                {"action", "DELEGATE_TO_MAIN"},
+                {"read_only", true},
+                {"model_ok", delegatedOk},
+                {"delegated_role", "main"}
+            }}
         };
+        if (!delegatedOk)
+            out["debug_facts"]["model_error"] = plan.value("error", "main model unavailable");
+        return out;
+    }
 
     case Action::NEEDS_INPUT_RELEVANCE:
     case Action::NEEDS_INPUT_CURSOR:
@@ -299,7 +624,7 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
                 {"options", json::array()},
                 {"free_text_allowed", true}
             }},
-            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"action", actionToString(action)}, {"integration_note", "needs_input из handler не декорируется orchestrator'ом — см. комментарий в коде"}}}
+            {"debug_facts", {{"primitive", ctx.primitiveStr}, {"rationale", ctx.guess.rationale}, {"state_machine", "UNDERSTAND"}, {"detail", detailToString(ctx.guess.detail)}, {"cursor_context", ctxStr}, {"relevance", relevanceToString(relevance)}, {"action", actionToString(action)}, {"integration_note", "needs_input из handler не декорируется orchestrator'ом — см. комментарий в коде"}}}
         };
 
     default:
@@ -319,6 +644,7 @@ json UnderstandHandler::handle(const HandlerContext& ctx) {
             {"state_machine",  "UNDERSTAND"},
             {"detail",         detailToString(ctx.guess.detail)},
             {"cursor_context", ctxStr},
+            {"relevance",      relevanceToString(relevance)},
             {"action",         actionToString(action)},
             {"enclosing_class", ground.enclosingClass}
         }}

@@ -43,6 +43,18 @@
 },
 {
   "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -I/usr/local/include -std=gnu++17 -o CMakeFiles/core.dir/core/src/query_calls.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/core/src/query_calls.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/core/src/query_calls.cpp",
+  "output": "CMakeFiles/core.dir/core/src/query_calls.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -I/usr/local/include -std=gnu++17 -o CMakeFiles/core.dir/core/src/query_analysis.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/core/src/query_analysis.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/core/src/query_analysis.cpp",
+  "output": "CMakeFiles/core.dir/core/src/query_analysis.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
   "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -I/usr/local/include -std=gnu++17 -o CMakeFiles/core.dir/core/src/compile_commands.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/core/src/compile_commands.cpp",
   "file": "/home/artem/projects/outer/AI-agent/cpp-tool/core/src/compile_commands.cpp",
   "output": "CMakeFiles/core.dir/core/src/compile_commands.cpp.o"
@@ -79,9 +91,33 @@
 },
 {
   "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent.dir/agent/src/api_ai.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/api_ai.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/src/api_ai.cpp",
+  "output": "CMakeFiles/agent.dir/agent/src/api_ai.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent.dir/agent/src/task_router.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/task_router.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/src/task_router.cpp",
+  "output": "CMakeFiles/agent.dir/agent/src/task_router.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent.dir/agent/src/model_profile.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/model_profile.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/src/model_profile.cpp",
+  "output": "CMakeFiles/agent.dir/agent/src/model_profile.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
   "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent.dir/agent/src/model_broker.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/model_broker.cpp",
   "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/src/model_broker.cpp",
   "output": "CMakeFiles/agent.dir/agent/src/model_broker.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent.dir/agent/src/config_reader.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/config_reader.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/src/config_reader.cpp",
+  "output": "CMakeFiles/agent.dir/agent/src/config_reader.cpp.o"
 },
 {
   "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
@@ -160,5 +196,29 @@
   "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent_tests.dir/agent/tests/test_orchestrator_integration.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp",
   "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_orchestrator_integration.cpp",
   "output": "CMakeFiles/agent_tests.dir/agent/tests/test_orchestrator_integration.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent_tests.dir/agent/tests/test_task_classification.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_task_classification.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_task_classification.cpp",
+  "output": "CMakeFiles/agent_tests.dir/agent/tests/test_task_classification.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent_tests.dir/agent/tests/test_config_reader.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_config_reader.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_config_reader.cpp",
+  "output": "CMakeFiles/agent_tests.dir/agent/tests/test_config_reader.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent_tests.dir/agent/tests/test_api_ai.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_api_ai.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_api_ai.cpp",
+  "output": "CMakeFiles/agent_tests.dir/agent/tests/test_api_ai.cpp.o"
+},
+{
+  "directory": "/home/artem/projects/outer/AI-agent/cpp-tool/build",
+  "command": "/usr/bin/clang++ -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include -std=gnu++17 -o CMakeFiles/agent_tests.dir/agent/tests/test_task_router.cpp.o -c /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_task_router.cpp",
+  "file": "/home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_task_router.cpp",
+  "output": "CMakeFiles/agent_tests.dir/agent/tests/test_task_router.cpp.o"
 }
 ]

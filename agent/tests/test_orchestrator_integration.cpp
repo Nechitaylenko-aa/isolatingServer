@@ -19,6 +19,13 @@ static void writeFile(const std::string& p, const std::string& c){
     std::ofstream out(p, std::ios::trunc); out<<c;
 }
 
+// <cpp-tool>/build/compile_commands.json, рассчитанный от __FILE__ этого
+// файла (<cpp-tool>/agent/tests/...). Никакого хардкода абсолютных путей.
+static std::string buildDirCompileCommands(){
+    fs::path root = fs::path(__FILE__).parent_path().parent_path().parent_path();
+    return (root / "build" / "compile_commands.json").string();
+}
+
 // Хелпер: создаёт минимальный C++ проект с compile_commands.json
 // Fail-closed verify (контракт нарушен, пока сборка не подтвердит обратное) означает,
 // что verify теперь реально зовёт cmake --build. Значит TestProject должен быть
@@ -36,6 +43,10 @@ struct TestProject {
         srcFile = root / "test.cpp";
         ccPath = root / "compile_commands.json";
 
+        // use_calculator вызывает add() — это даёт методу НАСТОЯЩУЮ ссылку
+        // (refs), без которой blast_radius всегда видел 0 ссылок и тесты
+        // "широкой правки" не могли сработать (см. migration: cache считает
+        // только реальные использования символа, не его декларацию).
         writeFile(srcFile.string(),
             "#include <vector>\n"
             "class Calculator {\n"
@@ -46,7 +57,10 @@ struct TestProject {
             "    int multiply(int a, int b) {\n"
             "        return a * b;\n"
             "    }\n"
-            "};\n");
+            "};\n"
+            "int use_calculator(Calculator& c, int x) {\n"
+            "    return c.add(x, 1);\n"
+            "}\n");
 
         writeFile((root / "CMakeLists.txt").string(),
             "cmake_minimum_required(VERSION 3.10)\n"
@@ -79,7 +93,7 @@ public:
 TEST_CASE("Orchestrator: UNDERSTAND with Stub model", "[orchestrator][stub]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Что делает метод add?"},
@@ -102,7 +116,7 @@ TEST_CASE("Orchestrator: SANDBOX_FIX with Stub models", "[orchestrator][stub]"){
     TestProject proj;
     StubModelBroker model;
     StubMainModelBroker mainModel;
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -134,7 +148,7 @@ TEST_CASE("Orchestrator: SANDBOX_FIX on tiny project passes without confirmation
     TestProject proj;
     StubModelBroker model;
     StubMainModelBroker mainModel;
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -157,7 +171,7 @@ TEST_CASE("Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with expl
     // можно принудительно заставить сработать needs_input для проверки цикла.
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -189,7 +203,7 @@ TEST_CASE("Orchestrator: SANDBOX_FIX triggers blast_radius needs_input with expl
 TEST_CASE("Orchestrator: INFRA without cursor", "[orchestrator][stub]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Пересобери cmake"}
@@ -206,7 +220,7 @@ TEST_CASE("Orchestrator: INFRA without cursor", "[orchestrator][stub]"){
 TEST_CASE("Orchestrator: needs_input on low confidence (manual simulation)", "[orchestrator][stub]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     
     // Эмулируем ситуацию низкой уверенности через self-consistency
     json task = {
@@ -234,7 +248,7 @@ TEST_CASE("Orchestrator: needs_input on low confidence (manual simulation)", "[o
 TEST_CASE("Orchestrator: blast_radius wide warning", "[orchestrator][stub]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Исправь метод add"},
@@ -262,7 +276,7 @@ TEST_CASE("Orchestrator: clarification cycle blast_radius -> proceed -> answer",
     TestProject proj;
     StubModelBroker model;
     StubMainModelBroker mainModel;
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
 
     // Шаг 1: низкий порог -> должен вернуть needs_input blast-radius-wide
     json task = {
@@ -297,7 +311,7 @@ TEST_CASE("Orchestrator: clarification cycle blast_radius -> proceed -> answer",
 TEST_CASE("Orchestrator: clarification cycle blast_radius -> cancel", "[orchestrator][stub][clarify]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -318,7 +332,7 @@ TEST_CASE("Orchestrator: clarification cycle blast_radius -> cancel", "[orchestr
 TEST_CASE("Orchestrator: clarification cycle depth protection", "[orchestrator][stub][clarify]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -345,7 +359,7 @@ TEST_CASE("Orchestrator: clarification cycle depth protection", "[orchestrator][
 TEST_CASE("Orchestrator: clarification replay protection", "[orchestrator][stub][clarify]"){
     TestProject proj;
     StubModelBroker model;
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -369,14 +383,15 @@ TEST_CASE("Orchestrator: clarification replay protection", "[orchestrator][stub]
 TEST_CASE("Orchestrator: InfraHandler build with real buildDir", "[orchestrator][stub]"){
     // Проверяем что INFRA реально запускает cmake --build и возвращает лог
     StubModelBroker model;
-    // compile_commands.json лежит рядом с cmake-build-debug
-    std::string ccPath = "/home/artem/projects/outer/AI-agent/cpp-tool/cmake-build-debug/../cmake-build-debug/compile_commands.json";
+    // Путь считается от __FILE__, а не хардкодится (раньше указывал на
+    // несуществующий cmake-build-debug и тест молча пропускался).
+    std::string ccPath = buildDirCompileCommands();
     // Если файл не существует, пропускаем тест
     if(!std::filesystem::exists(ccPath)) {
         WARN("compile_commands.json not found at " << ccPath << ", skipping InfraHandler build test");
         return;
     }
-    Orchestrator orch(model, ccPath);
+    Orchestrator orch(model, ccPath, nullptr, nullptr, true, 3, true, true, true);
     json task = {{"goal_text", "Пересобери cmake"}};
     json outcome = orch.run(task);
     REQUIRE(outcome.value("type", "") == "answer");
@@ -392,12 +407,12 @@ TEST_CASE("Orchestrator: InfraHandler build with real buildDir", "[orchestrator]
 
 TEST_CASE("Orchestrator: InfraHandler graph targets", "[orchestrator][stub]"){
     StubModelBroker model;
-    std::string ccPath = "/home/artem/projects/outer/AI-agent/cpp-tool/cmake-build-debug/compile_commands.json";
+    std::string ccPath = buildDirCompileCommands();
     if(!std::filesystem::exists(ccPath)) {
-        WARN("compile_commands.json not found, skipping InfraHandler graph test");
+        WARN("compile_commands.json not found at " << ccPath << ", skipping InfraHandler graph test");
         return;
     }
-    Orchestrator orch(model, ccPath);
+    Orchestrator orch(model, ccPath, nullptr, nullptr, true, 3, true, true, true);
     json task = {{"goal_text", "Покажи граф таргетов"}};
     json outcome = orch.run(task);
     REQUIRE(outcome.value("type", "") == "answer");
@@ -414,7 +429,7 @@ TEST_CASE("Orchestrator: dead model + INFRA phrase -> answer via stub (no missin
     // на фразе про сборку. Теперь INFRA берётся из stub молча — он read-only.
     TestProject proj;
     DeadModelBroker dead;
-    Orchestrator orch(dead, proj.ccPath.string());
+    Orchestrator orch(dead, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     json task = {{"goal_text", "Пересобери cmake"}};
     json outcome = orch.run(task);
     REQUIRE(outcome.value("type", "") == "answer");
@@ -425,7 +440,7 @@ TEST_CASE("Orchestrator: dead model + INFRA phrase -> answer via stub (no missin
 TEST_CASE("Orchestrator: dead model + question -> answer via stub UNDERSTAND", "[orchestrator][stub][fallback]"){
     TestProject proj;
     DeadModelBroker dead;
-    Orchestrator orch(dead, proj.ccPath.string());
+    Orchestrator orch(dead, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     json task = {
         {"goal_text", "Что делает метод add?"},
         {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
@@ -441,7 +456,7 @@ TEST_CASE("Orchestrator: dead model + write phrase -> needs_input model-unavaila
     TestProject proj;
     DeadModelBroker dead;
     StubMainModelBroker mainModel;
-    Orchestrator orch(dead, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(dead, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
     json task = {
         {"goal_text", "Замени int на long в методе add"},
         {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
@@ -459,7 +474,7 @@ TEST_CASE("Orchestrator: dead model + clarification proceed -> writes", "[orches
     TestProject proj;
     DeadModelBroker dead;
     StubMainModelBroker mainModel;
-    Orchestrator orch(dead, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(dead, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
     json task = {
         {"goal_text", "Замени int на long в методе add"},
         {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}},
@@ -474,7 +489,7 @@ TEST_CASE("Orchestrator: dead model + clarification proceed -> writes", "[orches
 TEST_CASE("Orchestrator: dead model + clarification wait -> error model_unavailable_wait", "[orchestrator][stub][fallback]"){
     TestProject proj;
     DeadModelBroker dead;
-    Orchestrator orch(dead, proj.ccPath.string());
+    Orchestrator orch(dead, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     json task = {
         {"goal_text", "Замени int на long в методе add"},
         {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}},
@@ -489,8 +504,8 @@ TEST_CASE("Orchestrator: dead model + clarification wait -> error model_unavaila
 // Помечены тегом [live] чтобы можно было запускать отдельно
 
 TEST_CASE("LightModelBroker: classify with real model", "[orchestrator][live][!mayfail]"){
-    // Requires: llama.cpp server on http://127.0.0.1:8081
-    LightModelBroker model("http://127.0.0.1:8081", "light", 0.1);
+    // Requires: llama.cpp server on http://127.0.0.1:8080
+    LightModelBroker model("http://127.0.0.1:8080", "", 0.1);
     
     auto guess = model.classifyIntent("Что делает этот метод?");
     
@@ -502,11 +517,44 @@ TEST_CASE("LightModelBroker: classify with real model", "[orchestrator][live][!m
     
     CHECK(guess.primitive == Primitive::UNDERSTAND);
     CHECK(guess.confidence > 0.5);
+    // Слой 1: на явную фразу "Что делает этот метод?" detail должен быть SIMPLE_READ
+    // (не GENERAL_QUESTION) — это проверка, что промпт реально заполняет detail.
+    CHECK(guess.detail == Detail::SIMPLE_READ);
+}
+
+// LIVE: реальная точность классификатора на размеченном датасете
+// (agent/tests/primitive_dataset.json, 35 фраз, по 5-7 на каждый примитив).
+// Это НЕ проверка заглушки: гоняется настоящая Qwen2.5-Coder-14B.
+TEST_CASE("LightModelBroker: real-model primitive accuracy on dataset", "[orchestrator][live][!mayfail]") {
+    fs::path datasetPath = fs::path(__FILE__).parent_path() / "primitive_dataset.json";
+    std::ifstream in(datasetPath.string());
+    if (!in) { WARN("dataset not found: " << datasetPath); return; }
+    json dataset; in >> dataset;
+    REQUIRE(dataset.is_array());
+
+    LightModelBroker model("http://127.0.0.1:8080", "", 0.1);
+    int correct = 0, total = 0, unavailable = 0;
+    for (auto& e : dataset) {
+        std::string goal = e.value("goal_text", "");
+        std::string expected = e.value("expected", "");
+        if (goal.empty() || expected.empty()) continue;
+        PrimitiveGuess g = model.classifyIntent(goal);
+        if (g.modelUnavailable) { ++unavailable; continue; }
+        ++total;
+        if (g.primitiveStr == expected) ++correct;
+        else WARN("misclassified [" << e.value("id","?") << "]: expected=" << expected
+                                    << " got=" << g.primitiveStr << " | " << goal);
+    }
+    if (unavailable > 0) { WARN("model unavailable for " << unavailable << " phrases, skipping"); return; }
+    REQUIRE(total > 0);
+    double acc = double(correct) / double(total);
+    INFO("accuracy = " << correct << "/" << total << " (" << acc * 100 << "%)");
+    CHECK(acc >= 0.90);
 }
 
 TEST_CASE("HttpMainModelBroker: generate plan with real model", "[orchestrator][live][!mayfail]"){
-    // Requires: llama.cpp server on http://127.0.0.1:8082
-    HttpMainModelBroker mainModel("http://127.0.0.1:8082", "main");
+    // Requires: llama.cpp server on http://127.0.0.1:8080
+    HttpMainModelBroker mainModel("http://127.0.0.1:8080", "");
     
     GenerateRequest req;
     req.primitiveStr = "SANDBOX_FIX";
@@ -530,8 +578,8 @@ TEST_CASE("HttpMainModelBroker: generate plan with real model", "[orchestrator][
 
 TEST_CASE("Orchestrator: full cycle UNDERSTAND with real light model", "[orchestrator][live][!mayfail]"){
     TestProject proj;
-    LightModelBroker model("http://127.0.0.1:8081", "light", 0.1);
-    Orchestrator orch(model, proj.ccPath.string());
+    LightModelBroker model("http://127.0.0.1:8080", "", 0.1);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Что делает метод multiply?"},
@@ -560,9 +608,9 @@ TEST_CASE("Orchestrator: full cycle UNDERSTAND with real light model", "[orchest
 
 TEST_CASE("Orchestrator: full cycle SANDBOX_FIX with real models", "[orchestrator][live][!mayfail]"){
     TestProject proj;
-    LightModelBroker model("http://127.0.0.1:8081", "light", 0.1);
-    HttpMainModelBroker mainModel("http://127.0.0.1:8082", "main");
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    LightModelBroker model("http://127.0.0.1:8080", "", 0.1);
+    HttpMainModelBroker mainModel("http://127.0.0.1:8080", "");
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
     
     json task = {
         {"goal_text", "Добавь const к методу add"},
@@ -591,7 +639,59 @@ TEST_CASE("Orchestrator: full cycle SANDBOX_FIX with real models", "[orchestrato
     CHECK(outcome.value("primitive", "") == "SANDBOX_FIX");
     CHECK(outcome.contains("execute"));
     CHECK(outcome.contains("verify"));
+    CHECK(outcome.contains("checkpoint"));
     CHECK(outcome["answered_by"].value("role", "") == "light");
+    // РЕАЛЬНАЯ проверка возможностей: main-модель должна была ПРИМЕНИТЬ правку
+    // на диск (добавить const), а не просто вернуть текст плана.
+    std::string after = readFile(proj.srcFile.string());
+    CHECK(after.find("const") != std::string::npos);
+}
+
+// LIVE: реальный проект reminder (копия рабочего). Проверяем, что Ground
+// разрешает метод из ЗАГОЛОВКА (нет прямой записи в compile_commands) и что
+// агент отвечает осмысленно на живой модели. Путь можно задать через
+// REMINDER_ROOT, иначе берётся /home/artem/projects/outer/reminder.
+TEST_CASE("Orchestrator: real project (reminder) UNDERSTAND on live model",
+          "[orchestrator][live][!mayfail][realproject]") {
+    fs::path root = std::getenv("REMINDER_ROOT")
+                        ? fs::path(std::getenv("REMINDER_ROOT"))
+                        : fs::path("/home/artem/projects/outer/reminder");
+    fs::path hdr = root / "backend/sources/include/DateTimeCalculator.h";
+    fs::path cc  = root / "build/compile_commands.json";
+    if (!fs::exists(hdr) || !fs::exists(cc)) {
+        WARN("reminder project not available at " << root << " (build/compile_commands.json отсутствует), skipping");
+        return;
+    }
+
+    LightModelBroker model("http://127.0.0.1:8080", "", 0.1);
+    Orchestrator orch(model, cc.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    // Тест не должен зависеть от номера строки (внешний проект живой и меняется).
+    // Наводимся на первую строку файла, содержащую "calculateNext", и проверяем,
+    // что Ground поднял метод из этого заголовка (которого нет в compile_commands
+    // отдельным TU — decl берётся из включающего TU).
+    int targetLine = 0;
+    {
+        std::ifstream in(hdr.string());
+        std::string l; int n = 0;
+        while (std::getline(in, l)) { ++n; if (l.find("calculateNext") != std::string::npos) { targetLine = n; break; } }
+    }
+    if (targetLine == 0) { WARN("no calculateNext* declaration found in " << hdr << ", skipping"); return; }
+
+    json task = {
+        {"goal_text", "Что делает этот метод?"},
+        {"cursor", {{"file", hdr.string()}, {"line", targetLine}, {"column", 20}}}
+    };
+    json outcome = orch.run(task);
+    if (outcome.value("type", "") == "error") {
+        WARN("light model unavailable, skipping reminder integration test");
+        return;
+    }
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome.value("primitive", "") == "UNDERSTAND");
+    REQUIRE(outcome["answer"].contains("refs"));
+    REQUIRE(!outcome["answer"]["refs"].empty());
+    CHECK(outcome["answer"]["refs"][0].value("usr", "").find("calculateNext") != std::string::npos);
 }
 // === TDD-красные кейсы: фиксируют дефекты ДО правки кода ===
 
@@ -628,7 +728,7 @@ TEST_CASE("Orchestrator: failed main plan must not produce green verify", "[orch
     TestProject proj;
     StubModelBroker model;
     FailingMainModelBroker mainModel;
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -656,7 +756,7 @@ TEST_CASE("Orchestrator: INFRA must report failure on real non-zero build", "[or
         "build dummy: boom\n");
 
     StubModelBroker model;
-    Orchestrator orch(model, (root / "compile_commands.json").string());
+    Orchestrator orch(model, (root / "compile_commands.json").string(), nullptr, nullptr, true, 3, true, true, true);
     json outcome = orch.run(json{{"goal_text", "Пересобери cmake"}});
 
     REQUIRE(outcome.value("type", "") == "answer");
@@ -715,7 +815,7 @@ TEST_CASE("Orchestrator: explicit 'без правок' vetoes write primitive -
     // Брокер уверенно говорит SANDBOX_FIX (как Light на "проверь методы X и Y"),
     // но в цели явно сказано "без правок".
     TestClassifyBroker model(Primitive::SANDBOX_FIX, true);
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Проверь метод add: корректно ли реализован. Без правок"},
@@ -736,7 +836,7 @@ TEST_CASE("Orchestrator: explicit 'без правок' vetoes write primitive -
 TEST_CASE("Orchestrator: 'только проверь' vetoes write primitive", "[orchestrator][stub][veto]"){
     TestProject proj;
     TestClassifyBroker model(Primitive::SANDBOX_FIX, true);
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Только проверь корректность метода add, ничего не меняй"},
@@ -753,7 +853,7 @@ TEST_CASE("Orchestrator: write goal WITHOUT no-edit phrase is not vetoed", "[orc
     TestProject proj;
     TestClassifyBroker model(Primitive::SANDBOX_FIX, true);
     StubMainModelBroker mainModel;
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "Замени int на long в методе add"},
@@ -774,7 +874,7 @@ TEST_CASE("Orchestrator: vague goal for write primitive -> needs_input goal-vagu
     TestProject proj;
     // Брокер говорит: это SANDBOX_FIX (правка), но goalIsSpecific=false.
     TestClassifyBroker model(Primitive::SANDBOX_FIX, false);
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "сделай лучше"},
@@ -797,7 +897,7 @@ TEST_CASE("Orchestrator: vague goal answered -> goal_text replaced and proceeds"
     TestProject proj;
     TestClassifyBroker model(Primitive::SANDBOX_FIX, false);
     StubMainModelBroker mainModel;
-    Orchestrator orch(model, proj.ccPath.string(), &mainModel);
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "сделай лучше"},
@@ -821,7 +921,7 @@ TEST_CASE("Orchestrator: vague goal for UNDERSTAND -> no blocking", "[orchestrat
     TestProject proj;
     // UNDERSTAND + goalIsSpecific=false — не блокируем (чтение не опасно).
     TestClassifyBroker model(Primitive::UNDERSTAND, false);
-    Orchestrator orch(model, proj.ccPath.string());
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
 
     json task = {
         {"goal_text", "объясни это"},
@@ -873,4 +973,240 @@ TEST_CASE("GroundService: USR anchor survives line shifts", "[orchestrator][stub
     json c2 = gs.resolveCursorByUsr(proj.srcFile.string(), usr);
     CHECK(!c2.value("ok", true));
     CHECK(c2["error"].value("code", "") == "usr_not_found");
+}
+
+// === Слой 3/4: Relevance и read-only delegate в UnderstandHandler ===
+
+// Брокер с управляемым Detail: Stub его не заполняет (всегда GENERAL_QUESTION),
+// а слои 3-4 различают Detail-ы — без этого их не проверить из оркестратора.
+class DetailClassifyBroker : public ModelBroker {
+    Primitive prim_;
+    Detail detail_;
+public:
+    DetailClassifyBroker(Primitive p, Detail d) : prim_(p), detail_(d) {}
+    PrimitiveGuess classifyIntent(const std::string&) override {
+        PrimitiveGuess g{prim_, primitiveToString(prim_), "тестовый брокер: управляемый Detail", false};
+        g.detail = detail_;
+        g.detailStr = detailToString(detail_);
+        g.goalIsSpecific = true;
+        return g;
+    }
+    std::string roleName() const override { return "test_classify"; }
+};
+
+TEST_CASE("Orchestrator: cursor on method A while goal names method B -> needs_input relevance",
+          "[orchestrator][stub][relevance]") {
+    TestProject proj;
+    DetailClassifyBroker model(Primitive::UNDERSTAND, Detail::SIMPLE_READ);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    json task = {
+        {"goal_text", "Что делает метод multiply(int, int)?"},
+        // курсор стоит на add() (строка 4), а цель называет multiply() — место не то.
+        {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
+    };
+    json outcome = orch.run(task);
+
+    REQUIRE(outcome.value("type", "") == "needs_input");
+    REQUIRE(outcome["needs_input"].value("question_id", "") == "understand-relevance-1");
+    CHECK(outcome["debug_facts"].value("action", "") == "NEEDS_INPUT_RELEVANCE");
+    CHECK(outcome["debug_facts"].value("relevance", "") == "UNRELATED");
+    CHECK(outcome["needs_input"].contains("options"));
+}
+
+TEST_CASE("Orchestrator: GENERAL_QUESTION is delegated read-only to main model",
+          "[orchestrator][stub][delegate]") {
+    TestProject proj;
+    DetailClassifyBroker model(Primitive::UNDERSTAND, Detail::GENERAL_QUESTION);
+    StubMainModelBroker mainModel;
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
+
+    json task = {
+        {"goal_text", "Как в целом работает класс Calculator?"},
+        {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
+    };
+    json outcome = orch.run(task);
+
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome.value("primitive", "") == "UNDERSTAND");
+    CHECK(outcome["debug_facts"].value("action", "") == "DELEGATE_TO_MAIN");
+    CHECK(outcome["debug_facts"].value("read_only", false) == true);
+    // Read-only: на диске ничего не меняется, execute/checkpoint отсутствуют.
+    CHECK(!outcome.contains("execute"));
+    CHECK(!outcome.contains("checkpoint"));
+    CHECK(readFile(proj.srcFile.string()).find("int add") != std::string::npos);
+}
+
+// === Слой 0: CursorBinding ===
+
+class CursorBindingBroker : public ModelBroker {
+    Primitive prim_;
+    CursorBinding cb_;
+    Detail detail_;
+public:
+    CursorBindingBroker(Primitive p, CursorBinding cb, Detail d = Detail::GENERAL_QUESTION)
+        : prim_(p), cb_(cb), detail_(d) {}
+    PrimitiveGuess classifyIntent(const std::string&) override {
+        PrimitiveGuess g{prim_, primitiveToString(prim_), "тестовый брокер: управляемый CursorBinding", false};
+        g.cursorBinding = cb_;
+        g.cursorBindingStr = cursorBindingToString(cb_);
+        g.detail = detail_;
+        g.detailStr = detailToString(detail_);
+        return g;
+    }
+    std::string roleName() const override { return "test_classify"; }
+};
+
+TEST_CASE("Orchestrator: CursorBinding NOT_NEEDED skips Ground, answers without cursor",
+          "[orchestrator][stub][cursorbinding]") {
+    TestProject proj;
+    CursorBindingBroker model(Primitive::UNDERSTAND, CursorBinding::NOT_NEEDED);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    // Задача без cursor вообще: NOT_NEEDED не требует Ground и не падает в missing_cursor.
+    json task = {{"goal_text", "Объясни, как в целом устроена подсистема"}};
+    json outcome = orch.run(task);
+
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome.value("primitive", "") == "UNDERSTAND");
+    CHECK(!outcome.contains("execute"));
+    CHECK(outcome["debug_facts"].value("cursor_binding", "") == "NOT_NEEDED");
+}
+
+TEST_CASE("Orchestrator: NOT_NEEDED normalizes method-bound Detail to GENERAL_QUESTION",
+          "[orchestrator][stub][cursorbinding]") {
+    // Модель на общий вопрос иногда возвращает method-bound detail (SIMPLE_READ).
+    // При NOT_NEEDED место неважно: не должно быть needs_input, должен быть read-only ответ.
+    TestProject proj;
+    CursorBindingBroker model(Primitive::UNDERSTAND, CursorBinding::NOT_NEEDED, Detail::SIMPLE_READ);
+    StubMainModelBroker mainModel;
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
+
+    json task = {{"goal_text", "Объясни, как в целом устроена подсистема"}};
+    json outcome = orch.run(task);
+
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome.value("primitive", "") == "UNDERSTAND");
+    CHECK(outcome["debug_facts"].value("action", "") == "DELEGATE_TO_MAIN");
+    CHECK(!outcome.contains("execute"));
+}
+
+// === Граф вызовов: CALL_CHAIN ===
+
+TEST_CASE("Orchestrator: CALL_CHAIN lists callers via cached call graph",
+          "[orchestrator][stub][calls]") {
+    TestProject proj;
+    DetailClassifyBroker model(Primitive::UNDERSTAND, Detail::CALL_CHAIN);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    // use_calculator вызывает c.add(...) -> add имеет входящее ребро.
+    json task = {
+        {"goal_text", "Кто вызывает метод add(int, int)?"},
+        {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
+    };
+    json outcome = orch.run(task);
+
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome.value("primitive", "") == "UNDERSTAND");
+    CHECK(outcome["debug_facts"].value("action", "") == "QUERY_CALL_CHAIN");
+    REQUIRE(outcome["answer"].contains("refs"));
+    CHECK(!outcome["answer"]["refs"].empty());
+    // в тексте есть сигнатура вызывающего (use_calculator) или хотя бы число найденных
+    CHECK(outcome["answer"]["text"].get<std::string>().find("вызывает") != std::string::npos);
+    // read-only
+    CHECK(!outcome.contains("execute"));
+}
+
+// === 2b: dependency map / todo scan / code smell (детерминированные) ===
+
+TEST_CASE("Orchestrator: DEPENDENCY_MAP reports file dependents", "[orchestrator][stub][analysis]") {
+    TestProject proj;
+    DetailClassifyBroker model(Primitive::UNDERSTAND, Detail::DEPENDENCY_MAP);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    json task = {
+        {"goal_text", "От чего зависит класс Calculator?"},
+        {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
+    };
+    json outcome = orch.run(task);
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome["debug_facts"].value("action", "") == "QUERY_DEPENDENCY_MAP");
+    CHECK(outcome["answer"]["text"].get<std::string>().find("зависимост") != std::string::npos);
+    CHECK(!outcome.contains("execute"));
+}
+
+TEST_CASE("Orchestrator: TODO_SCAN finds markers deterministically", "[orchestrator][stub][analysis]") {
+    TestProject proj;
+    // добавляем маркер в исходник
+    {
+        std::string body = readFile(proj.srcFile.string());
+        writeFile(proj.srcFile.string(), body + "// TODO: убрать после релиза\n");
+    }
+    DetailClassifyBroker model(Primitive::UNDERSTAND, Detail::TODO_SCAN);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    json task = {
+        {"goal_text", "Найди TODO в этом файле"},
+        {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
+    };
+    json outcome = orch.run(task);
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome["debug_facts"].value("action", "") == "QUERY_TODO_SCAN");
+    CHECK(outcome["answer"]["text"].get<std::string>().find("TODO") != std::string::npos);
+    CHECK(!outcome["answer"]["refs"].empty()); // найденный маркер попал в refs
+}
+
+TEST_CASE("Orchestrator: CODE_SMELL heuristic on a method", "[orchestrator][stub][analysis]") {
+    TestProject proj;
+    DetailClassifyBroker model(Primitive::UNDERSTAND, Detail::CODE_SMELL);
+    Orchestrator orch(model, proj.ccPath.string(), nullptr, nullptr, true, 3, true, true, true);
+
+    json task = {
+        {"goal_text", "Почему метод add плохой?"},
+        {"cursor", {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}}}
+    };
+    json outcome = orch.run(task);
+    REQUIRE(outcome.value("type", "") == "answer");
+    CHECK(outcome["debug_facts"].value("action", "") == "QUERY_CODE_SMELL");
+    CHECK(!outcome.contains("execute"));
+}
+
+TEST_CASE("Orchestrator: CursorBinding NEEDED_MISSING asks for cursor, retry proceeds",
+          "[orchestrator][stub][cursorbinding]") {
+    TestProject proj;
+    CursorBindingBroker model(Primitive::SANDBOX_FIX, CursorBinding::NEEDED_MISSING);
+    StubMainModelBroker mainModel;
+    Orchestrator orch(model, proj.ccPath.string(), &mainModel, nullptr, true, 3, true, true, true);
+
+    json task = {{"goal_text", "Замени int на long в методе add"}}; // курсора нет
+    json outcome = orch.run(task);
+
+    REQUIRE(outcome.value("type", "") == "needs_input");
+    CHECK(outcome["needs_input"].value("question_id", "") == "cursor-needed");
+    CHECK(outcome["needs_input"].contains("history_entry"));
+    CHECK(outcome["needs_input"].contains("options"));
+    CHECK(outcome["needs_input"]["depth"].get<int>() == 1);
+    // файл не тронут
+    CHECK(readFile(proj.srcFile.string()).find("int add") != std::string::npos);
+
+    // повтор с курсором проходит дальше: NEEDED_MISSING больше не срабатывает
+    json task2 = task;
+    task2["cursor"] = {{"file", proj.srcFile.string()}, {"line", 4}, {"column", 9}};
+    task2["blast_radius_relative_threshold"] = 1.1;
+    task2["clarification"] = {{"question_id", "cursor-needed"}, {"chosen_option_id", "retry"}};
+    json outcome2 = orch.run(task2);
+    REQUIRE(outcome2.value("type", "") == "answer");
+    CHECK(outcome2.value("primitive", "") == "SANDBOX_FIX");
+    CHECK(outcome2.contains("execute"));
+}
+
+// === Stub заполняет Detail (слой 1) ===
+
+TEST_CASE("StubModelBroker: fills Detail along with Primitive", "[orchestrator][stub][detail]") {
+    StubModelBroker model;
+    CHECK(model.classifyIntent("Что делает метод add?").detail == Detail::SIMPLE_READ);
+    CHECK(model.classifyIntent("Пересобери cmake").detail == Detail::BUILD_CONFIG);
+    CHECK(model.classifyIntent("Напиши тесты для add").detail == Detail::UNIT_TEST);
+    CHECK(model.classifyIntent("Замени int на long в методе add").detail == Detail::LOCAL_FIX);
+    CHECK(model.classifyIntent("Добавь новый класс брокера").detail == Detail::API_DESIGN);
 }

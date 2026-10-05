@@ -2,6 +2,8 @@
 
 #include "tu_cache.h"
 #include "queries.h"
+#include "clang_index.h"
+#include <clang-c/Index.h>
 
 #include <sqlite3.h>
 
@@ -160,19 +162,137 @@ void set_user_version(const std::string& dbPath, int version)
     sqlite3_close(db);
 }
 
-// USR do_work берём из разбора api.h в режиме C++ (-x c++: без него clang
-// разбирает .h как C-заголовок и разбор падает). Именно декларация, а не
-// вызов: у DeclRefExpr в месте вызова cursorUSR пустой, а USR декларации
-// name-based и совпадает с тем, что ссылается на символ из других TU.
+// USR декларации do_work в api.h (строка 2: "int do_work(int value);").
+//
+// Намеренно НЕ через queryLocateSymbol/ensure_project_indexed: это тестовый
+// bootstrap, который должен добыть usr, не вызывая побочного эффекта
+// "весь проект проиндексирован" — иначе тесты вида "первый вызов сканирует,
+// второй берёт из кэша" ломаются, потому что к моменту их собственного
+// первого вызова кэш уже тёплый от этого самого вызова. Прямой точечный
+// парс api.h в обход кэша — ровно то разделение, которого тесты и ждут.
 std::string find_do_work_usr(const STestProject& proj)
 {
-    json locate = queryLocateSymbol(proj.header(), 2, 5, {"-std=c++17", "-x", "c++"});
-    if (!locate.value("ok", false))
-        return "";
-    return locate.value("cursor", json::object()).value("usr", "");
+    auto unit = ParsedUnit::parse(proj.header(), {"-std=c++17", "-x", "c++"});
+    if (!unit) return "";
+    CXFile f = clang_getFile(unit->tu(), proj.header().c_str());
+    CXSourceLocation loc = clang_getLocation(unit->tu(), f, 2, 5);
+    CXCursor cursor = clang_getCursor(unit->tu(), loc);
+    if (clang_Cursor_isNull(cursor) || clang_isInvalid(clang_getCursorKind(cursor))) return "";
+    return cursorUSR(cursor);
+}
+
+// USR символа в конкретной точке файла — для проверок графа вызовов.
+std::string find_usr_at(const std::string& file, unsigned line, unsigned col)
+{
+    auto unit = ParsedUnit::parse(file, {"-std=c++17", "-x", "c++"});
+    if (!unit) return "";
+    CXFile f = clang_getFile(unit->tu(), file.c_str());
+    CXSourceLocation loc = clang_getLocation(unit->tu(), f, line, col);
+    CXCursor cursor = clang_getCursor(unit->tu(), loc);
+    if (clang_Cursor_isNull(cursor) || clang_isInvalid(clang_getCursorKind(cursor))) return "";
+    return cursorUSR(cursor);
 }
 
 } // namespace
+
+TEST_CASE("queryTypeUsage/Complexity/DuplicateFind on the fixture", "[cache]")
+{
+    STestProject proj;
+    const std::string usr = find_do_work_usr(proj);
+    REQUIRE(!usr.empty());
+
+    // TYPE_USAGE: do_work используется в alpha.cpp и beta.cpp (>=2 мест)
+    json tu = queryTypeUsage(usr, proj.compile_commands());
+    REQUIRE(tu.value("ok", false));
+    CHECK(tu["locations"].size() >= 2);
+
+    // COMPLEXITY: у alpha.cpp есть метод alpha_sum
+    json cx = queryComplexityHotspot(proj.compile_commands(), proj.alpha(), "");
+    REQUIRE(cx.value("ok", false));
+    REQUIRE(!cx["hotspots"].empty());
+    CHECK(cx["hotspots"][0].contains("body_lines"));
+    CHECK(cx["hotspots"][0].contains("max_nesting"));
+
+    // DUPLICATE_FIND: в пределах одного файла дублей нет -> групп 0 (не падаем)
+    json dup = queryDuplicateFind(proj.compile_commands(), proj.alpha(), "");
+    REQUIRE(dup.value("ok", false));
+    CHECK(dup["groups"].is_array());
+}
+
+TEST_CASE("queryTodoScan/queryDocCheck find markers and undoc headers", "[cache]")
+{
+    STestProject proj;
+    proj.write("sample_quality.cpp",
+               "#pragma once\n"                     // без doc-комментария
+               "int f() {\n"
+               "    // TODO: сделать нормально\n"
+               "    int x = 1; // FIXME later\n"
+               "    return x;\n"
+               "}\n");
+
+    json todo = queryTodoScan(proj.compile_commands(), proj.path("sample_quality.cpp"), "");
+    REQUIRE(todo.value("ok", false));
+    CHECK(todo["markers"].size() == 2); // TODO + FIXME в одной строке -> один маркер? (разные строки)
+    bool sawTodo = false, sawFixme = false;
+    for (auto& m : todo["markers"]) {
+        if (m.value("marker", "") == "TODO") sawTodo = true;
+        if (m.value("marker", "") == "FIXME") sawFixme = true;
+    }
+    CHECK(sawTodo);
+    CHECK(sawFixme);
+
+    json doc = queryDocCheck(proj.compile_commands(), proj.path("sample_quality.cpp"), "");
+    REQUIRE(doc.value("ok", false));
+    CHECK(doc["checked"].size() == 1);
+    CHECK(doc["undocumented"].size() == 1); // заголовочного doc нет
+}
+
+// DEPENDENCY_MAP: кто подключает api.h (alpha.cpp), и что подключает alpha.cpp.
+TEST_CASE("CTuCache reports file dependents and dependencies", "[cache]")
+{
+    STestProject proj;
+    CTuCache cache(proj.cache_path());
+    REQUIRE(cache.opened());
+    REQUIRE(cache.get_refs_for_usr(proj.compile_commands(), "c:@F@do_work#I#").filesScanned == 2);
+
+    json deps = json::parse(cache.get_file_deps_json(proj.header()));
+    REQUIRE(deps.value("ok", false));
+    // alpha.cpp включает api.h -> он dependent
+    bool alphaDep = false;
+    for (auto& d : deps["dependents"]) if (d.get<std::string>().find("alpha.cpp") != std::string::npos) alphaDep = true;
+    CHECK(alphaDep);
+    // beta.cpp api.h не включает -> не dependent
+    bool betaDep = false;
+    for (auto& d : deps["dependents"]) if (d.get<std::string>().find("beta.cpp") != std::string::npos) betaDep = true;
+    CHECK(!betaDep);
+
+    // alpha.cpp включает api.h -> среди его dependencies
+    json a = json::parse(cache.get_file_deps_json(proj.alpha()));
+    REQUIRE(a.value("ok", false));
+    bool hasHeader = false;
+    for (auto& d : a["dependencies"]) if (d.get<std::string>().find("api.h") != std::string::npos) hasHeader = true;
+    CHECK(hasHeader);
+}
+
+TEST_CASE("CTuCache find_enclosing exposes method extent", "[cache]")
+{
+    STestProject proj;
+    const std::string usr = find_do_work_usr(proj);
+    REQUIRE(!usr.empty());
+
+    CTuCache cache(proj.cache_path());
+    REQUIRE(cache.opened());
+    REQUIRE(cache.get_refs_for_usr(proj.compile_commands(), usr).filesScanned == 2);
+
+    // alpha_sum определён с телом (строки 2..5 в alpha.cpp).
+    json m = json::parse(cache.find_enclosing_json(proj.alpha(), 3, 5));
+    REQUIRE(m.value("ok", false));
+    REQUIRE(!m["enclosing_method"].is_null());
+    CHECK(m["enclosing_method"].contains("start_line"));
+    CHECK(m["enclosing_method"].contains("end_line"));
+    CHECK(m["enclosing_method"]["start_line"].get<int>() <= 3);
+    CHECK(m["enclosing_method"]["end_line"].get<int>() >= 3);
+}
 
 TEST_CASE("CTuCache opens and creates schema", "[cache]")
 {
@@ -420,4 +540,100 @@ TEST_CASE("CTuCache opening the same fresh database twice does not loop or wipe"
     REQUIRE(first.opened());
     CTuCache second(proj.cache_path());
     REQUIRE(second.opened());
+}
+
+// Баг миграции: PK decl = (usr,file,start_line), поэтому сдвиг строк не
+// затирал старую строку (INSERT OR REPLACE добавлял новую), и locate по
+// старым координатам продолжал возвращать метод. Правка выше символа обязана
+// убирать призрак.
+TEST_CASE("CTuCache drops stale decl rows after a line shift", "[cache]")
+{
+    STestProject proj;
+    const std::string usr = find_do_work_usr(proj);
+    REQUIRE(!usr.empty());
+
+    CTuCache cache(proj.cache_path());
+    REQUIRE(cache.opened());
+    REQUIRE(cache.get_refs_for_usr(proj.compile_commands(), usr).filesScanned == 2);
+
+    // до сдвига do_work объявлен в api.h на строке 2
+    json before = json::parse(cache.find_enclosing_json(proj.header(), 2, 5));
+    REQUIRE(before.value("ok", false));
+    REQUIRE(!before["enclosing_method"].is_null());
+    CHECK(before["enclosing_method"].value("usr", "") == usr);
+
+    // сдвигаем объявление на строку вниз: api.h -> //pad, #pragma once, do_work
+    proj.write("api.h", "// pad\n#pragma once\nint do_work(int value);\n");
+    cache.get_refs_for_usr(proj.compile_commands(), usr); // alpha.cpp пересобран
+
+    // старая координата больше НЕ метод (призрак убран)
+    json stale = json::parse(cache.find_enclosing_json(proj.header(), 2, 5));
+    bool staleIsMethod = !stale["enclosing_method"].is_null() &&
+                         stale["enclosing_method"].value("usr", "") == usr;
+    CHECK(!staleIsMethod);
+
+    // новая координата — метод
+    json fresh = json::parse(cache.find_enclosing_json(proj.header(), 3, 5));
+    REQUIRE(!fresh["enclosing_method"].is_null());
+    CHECK(fresh["enclosing_method"].value("usr", "") == usr);
+}
+
+// Граф вызовов: alpha_sum и beta_sum вызывают do_work -> входящие рёбра есть;
+// у alpha_sum исходящее ребро на do_work.
+TEST_CASE("CTuCache records and returns call edges", "[cache]")
+{
+    STestProject proj;
+    const std::string doWork = find_do_work_usr(proj);
+    const std::string alphaSum = find_usr_at(proj.alpha(), 2, 5); // "int alpha_sum(int a) {"
+    REQUIRE(!doWork.empty());
+    REQUIRE(!alphaSum.empty());
+
+    CTuCache cache(proj.cache_path());
+    REQUIRE(cache.opened());
+    REQUIRE(cache.get_refs_for_usr(proj.compile_commands(), doWork).filesScanned == 2);
+
+    // incoming: кто вызывает do_work -> alpha_sum и beta_sum (из разных TU)
+    json in = json::parse(cache.get_calls_json(doWork, true));
+    REQUIRE(in.value("ok", false));
+    CHECK(in.value("direction", "") == "incoming");
+    CHECK(in["calls"].size() >= 2);
+
+    // outgoing: кого вызывает alpha_sum -> do_work
+    json out = json::parse(cache.get_calls_json(alphaSum, false));
+    REQUIRE(out.value("ok", false));
+    CHECK(out.value("direction", "") == "outgoing");
+    bool foundDoWork = false;
+    for (auto& c : out["calls"]) if (c.value("usr", "") == doWork) foundDoWork = true;
+    CHECK(foundDoWork);
+}
+
+// Fast-path по mtime: перезапись тем же содержимым меняет mtime, но не хэш —
+// TU должен остаться валидным (переиндексации нет), т.е. лишнего чтения нет.
+TEST_CASE("CTuCache: identical rewrite stays valid via mtime fast-path", "[cache]")
+{
+    STestProject proj;
+    const std::string usr = find_do_work_usr(proj);
+    REQUIRE(!usr.empty());
+
+    CTuCache cache(proj.cache_path());
+    REQUIRE(cache.opened());
+    REQUIRE(cache.get_refs_for_usr(proj.compile_commands(), usr).filesScanned == 2);
+
+    proj.write("alpha.cpp", proj.read("alpha.cpp")); // тот же байт-в-байт контент
+
+    auto after = cache.get_refs_for_usr(proj.compile_commands(), usr);
+    REQUIRE(after.ok);
+    CHECK(after.filesScanned == 0);
+    CHECK(after.fromCache == 2);
+}
+
+// Общий на процесс экземпляр: один и тот же путь -> тот же объект.
+TEST_CASE("CTuCache::shared returns the same instance per path", "[cache]")
+{
+    STestProject proj;
+    auto a = CTuCache::shared(proj.cache_path());
+    auto b = CTuCache::shared(proj.cache_path());
+    REQUIRE(a->opened());
+    REQUIRE(b->opened());
+    CHECK(a.get() == b.get());
 }

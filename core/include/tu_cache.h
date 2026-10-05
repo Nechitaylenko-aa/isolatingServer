@@ -10,90 +10,180 @@ namespace cpptool
 class CDbManager;
 
 /**
- * @brief Результат агрегата ссылок на символ по всему проекту.
+ * @brief Каталог/файл кэша по умолчанию для compile_commands.json.
  *
- * Состав полей намеренно совпадает с прежним BlastRefsResult, чтобы логика
- * адаптивных порогов в blast_radius.cpp не менялась вместе с источником данных.
+ * Если задан явный файл через set_cache_file() — возвращается он (путь к БД
+ * приходит из конфига агента: <db_dir>/<hash(project_root)>.db). Иначе —
+ * историческое поведение: рядом с compile_commands.json в .cpp-tool-cache.
+ */
+std::string defaultCachePathFor(const std::string& compileCommandsPath);
+
+/**
+ * @brief Задать единый для процесса файл кэша (override из конфига cf-agent).
+ * Пустая строка сбрасывает override к поведению по умолчанию.
+ */
+void set_cache_file(const std::string& dbFilePath);
+
+/**
+ * @brief Результат агрегата ссылок на символ по всему проекту.
+ * Состав полей совпадает с прежней версией — adaptive-threshold логика в
+ * blast_radius.cpp не меняется вместе с источником данных.
  */
 struct SBlastRefsResult
 {
-    int totalRefs{0};              ///< сколько раз USR встретился во всех .cpp
-    int distinctFilesWithRefs{0};  ///< в скольких .cpp он встретился хотя бы раз
-    int filesScanned{0};           ///< сколько TU перепарсено в этом вызове
-    int filesTotal{0};             ///< знаменатель для относительного порога
-    int fromCache{0};              ///< сколько TU взято из кэша без парсинга
-    bool ok{true};                 ///< false — ошибка на уровне проекта, см. error
-    std::string error;             ///< причина при ok == false
+    int totalRefs{0};
+    int distinctFilesWithRefs{0};
+    int filesScanned{0};
+    int filesTotal{0};
+    int fromCache{0};
+    bool ok{true};
+    std::string error;
+};
+
+/** @brief Результат ensure_project_indexed — сколько TU пересобрано/взято из кэша. */
+struct SIndexStats
+{
+    int filesTotal{0};
+    int filesScanned{0};  ///< пересобрано (невалидны были)
+    int fromCache{0};     ///< уже валидны, не трогались
+    bool ok{true};
+    std::string error;
 };
 
 /**
- * @brief Постоянный кэш разбора translation unit'ов на SQLite.
+ * @brief Постоянный индекс проекта на SQLite — единственный источник ответа
+ * на запросы (locate_symbol, class_outline, symbol_refs, overrides, bases).
  *
- * Одна запись на .cpp из compile_commands.json. Валидность записи определяется
- * набором входов, от которых зависит AST: хэш содержимого главного файла, хэш
- * флагов и хэши содержимого всех файлов, которые препроцессор реально открыл в
- * этом TU. Версия схемы и версия libclang проверяются при открытии: при
- * расхождении кэш очищается целиком, потому что строковый формат USR задаёт
- * конкретная версия clang, и старые ключи после смены версии перестают
- * находиться — отказ был бы тихим (refs = 0 вместо ошибки).
+ * Принцип v2 (в отличие от v1, где кэш был только ускорением поверх
+ * повторного парсинга): clang вызывается РОВНО в одном месте —
+ * build_and_store, когда запись для TU невалидна. Все query-методы — чистые
+ * SELECT, ParsedUnit::parse внутри них не вызывается никогда.
  *
- * Ограничение, принятое осознанно: отслеживаются только файлы внутри project
- * root. Правка заголовка вне root (системного или вендорного) кэш не
- * инвалидирует. Не отслеживаются и пробы вида __has_include: если новый файл
- * появляется по пробуемому пути, но ранее не открывался, запись остаётся
- * валидной.
+ * decl хранится ГЛОБАЛЬНО по usr (не по tu_id): декларация метода в
+ * заголовке, видимом из N TU, существует в природе одна, и физически
+ * привязана к файлу, где она написана, а не к тому, кто её #include-ит.
+ * Так же refs — первичный ключ (file,line,col,usr), а не tu_id: ссылка,
+ * физически написанная внутри заголовка (inline-метод), не размножается на
+ * каждый включающий TU — INSERT OR IGNORE делает повторную вставку с тем же
+ * физическим местом no-op'ом.
  *
- * Project root не задаётся вызывающим кодом, а выводится из самой базы: это
- * общий каталог-предок всех .cpp. Брать в этом качестве каталог
- * compile_commands.json нельзя — CMake кладёт его в build/, а исходники лежат
- * рядом с build/, и тогда ни один заголовок проекта не попал бы в
- * отслеживаемые.
+ * Отслеживаются только файлы внутри project root (как и раньше) — декларации
+ * и ссылки на символы вне project root (std::/системные/вендорные) не
+ * попадают в decl/refs вовсе: без этого фильтра один обычный .cpp даёт
+ * десятки тысяч нерелевантных строк (измерено на реальном проекте).
  */
 class CTuCache
 {
 public:
-    /**
-     * @brief Открывает кэш в указанном файле БД.
-     *
-     * @param dbPath путь к файлу SQLite
-     */
     explicit CTuCache(std::string dbPath);
-
     ~CTuCache();
 
     CTuCache(const CTuCache&) = delete;
     CTuCache& operator=(const CTuCache&) = delete;
 
-    /**
-     * @brief true, если БД открыта и схема готова к работе.
-     */
     bool opened() const { return isOpen_; }
-
-    /**
-     * @brief Причина, по которой кэш не открылся.
-     */
     const std::string& open_error() const { return openError_; }
 
     /**
-     * @brief Суммирует вхождения USR по всем TU проекта.
+     * @brief Проходит все TU из compile_commands.json, пересобирает невалидные.
      *
-     * Перепарсивает только грязные TU, остальные читает из БД. Заголовки
-     * проекта, попавшие в разбор, отслеживаются: их правка делает TU грязным.
-     *
-     * @param compileCommandsPath путь к compile_commands.json
-     * @param targetUSR искомый USR
-     * @return агрегат; ok == false только при ошибке уровня проекта
+     * Единая точка входа перед любым query-методом ниже (они её тоже
+     * вызывают сами, так что вызывать отдельно нужно, только если важна
+     * статистика пересборки сама по себе).
      */
+    SIndexStats ensure_project_indexed(const std::string& compileCommandsPath);
+
+    /**
+     * @brief Метод/класс/прочая декларация, чей extent накрывает (file,line,col).
+     *
+     * Чистый SELECT по decl(file,start_line,end_line) — самый узкий
+     * охватывающий диапазон побеждает (метод внутри класса, а не класс).
+     * file может быть заголовком без собственной записи в
+     * compile_commands.json: decl заполняется из ЛЮБОГО TU, который этот
+     * заголовок #include-ит, так что работает, если индекс уже строился
+     * хоть раз (см. ensure_project_indexed).
+     *
+     * Возвращает JSON строкой (чтобы не тянуть json.hpp в заголовок) —
+     * {ok, cursor_kind, enclosing_method:{...}|null, enclosing_class:{...}|null}
+     */
+    std::string find_enclosing_json(const std::string& file, unsigned line, unsigned col);
+
+    /** @brief По имени класса (среди всех decl) или по usr. JSON строкой. */
+    std::string class_outline_json(const std::string& nameOrUsr, bool byUsr,
+                                    const std::string& fileHint);
+
+    /** @brief Суммирует вхождения usr по всем TU проекта (из таблицы refs). */
     SBlastRefsResult get_refs_for_usr(const std::string& compileCommandsPath,
                                       const std::string& targetUSR);
 
     /**
-     * @brief true, если запись для файла валидна и её можно использовать как есть.
+     * @brief Общий экземпляр кэша на процесс (реестр по пути БД).
      *
-     * @param file путь к .cpp
-     * @param flags флаги компиляции для этого файла
-     * @param projectRoot корень проекта; пути вне него не отслеживаются
+     * Без этого каждый query создавал свой CTuCache и заново прогонял
+     * ensure_project_indexed — полный скан всех TU на КАЖДЫЙ под-запрос одного
+     * прогона агента. Реестр держит по одному живому кэшу на путь; повторный
+     * вызов с тем же путём возвращает тот же объект (без повторного открытия).
+     * Потокобезопасно: реестр под std::mutex.
      */
+    static std::shared_ptr<CTuCache> shared(const std::string& dbPath);
+
+    /**
+     * @brief Методы, переопределяющие БАЗОВЫЙ метод для targetUsr.
+     *
+     * targetUsr не обязан САМ быть базовым: если это override (siblings-кейс —
+     * курсор стоит на CMySQLModel::execSQL_read, а нужны все реализации, т.е.
+     * и CPostgresModel::execSQL_read тоже), метод сам поднимается к базовому
+     * через overrides(method_usr=targetUsr) перед поиском остальных override'ов.
+     * Раньше это поднятие делал agent/ground_service.cpp повторным парсингом
+     * TU — теперь это два SELECT по уже заполненной таблице.
+     */
+    std::string get_overrides_json(const std::string& targetUsr);
+
+    /** @brief file/decl_line/decl_col декларации по usr. Якорь курсора переживает сдвиги строк. */
+    std::string get_location_by_usr_json(const std::string& usr);
+
+    /**
+     * @brief Рёбра графа вызовов вокруг usr.
+     *
+     * incoming=true  — кто ВЫЗЫВАЕТ usr (CALL_CHAIN: "кто вызывает этот метод");
+     * incoming=false — кого ВЫЗЫВАЕТ usr (CALL_GRAPH_SUBTREE: "что вызывает этот метод").
+     * Рёбра (caller_usr -> callee_usr) собраны из CallExpr/DeclRefExpr туда, где
+     * clang_getCursorReferenced даёт метод/функцию. Для каждой стороны через
+     * decl достаётся сигнатура/файл/строка определения (ORDER BY is_definition).
+     * Возвращает JSON строкой: {ok, target_usr, direction, calls:[{usr,signature,file,line,call_file,call_line}]}.
+     */
+    std::string get_calls_json(const std::string& usr, bool incoming);
+
+    /**
+     * @brief Зависимости файла-уровня для DEPENDENCY_MAP.
+     *
+     * Ищет файл в списке TU (по basename, если полного пути нет — результат
+     * в файле может быть заголовком/передан относительным путём) и возвращает:
+     *   - dependents — файлы TU, которые этот файл ПОДКЛЮЧАЮТ (их tu_dep
+     *     содержит наш путь);
+     *   - dependencies — файлы, которые ПОДКЛЮЧАЕТ этот файл (его собственные
+     *     tu_dep-записи).
+     * Если индекс ещё пуст — вызывающий обязан сперва сделать
+     * ensure_project_indexed (как и для остальных query).
+     */
+    std::string get_file_deps_json(const std::string& file);
+
+    /**
+     * @brief Файлы/сигнатуры методов класса (parent_usr) — для TODO_SCAN/DOC_CHECK
+     * в пределах класса, а не всего проекта. JSON строкой: {ok, files:[...]}.
+     */
+    std::string get_class_files_json(const std::string& classUsr);
+
+    /** @brief Все места использования usr (file,line) из refs — для TYPE_USAGE. */
+    std::string get_refs_locations_json(const std::string& usr, int limit = 500);
+
+    /**
+     * @brief Методы области (файл ИЛИ класс) с extent — для COMPLEXITY_HOTSPOT
+     * и DUPLICATE_FIND. JSON: {ok, methods:[{usr,signature,file,start_line,end_line}]}.
+     */
+    std::string get_methods_json(const std::string& scopeFile, const std::string& classUsr);
+
+    /** @brief true, если запись для файла валидна и её можно использовать как есть. */
     bool is_valid(const std::string& file, const std::vector<std::string>& flags,
                   const std::string& projectRoot);
 
@@ -104,27 +194,26 @@ private:
     bool sync_libclang_version();
     bool wipe_all();
 
-    /** @brief id записи для файла, либо -1 если записи нет. */
     int64_t tu_id_for(const std::string& file);
-
-    /**
-     * @brief Распарсивает файл и записывает результат в БД.
-     *
-     * Возвращает false, если файл изменился между парсингом и хэшированием:
-     * в этом случае запись остаётся невалидной, чтобы не оставить валидную
-     * с виду запись с AST от другого содержимого.
-     *
-     * @param file путь к .cpp
-     * @param flags флаги компиляции
-     * @param projectRoot корень проекта; зависит от набора файлов в базе
-     */
     bool build_and_store(const std::string& file, const std::vector<std::string>& flags,
                          const std::string& projectRoot);
 
-    /** @brief Удаляет refs и tu_dep записи — перед перезаписью. */
-    bool clear_tu_contents(int64_t tuId);
-
-    bool count_ref_for_usr(int64_t tuId, const std::string& usr, int& out, bool& found);
+    /**
+     * @brief Стирает факты, засеянные конкретным TU, перед повторной записью.
+     *
+     * decl/refs чистятся по ФАЙЛАМ нового набора зависимостей (сам TU + все
+     * project-root заголовки, которые он #include-ит). Причина: PK decl =
+     * (usr,file,start_line), поэтому сдвиг строк меняет start_line -> INSERT
+     * OR REPLACE не затирает старую строку, а добавляет новую, и в таблице
+     * остаётся призрак старых координат (find_enclosing/locate по нему
+     * возвращают устаревший метод). bases/overrides чистятся по usr
+     * деклараций из этих файлов — их ключ (class_usr/method_usr), а не файл.
+     *
+     * Чистим только файлы НОВОГО набора: если TU перестал #include-ить
+     * заголовок, общий с другим TU, удалять его строки нельзя — они всё ещё
+     * валидны для второго TU, который не пересобирается.
+     */
+    bool clear_tu_contents(int64_t tuId, const std::vector<std::string>& depFiles);
 
     std::unique_ptr<CDbManager> db_;
     std::string dbPath_;

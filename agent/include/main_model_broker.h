@@ -1,5 +1,7 @@
 #pragma once
 #include "json.hpp"
+#include "api_ai.h"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -44,15 +46,18 @@ public:
     std::string roleName() const override { return "stub-main"; }
 };
 
-// Реальная реализация: HTTP к llama.cpp (OpenAI-совместимый), как LightModelBroker но с большим max_tokens.
+// Реальная реализация: генерация через IApiAI (OpenAI-совместимый), как
+// LightModelBroker, но с большим max_tokens.
 class HttpMainModelBroker : public MainModelBroker {
 public:
-    explicit HttpMainModelBroker(std::string baseUrl, std::string modelName = "")
-        : baseUrl_(std::move(baseUrl)), modelName_(std::move(modelName)) {}
+    explicit HttpMainModelBroker(std::string baseUrl, std::string modelName = "");
+    // Инъекция произвольного провайдера (тесты — FakeApi; потом Claude/remote).
+    explicit HttpMainModelBroker(std::shared_ptr<IApiAI> api, std::string modelName = "")
+        : api_(std::move(api)), modelName_(std::move(modelName)) {}
     GenerateResult generate(const GenerateRequest& req) override;
     std::string roleName() const override { return "main"; }
 private:
-    std::string baseUrl_;
+    std::shared_ptr<IApiAI> api_;
     std::string modelName_;
 };
 

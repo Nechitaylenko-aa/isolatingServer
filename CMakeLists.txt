@@ -43,6 +43,8 @@ add_library(core STATIC
         core/src/query_virtual_overrides.cpp
         core/src/query_clangd_implementations.cpp
         core/src/query_find_implementors.cpp
+        core/src/query_calls.cpp
+        core/src/query_analysis.cpp
         core/src/compile_commands.cpp
         core/src/build_graph.cpp
         core/src/blast_radius.cpp
@@ -60,7 +62,11 @@ set_target_properties(core PROPERTIES BUILD_RPATH "${LIBCLANG_DIR}/lib")
 # compile_commands.h, build_graph.h), которые agent/src/orchestrator.cpp
 # инклюдит из core/include. Разделение осталось, просто не через процесс. ---
 add_library(agent STATIC
+        agent/src/api_ai.cpp
+        agent/src/task_router.cpp
+        agent/src/model_profile.cpp
         agent/src/model_broker.cpp
+        agent/src/config_reader.cpp
         agent/src/orchestrator.cpp
         agent/src/handlers.cpp
         agent/src/ground_service.cpp
@@ -99,6 +105,10 @@ if(Catch2_FOUND)
     add_executable(agent_tests
         agent/tests/test_execute_service.cpp
         agent/tests/test_orchestrator_integration.cpp
+        agent/tests/test_task_classification.cpp
+        agent/tests/test_config_reader.cpp
+        agent/tests/test_api_ai.cpp
+        agent/tests/test_task_router.cpp
     )
     target_link_libraries(agent_tests PRIVATE agent core Catch2::Catch2WithMain)
     target_include_directories(agent_tests PRIVATE agent/include core/include third_party "${LIBCLANG_DIR}/include")

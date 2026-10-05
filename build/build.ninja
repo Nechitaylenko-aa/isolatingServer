@@ -93,6 +93,20 @@ build CMakeFiles/core.dir/core/src/query_find_implementors.cpp.o: CXX_COMPILER__
   OBJECT_DIR = CMakeFiles/core.dir
   OBJECT_FILE_DIR = CMakeFiles/core.dir/core/src
 
+build CMakeFiles/core.dir/core/src/query_calls.cpp.o: CXX_COMPILER__core_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/core/src/query_calls.cpp || cmake_object_order_depends_target_core
+  DEP_FILE = CMakeFiles/core.dir/core/src/query_calls.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -I/usr/local/include
+  OBJECT_DIR = CMakeFiles/core.dir
+  OBJECT_FILE_DIR = CMakeFiles/core.dir/core/src
+
+build CMakeFiles/core.dir/core/src/query_analysis.cpp.o: CXX_COMPILER__core_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/core/src/query_analysis.cpp || cmake_object_order_depends_target_core
+  DEP_FILE = CMakeFiles/core.dir/core/src/query_analysis.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -I/usr/local/include
+  OBJECT_DIR = CMakeFiles/core.dir
+  OBJECT_FILE_DIR = CMakeFiles/core.dir/core/src
+
 build CMakeFiles/core.dir/core/src/compile_commands.cpp.o: CXX_COMPILER__core_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/core/src/compile_commands.cpp || cmake_object_order_depends_target_core
   DEP_FILE = CMakeFiles/core.dir/core/src/compile_commands.cpp.o.d
   FLAGS = -std=gnu++17
@@ -143,7 +157,7 @@ build CMakeFiles/core.dir/core/src/tu_cache.cpp.o: CXX_COMPILER__core_unscanned_
 #############################################
 # Link the static library libcore.a
 
-build libcore.a: CXX_STATIC_LIBRARY_LINKER__core_ CMakeFiles/core.dir/core/src/clang_index.cpp.o CMakeFiles/core.dir/core/src/query_locate_symbol.cpp.o CMakeFiles/core.dir/core/src/query_class_outline.cpp.o CMakeFiles/core.dir/core/src/query_symbol_refs.cpp.o CMakeFiles/core.dir/core/src/query_virtual_overrides.cpp.o CMakeFiles/core.dir/core/src/query_clangd_implementations.cpp.o CMakeFiles/core.dir/core/src/query_find_implementors.cpp.o CMakeFiles/core.dir/core/src/compile_commands.cpp.o CMakeFiles/core.dir/core/src/build_graph.cpp.o CMakeFiles/core.dir/core/src/blast_radius.cpp.o CMakeFiles/core.dir/core/src/db_manager.cpp.o CMakeFiles/core.dir/core/src/hash.cpp.o CMakeFiles/core.dir/core/src/tu_cache.cpp.o
+build libcore.a: CXX_STATIC_LIBRARY_LINKER__core_ CMakeFiles/core.dir/core/src/clang_index.cpp.o CMakeFiles/core.dir/core/src/query_locate_symbol.cpp.o CMakeFiles/core.dir/core/src/query_class_outline.cpp.o CMakeFiles/core.dir/core/src/query_symbol_refs.cpp.o CMakeFiles/core.dir/core/src/query_virtual_overrides.cpp.o CMakeFiles/core.dir/core/src/query_clangd_implementations.cpp.o CMakeFiles/core.dir/core/src/query_find_implementors.cpp.o CMakeFiles/core.dir/core/src/query_calls.cpp.o CMakeFiles/core.dir/core/src/query_analysis.cpp.o CMakeFiles/core.dir/core/src/compile_commands.cpp.o CMakeFiles/core.dir/core/src/build_graph.cpp.o CMakeFiles/core.dir/core/src/blast_radius.cpp.o CMakeFiles/core.dir/core/src/db_manager.cpp.o CMakeFiles/core.dir/core/src/hash.cpp.o CMakeFiles/core.dir/core/src/tu_cache.cpp.o
   OBJECT_DIR = CMakeFiles/core.dir
   POST_BUILD = :
   PRE_LINK = :
@@ -159,8 +173,36 @@ build libcore.a: CXX_STATIC_LIBRARY_LINKER__core_ CMakeFiles/core.dir/core/src/c
 
 build cmake_object_order_depends_target_agent: phony || cmake_object_order_depends_target_core
 
+build CMakeFiles/agent.dir/agent/src/api_ai.cpp.o: CXX_COMPILER__agent_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/api_ai.cpp || cmake_object_order_depends_target_agent
+  DEP_FILE = CMakeFiles/agent.dir/agent/src/api_ai.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent.dir/agent/src
+
+build CMakeFiles/agent.dir/agent/src/task_router.cpp.o: CXX_COMPILER__agent_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/task_router.cpp || cmake_object_order_depends_target_agent
+  DEP_FILE = CMakeFiles/agent.dir/agent/src/task_router.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent.dir/agent/src
+
+build CMakeFiles/agent.dir/agent/src/model_profile.cpp.o: CXX_COMPILER__agent_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/model_profile.cpp || cmake_object_order_depends_target_agent
+  DEP_FILE = CMakeFiles/agent.dir/agent/src/model_profile.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent.dir/agent/src
+
 build CMakeFiles/agent.dir/agent/src/model_broker.cpp.o: CXX_COMPILER__agent_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/model_broker.cpp || cmake_object_order_depends_target_agent
   DEP_FILE = CMakeFiles/agent.dir/agent/src/model_broker.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent.dir/agent/src
+
+build CMakeFiles/agent.dir/agent/src/config_reader.cpp.o: CXX_COMPILER__agent_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/src/config_reader.cpp || cmake_object_order_depends_target_agent
+  DEP_FILE = CMakeFiles/agent.dir/agent/src/config_reader.cpp.o.d
   FLAGS = -std=gnu++17
   INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/usr/local/llvm22/include -isystem /usr/local/include
   OBJECT_DIR = CMakeFiles/agent.dir
@@ -223,7 +265,7 @@ build CMakeFiles/agent.dir/agent/src/verify_service.cpp.o: CXX_COMPILER__agent_u
 #############################################
 # Link the static library libagent.a
 
-build libagent.a: CXX_STATIC_LIBRARY_LINKER__agent_ CMakeFiles/agent.dir/agent/src/model_broker.cpp.o CMakeFiles/agent.dir/agent/src/orchestrator.cpp.o CMakeFiles/agent.dir/agent/src/handlers.cpp.o CMakeFiles/agent.dir/agent/src/ground_service.cpp.o CMakeFiles/agent.dir/agent/src/task_classification.cpp.o CMakeFiles/agent.dir/agent/src/main_model_broker.cpp.o CMakeFiles/agent.dir/agent/src/execute_service.cpp.o CMakeFiles/agent.dir/agent/src/verify_service.cpp.o || libcore.a
+build libagent.a: CXX_STATIC_LIBRARY_LINKER__agent_ CMakeFiles/agent.dir/agent/src/api_ai.cpp.o CMakeFiles/agent.dir/agent/src/task_router.cpp.o CMakeFiles/agent.dir/agent/src/model_profile.cpp.o CMakeFiles/agent.dir/agent/src/model_broker.cpp.o CMakeFiles/agent.dir/agent/src/config_reader.cpp.o CMakeFiles/agent.dir/agent/src/orchestrator.cpp.o CMakeFiles/agent.dir/agent/src/handlers.cpp.o CMakeFiles/agent.dir/agent/src/ground_service.cpp.o CMakeFiles/agent.dir/agent/src/task_classification.cpp.o CMakeFiles/agent.dir/agent/src/main_model_broker.cpp.o CMakeFiles/agent.dir/agent/src/execute_service.cpp.o CMakeFiles/agent.dir/agent/src/verify_service.cpp.o || libcore.a
   OBJECT_DIR = CMakeFiles/agent.dir
   POST_BUILD = :
   PRE_LINK = :
@@ -336,6 +378,34 @@ build CMakeFiles/agent_tests.dir/agent/tests/test_orchestrator_integration.cpp.o
   OBJECT_DIR = CMakeFiles/agent_tests.dir
   OBJECT_FILE_DIR = CMakeFiles/agent_tests.dir/agent/tests
 
+build CMakeFiles/agent_tests.dir/agent/tests/test_task_classification.cpp.o: CXX_COMPILER__agent_tests_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_task_classification.cpp || cmake_object_order_depends_target_agent_tests
+  DEP_FILE = CMakeFiles/agent_tests.dir/agent/tests/test_task_classification.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent_tests.dir/agent/tests
+
+build CMakeFiles/agent_tests.dir/agent/tests/test_config_reader.cpp.o: CXX_COMPILER__agent_tests_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_config_reader.cpp || cmake_object_order_depends_target_agent_tests
+  DEP_FILE = CMakeFiles/agent_tests.dir/agent/tests/test_config_reader.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent_tests.dir/agent/tests
+
+build CMakeFiles/agent_tests.dir/agent/tests/test_api_ai.cpp.o: CXX_COMPILER__agent_tests_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_api_ai.cpp || cmake_object_order_depends_target_agent_tests
+  DEP_FILE = CMakeFiles/agent_tests.dir/agent/tests/test_api_ai.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent_tests.dir/agent/tests
+
+build CMakeFiles/agent_tests.dir/agent/tests/test_task_router.cpp.o: CXX_COMPILER__agent_tests_unscanned_ /home/artem/projects/outer/AI-agent/cpp-tool/agent/tests/test_task_router.cpp || cmake_object_order_depends_target_agent_tests
+  DEP_FILE = CMakeFiles/agent_tests.dir/agent/tests/test_task_router.cpp.o.d
+  FLAGS = -std=gnu++17
+  INCLUDES = -I/home/artem/projects/outer/AI-agent/cpp-tool/agent/include -I/home/artem/projects/outer/AI-agent/cpp-tool/core/include -I/home/artem/projects/outer/AI-agent/cpp-tool/third_party -I/usr/local/llvm22/include -isystem /usr/local/include
+  OBJECT_DIR = CMakeFiles/agent_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles/agent_tests.dir/agent/tests
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target agent_tests
@@ -344,7 +414,7 @@ build CMakeFiles/agent_tests.dir/agent/tests/test_orchestrator_integration.cpp.o
 #############################################
 # Link the executable agent_tests
 
-build agent_tests agent_tests-b12d07c_tests.cmake | ${cmake_ninja_workdir}agent_tests-b12d07c_tests.cmake: CXX_EXECUTABLE_LINKER__agent_tests_ CMakeFiles/agent_tests.dir/agent/tests/test_execute_service.cpp.o CMakeFiles/agent_tests.dir/agent/tests/test_orchestrator_integration.cpp.o | libagent.a libcore.a /usr/local/lib/libCatch2Main.so.3.15.3 /usr/local/llvm22/lib/libclang.so /usr/local/lib/libsqlite3.so /usr/local/lib/libcurl.so /usr/local/lib/libCatch2.so.3.15.3 || libagent.a libcore.a
+build agent_tests agent_tests-b12d07c_tests.cmake | ${cmake_ninja_workdir}agent_tests-b12d07c_tests.cmake: CXX_EXECUTABLE_LINKER__agent_tests_ CMakeFiles/agent_tests.dir/agent/tests/test_execute_service.cpp.o CMakeFiles/agent_tests.dir/agent/tests/test_orchestrator_integration.cpp.o CMakeFiles/agent_tests.dir/agent/tests/test_task_classification.cpp.o CMakeFiles/agent_tests.dir/agent/tests/test_config_reader.cpp.o CMakeFiles/agent_tests.dir/agent/tests/test_api_ai.cpp.o CMakeFiles/agent_tests.dir/agent/tests/test_task_router.cpp.o | libagent.a libcore.a /usr/local/lib/libCatch2Main.so.3.15.3 /usr/local/llvm22/lib/libclang.so /usr/local/lib/libsqlite3.so /usr/local/lib/libcurl.so /usr/local/lib/libCatch2.so.3.15.3 || libagent.a libcore.a
   DEP_FILE = CMakeFiles/agent_tests.dir/link.d
   LINK_FLAGS = -Xlinker --dependency-file=CMakeFiles/agent_tests.dir/link.d
   LINK_LIBRARIES = -Wl,-rpath,/usr/local/lib:/usr/local/llvm22/lib  libagent.a  libcore.a  /usr/local/lib/libCatch2Main.so.3.15.3  /usr/local/llvm22/lib/libclang.so  /usr/local/lib/libsqlite3.so  /usr/local/lib/libcurl.so  /usr/local/lib/libCatch2.so.3.15.3

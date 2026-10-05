@@ -2,6 +2,7 @@
 #include "ground_service.h"
 #include "model_broker.h"
 #include "main_model_broker.h"
+#include "task_router.h"
 #include "json.hpp"
 #include <string>
 #include <vector>
@@ -20,6 +21,8 @@ struct HandlerContext {
     GroundResult ground;
     std::string explicitMode;
     MainModelBroker* mainModel{nullptr}; // S4: 12 GiB генератор, может быть nullptr -> stub
+    Executor executor{Executor::LOCAL};  // маршрут (проактивный выбор исполнителя)
+    std::string executorReason;          // почему выбран этот маршрут
 };
 
 class PrimitiveHandler {

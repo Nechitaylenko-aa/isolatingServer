@@ -21,8 +21,20 @@ using json = nlohmann::json;
 class Orchestrator {
 public:
     // mainModel — опционально: если nullptr, используется StubMainModelBroker внутри.
-    explicit Orchestrator(ModelBroker& model, std::string compileCommandsPath, MainModelBroker* mainModel = nullptr)
-        : model_(model), compileCommandsPath_(std::move(compileCommandsPath)), mainModel_(mainModel) {}
+    // remoteMainModel — удалённая (сильнейшая) модель; если задана, тяжёлые классы
+    // задач маршрутизируются на неё проактивно, без ожидания сбоя локальной.
+    // localCapable — подтверждена ли (пробой) способность локальной main-модели.
+    // FAIL-CLOSED: по умолчанию false, пока профиль не подтвердит обратное.
+    explicit Orchestrator(ModelBroker& model, std::string compileCommandsPath,
+                          MainModelBroker* mainModel = nullptr,
+                          MainModelBroker* remoteMainModel = nullptr,
+                          bool localCapable = false,
+                          int localMaxEditFiles = 3,
+                          bool allowRead = true, bool allowWrite = true, bool allowExec = false)
+        : model_(model), compileCommandsPath_(std::move(compileCommandsPath)),
+          mainModel_(mainModel), remoteMainModel_(remoteMainModel),
+          localCapable_(localCapable), localMaxEditFiles_(localMaxEditFiles),
+          allowRead_(allowRead), allowWrite_(allowWrite), allowExec_(allowExec) {}
 
     // task — объект "task" из хода клиента (см. ТЗ §7.1)
     json run(const json& task);
@@ -31,6 +43,12 @@ private:
     ModelBroker& model_;
     std::string compileCommandsPath_;
     MainModelBroker* mainModel_{nullptr};
+    MainModelBroker* remoteMainModel_{nullptr};
+    bool localCapable_{false};        // fail-closed: не способна, пока не подтверждено
+    int localMaxEditFiles_{3};
+    bool allowRead_{true};            // политики доступа (agent.conf)
+    bool allowWrite_{true};
+    bool allowExec_{false};
 };
 
 } // namespace cppagent

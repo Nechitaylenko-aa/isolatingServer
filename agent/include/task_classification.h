@@ -133,6 +133,15 @@ enum class Action {
     QUERY_LOCATE_ONLY,           // просто показать сигнатуру
     QUERY_FIND_IMPLEMENTORS,     // найти реализации через наследование
     QUERY_VIRTUAL_OVERRIDES,     // найти overrides через USR
+    QUERY_CALL_CHAIN,            // кто вызывает метод (входящие рёбра calls)
+    QUERY_CALL_SUBTREE,          // кого вызывает метод (исходящие рёбра calls)
+    QUERY_DEPENDENCY_MAP,        // кто подключает файл / что подключает он сам (tu_dep)
+    QUERY_TODO_SCAN,             // найти TODO/FIXME/HACK/XXX (детерминированно)
+    QUERY_DOC_CHECK,             // проверить наличие doc-комментариев (детерминированно)
+    QUERY_CODE_SMELL,            // эвристика качества по телу метода
+    QUERY_TYPE_USAGE,            // где используется тип (refs по USR класса)
+    QUERY_COMPLEXITY,            // хотспоты сложности: длина/вложенность/строки
+    QUERY_DUPLICATES,            // методы с одинаковой сигнатурой (кандидаты в дубли)
     
     // --- Категория B: архитектурно готово, query не написан ---
     NOT_IMPLEMENTED_YET,         // Detail признан, но query/механизм ещё не готов
@@ -150,17 +159,26 @@ enum class Action {
 std::string detailToString(Detail d);
 std::string cursorContextToString(CursorContext c);
 std::string cursorBindingToString(CursorBinding b);
+std::string relevanceToString(Relevance r);
 std::string actionToString(Action a);
 
 // Обратное преобразование (для тестов/десериализации)
 Detail detailFromString(const std::string& s, bool& ok);
 
+// Слой 3: относится ли ФИЗИЧЕСКОЕ место под курсором (ctx) к тому, что просил
+// юзер (detail + goal_text). goalText/enclosingMethodUsr необязательны: без них
+// суждение деградирует до чисто позиционного (метод vs класс vs no-context).
+// enclosingMethodUsr нужен, чтобы отличить "задача про ЭТОТ метод" от "задача
+// явно про ДРУГОЙ метод" — детерминированная проверка по имени.
+Relevance computeRelevance(Detail detail, CursorContext ctx,
+                           const std::string& goalText = "",
+                           const std::string& enclosingMethodUsr = "");
 
-// Слой 5: Таблица решений. Выбирает Action по комбинации (Primitive, Detail, CursorContext).
+// Слой 4: Таблица решений. Выбирает Action по (Primitive, Detail, CursorContext),
+// где relevance — МОДИФИКАТОР: UNRELATED/AMBIGUOUS форсит NEEDS_INPUT_RELEVANCE
+// независимо от таблицы (arch.md: слой 3 -> слой 4).
 // primitiveStr передаётся строкой, чтобы не тянуть зависимость на orchestrator.h.
-Action selectAction(const std::string& primitiveStr, Detail detail, CursorContext ctx);
-
-// Сопоставление Detail и CursorContext: относится ли место к задаче.
-Relevance computeRelevance(Detail detail, CursorContext ctx);
+Action selectAction(const std::string& primitiveStr, Detail detail, CursorContext ctx,
+                    Relevance relevance = Relevance::ENTRY_POINT_EXACT);
 
 } // namespace cppagent

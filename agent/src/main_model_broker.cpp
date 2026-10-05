@@ -1,25 +1,9 @@
 #include "main_model_broker.h"
-#include <curl/curl.h>
+#include "api_ai.h"
 #include "json.hpp"
 #include <algorithm>
 
 namespace cppagent {
-
-namespace {
-size_t curlWriteCb(char* ptr, size_t size, size_t nmemb, void* d){ auto* s=static_cast<std::string*>(d); s->append(ptr,size*nmemb); return size*nmemb; }
-struct HttpRes{ bool ok=false; long code=0; std::string body; std::string err; };
-HttpRes postJson(const std::string& url, const json& bodyJson){
-    HttpRes r; CURL* c=curl_easy_init(); if(!c){ r.err="curl_easy_init null"; return r; }
-    std::string bs=bodyJson.dump(); std::string resp;
-    struct curl_slist* h=nullptr; h=curl_slist_append(h,"Content-Type: application/json");
-    curl_easy_setopt(c,CURLOPT_URL,url.c_str()); curl_easy_setopt(c,CURLOPT_POST,1L); curl_easy_setopt(c,CURLOPT_POSTFIELDS,bs.c_str());
-    curl_easy_setopt(c,CURLOPT_HTTPHEADER,h); curl_easy_setopt(c,CURLOPT_WRITEFUNCTION,curlWriteCb); curl_easy_setopt(c,CURLOPT_WRITEDATA,&resp); curl_easy_setopt(c,CURLOPT_TIMEOUT,120L);
-    CURLcode rc=curl_easy_perform(c); long code=0; curl_easy_getinfo(c,CURLINFO_RESPONSE_CODE,&code);
-    curl_slist_free_all(h); curl_easy_cleanup(c);
-    if(rc!=CURLE_OK){ r.err=curl_easy_strerror(rc); return r; }
-    r.code=code; r.body=resp; r.ok=(code>=200 && code<300); return r;
-}
-} // anon
 
 static std::string truncateUtf8(const std::string& s, size_t maxBytes){
     if(s.size()<=maxBytes) return s;
@@ -72,6 +56,10 @@ GenerateResult StubMainModelBroker::generate(const GenerateRequest& req){
     return r;
 }
 
+HttpMainModelBroker::HttpMainModelBroker(std::string baseUrl, std::string modelName)
+    : api_(std::make_shared<CApiOpenAI>(std::move(baseUrl), modelName, "", 5, 120)),
+      modelName_(std::move(modelName)) {}
+
 GenerateResult HttpMainModelBroker::generate(const GenerateRequest& req){
     std::string systemPrompt =
         "Ты — C++ ассистент-генератор правок. По примитиву и контексту метода сгенерируй план и точные правки файлов.\n"
@@ -82,18 +70,22 @@ GenerateResult HttpMainModelBroker::generate(const GenerateRequest& req){
     // Без фрагмента файла модель не может выдать oldText, точно совпадающий с содержимым:
     // она его не видела и либо выдумывает несуществующую строку, либо вставляет в конец (oldText:"").
     if(!req.fileContext.empty()) userPrompt += "\n--- file content (with line numbers) ---\n" + req.fileContext;
-    json body = {{"messages", json::array({{{"role","system"},{"content",systemPrompt}}, {{"role","user"},{"content",userPrompt}}})}, {"temperature",0.2}, {"max_tokens",1200}};
-    if(!modelName_.empty()) body["model"]=modelName_;
-    std::string url = baseUrl_ + "/v1/chat/completions";
-    json withFormat=body; withFormat["response_format"]={{"type","json_object"}};
-    HttpRes res = postJson(url, withFormat);
-    if(!res.ok){ HttpRes retry=postJson(url, body); if(retry.ok) res=retry; else { GenerateResult gr; gr.ok=false; gr.modelUnavailable=true; gr.error=!res.err.empty()?("сеть: "+res.err):("HTTP "+std::to_string(res.code)+": "+res.body); return gr; } }
-    json j; try{ j=json::parse(res.body);}catch(const std::exception& e){ GenerateResult gr; gr.ok=false; gr.modelUnavailable=true; gr.error=std::string("ответ не JSON: ")+e.what(); return gr; }
-    if(!j.contains("choices")||j["choices"].empty()){ GenerateResult gr; gr.ok=false; gr.modelUnavailable=true; gr.error="нет choices[]"; return gr; }
-    std::string content=j["choices"][0]["message"].value("content","");
+
+    ChatRequest creq;
+    creq.system = systemPrompt;
+    creq.user = userPrompt;
+    creq.model = modelName_;
+    creq.temperature = 0.2;
+    creq.maxTokens = 1200;
+    creq.wantJson = true;
+    ChatResult res = api_->chat(creq);
+    if(!res.ok){ GenerateResult gr; gr.ok=false; gr.modelUnavailable=true; gr.error=res.error; return gr; }
+    std::string content = res.text;
     if(content.empty()){ GenerateResult gr; gr.ok=false; gr.modelUnavailable=true; gr.error="content пуст"; return gr; }
     json inner; try{ inner=json::parse(content);}catch(...){ // попробуем вырезать {...}
-        auto s=content.find('{'); auto e=content.rfind('}'); if(s!=std::string::npos && e!=std::string::npos && e>s){ try{ inner=json::parse(content.substr(s,e-s+1)); }catch(...){ GenerateResult gr; gr.ok=true; gr.planText=content; gr.rationale="модель вернула текст без JSON"; return gr; } } else { GenerateResult gr; gr.ok=true; gr.planText=content; gr.rationale="текст"; return gr; }
+        std::string ext=extractFirstJsonObject(content);
+        if(!ext.empty()){ try{ inner=json::parse(ext); }catch(...){ GenerateResult gr; gr.ok=true; gr.planText=content; gr.rationale="модель вернула текст без JSON"; return gr; } }
+        else { GenerateResult gr; gr.ok=true; gr.planText=content; gr.rationale="текст"; return gr; }
     }
     GenerateResult gr; gr.ok=true; gr.planText=inner.value("plan", content); gr.rationale=inner.value("rationale", "");
     if(inner.contains("actions") && inner["actions"].is_array()) gr.actions = inner["actions"];

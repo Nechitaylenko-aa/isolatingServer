@@ -1,7 +1,7 @@
 #include "model_broker.h"
+#include "task_classification.h"
 #include <algorithm>
 #include <cctype>
-#include <curl/curl.h>
 #include "json.hpp"
 
 namespace cppagent {
@@ -79,8 +79,14 @@ bool containsAny(const std::string& text, std::initializer_list<const char*> nee
     for(auto* n: needles) if(text.find(n)!=std::string::npos) return true;
     return false;
 }
-PrimitiveGuess makeGuess(Primitive p, std::string rationale){
-    return PrimitiveGuess{p, primitiveToString(p), std::move(rationale), false};
+// Stub теперь заполняет и Detail (слой 1): раньше все возвраты оставляли
+// Detail::GENERAL_QUESTION, из-за чего selectAction/computeRelevance
+// вырождались и слои 1/3/4 нельзя было проверить офлайн.
+PrimitiveGuess makeGuess(Primitive p, std::string rationale, Detail d){
+    PrimitiveGuess g{p, primitiveToString(p), std::move(rationale), false};
+    g.detail = d;
+    g.detailStr = detailToString(d);
+    return g;
 }
 PrimitiveGuess unavailable(std::string reason){
     return PrimitiveGuess{Primitive::UNDERSTAND, "", std::move(reason), true};
@@ -95,124 +101,78 @@ PrimitiveGuess StubModelBroker::classifyIntent(const std::string& goalText) {
     if(containsAny(t, {"пересобери","пересобрать","обнови compile","собери проект","инфра"})) {
         // уточняем что это не "добавь cmake таргет" (это QUARRY)
         if(!containsAny(t, {"добавь","создай","новый"}))
-            return makeGuess(Primitive::INFRA, "команда обслуживания окружения/сборки без правки логики");
+            return makeGuess(Primitive::INFRA, "команда обслуживания окружения/сборки без правки логики", Detail::BUILD_CONFIG);
     }
     // INFRA по ключевым словам сборки (если нет явных добавлений)
     if(containsAny(t, {"cmake","compile_commands","граф зависимост","build_graph","граф таргет","граф сборк","ninja","make "}) &&
        containsAny(t, {"покажи","обнови","собери","пересобери"})) {
-        return makeGuess(Primitive::INFRA, "запрос информации об окружении/сборке");
+        return makeGuess(Primitive::INFRA, "запрос информации об окружении/сборке", Detail::BUILD_CONFIG);
     }
     // INFRA: read-only запросы про сборку/таргеты
     if(containsAny(t, {"покажи граф","граф build","таргет","target","зависимост сборк"}) &&
        !containsAny(t, {"метод","класс","функци","символ"})) {
-        return makeGuess(Primitive::INFRA, "запрос информации о графе сборки/таргетах");
+        return makeGuess(Primitive::INFRA, "запрос информации о графе сборки/таргетах", Detail::BUILD_CONFIG);
     }
     // EXPERIMENT — гипотеза с откатом
     if(containsAny(t, {"попробу","а что если","что если","эксперимент","гипотеза","посмотрим","скомпилируется ли","откат","undo","redo"}))
-        return makeGuess(Primitive::EXPERIMENT, "формулировка гипотезы/эксперимента с возможным откатом");
+        return makeGuess(Primitive::EXPERIMENT, "формулировка гипотезы/эксперимента с возможным откатом", Detail::TRY_ALTERNATIVE);
     // TEST_GEN — цель == тесты
     if(containsAny(t, {"напиши тест","покрой тест","покрыть тест","юнит-тест","unit test","google test","gtest","тест для"})){
         // "попробуй переписать и покрой тестами" -> не TEST_GEN
         if(containsAny(t, {"перепиши","исправь","замени","отрефактор","добавь класс"}))
             ; // fall through to FIX/DESIGN
         else
-            return makeGuess(Primitive::TEST_GEN, "явная просьба написать/покрыть тестами");
+            return makeGuess(Primitive::TEST_GEN, "явная просьба написать/покрыть тестами", Detail::UNIT_TEST);
     }
     // UNDERSTAND — вопрос без просьбы менять код
     bool isQuestion = containsAny(t, {"что делает","объясни","где ","найди где","как работает","почему","утечка","логическ","покажи","выведи","отобрази","clang_visit","проверь","убедись","проанализируй","оцени","дойди до","разберись"});
     bool wantsChange = containsAny(t, {"исправь","почини","замени","отрефактор","добавь","создай","вынеси","перепиши","оптимизир"});
     if(isQuestion && !wantsChange)
-        return makeGuess(Primitive::UNDERSTAND, "вопрос/объяснение без просьбы менять код на диске");
+        return makeGuess(Primitive::UNDERSTAND, "вопрос/объяснение без просьбы менять код на диске", Detail::SIMPLE_READ);
     // QUARRY_DESIGN — новые файлы/модули/архитектура
     if(containsAny(t, {"новый класс","новый модуль","новый файл","добавь брокер","скелет плагина","вынеси логику","отдельный сервис","архитектур","воркфлоу","workflow","нескольк компонент","много класс"}))
-        return makeGuess(Primitive::QUARRY_DESIGN, "просьба создать новые модули/файлы или изменить архитектуру");
+        return makeGuess(Primitive::QUARRY_DESIGN, "просьба создать новые модули/файлы или изменить архитектуру", Detail::API_DESIGN);
     // SANDBOX_FIX — точечная правка под курсором
     if(containsAny(t, {"этот метод","эту функцию","в этом методе","в этом классе","в методе","в функции","исправь баг","выход за границ","сырой указатель","unique_ptr","исправь"}))
-        return makeGuess(Primitive::SANDBOX_FIX, "точечная правка одного метода/класса под курсором");
+        return makeGuess(Primitive::SANDBOX_FIX, "точечная правка одного метода/класса под курсором", Detail::LOCAL_FIX);
     // Правила разрешения конфликтов из ТЗ
     if(wantsChange) {
         // широкое vs точечное
         if(containsAny(t, {"весь класс","весь модуль","фреймворк","сервис"}))
-            return makeGuess(Primitive::QUARRY_DESIGN, "конфликт отрефакторить+широкий контекст -> QUARRY_DESIGN");
-        return makeGuess(Primitive::SANDBOX_FIX, "конфликт по умолчанию для правки одного места -> SANDBOX_FIX");
+            return makeGuess(Primitive::QUARRY_DESIGN, "конфликт отрефакторить+широкий контекст -> QUARRY_DESIGN", Detail::API_DESIGN);
+        return makeGuess(Primitive::SANDBOX_FIX, "конфликт по умолчанию для правки одного места -> SANDBOX_FIX", Detail::LOCAL_FIX);
     }
     // дефолт: не распознали — считаем вопросом, безопасно
-    return makeGuess(Primitive::UNDERSTAND, "явных сигналов правки нет — трактуем как UNDERSTAND (read-only безопасно)");
+    return makeGuess(Primitive::UNDERSTAND, "явных сигналов правки нет — трактуем как UNDERSTAND (read-only безопасно)", Detail::GENERAL_QUESTION);
 }
 
-// --- LightModelBroker: HTTP к llama.cpp ---
+// --- LightModelBroker: классификация через IApiAI (провайдер-агностик) ---
+// extractFirstJsonObject и HTTP живут в api_ai (CApiOpenAI). Здесь — только
+// сборка промпта и семантическая интерпретация ответа.
 
-namespace {
-
-size_t curlWriteCallback(char* ptr, size_t size, size_t nmemb, void* userdata){
-    auto* buf=static_cast<std::string*>(userdata);
-    buf->append(ptr, size*nmemb);
-    return size*nmemb;
-}
-// Считаем скобки, ПРОПУСКАЯ содержимое строковых литералов: rationale у нас по-русски,
-// и {"...{...}..."} раньше ломало баланс — возвращался мусор или ничего, а наружу
-// уходило ложное «модель вернула не-JSON».
-std::string extractFirstJsonObject(const std::string& text){
-    auto start=text.find('{');
-    if(start==std::string::npos) return "";
-    int depth=0;
-    bool inStr=false, esc=false;
-    for(size_t i=start;i<text.size();++i){
-        char c=text[i];
-        if(inStr){
-            if(esc) { esc=false; }
-            else if(c=='\\') esc=true;
-            else if(c=='"') inStr=false;
-            continue;
-        }
-        if(c=='"') { inStr=true; continue; }
-        if(c=='{') ++depth;
-        else if(c=='}'){ --depth; if(depth==0) return text.substr(start,i-start+1); }
-    }
-    return "";
-}
-struct HttpResult{ bool ok=false; long httpCode=0; std::string body; std::string curlError; };
-HttpResult postChatCompletion(const std::string& url, const json& req){
-    HttpResult r;
-    CURL* curl=curl_easy_init();
-    if(!curl){ r.curlError="curl_easy_init вернул nullptr"; return r; }
-    std::string bodyStr=req.dump();
-    std::string resp;
-    struct curl_slist* headers=nullptr;
-    headers=curl_slist_append(headers,"Content-Type: application/json");
-    // libcurl без явного init работает не везде (и ломается при параллельных вызовах из тестов)
-    static const bool curlInit = [](){ curl_global_init(CURL_GLOBAL_DEFAULT); return true; }();
-    (void)curlInit;
-    curl_easy_setopt(curl,CURLOPT_URL,url.c_str());
-    curl_easy_setopt(curl,CURLOPT_POST,1L);
-    curl_easy_setopt(curl,CURLOPT_POSTFIELDS,bodyStr.c_str());
-    curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
-    curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,curlWriteCallback);
-    curl_easy_setopt(curl,CURLOPT_WRITEDATA,&resp);
-    // Локальные модели, одна пока на CPU: 30s резало холодный префилл длинного
-    // системного промпта -> unavailable -> тихий UNDERSTAND. Живость сервера
-    // отсекается коротким connect-таймаутом, саму генерацию не режем.
-    curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,5L);
-    curl_easy_setopt(curl,CURLOPT_TIMEOUT,600L);
-    curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
-    CURLcode rc=curl_easy_perform(curl);
-    long code=0; curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&code);
-    curl_slist_free_all(headers); curl_easy_cleanup(curl);
-    if(rc!=CURLE_OK){ r.curlError=curl_easy_strerror(rc); return r; }
-    r.httpCode=code; r.body=resp; r.ok=(code>=200 && code<300);
-    return r;
-}
-} // anon
+LightModelBroker::LightModelBroker(std::string baseUrl, std::string modelName, double temperature)
+    : api_(std::make_shared<CApiOpenAI>(std::move(baseUrl), modelName)),
+      modelName_(std::move(modelName)), temperature_(temperature) {}
 
 PrimitiveGuess LightModelBroker::classifyIntent(const std::string& goalText){
     const std::string systemPrompt =
         "Ты — детерминированный системный шлюз C++ агента. Твоя ЕДИНСТВЕННАЯ задача — перевести техническое задание пользователя в один из 6 системных примитивов.\n"
-        "ОТВЕЧАЙ СТРОГО ВАЛИДНЫМ JSON БЕЗ MARKDOWN: {\"primitive\": \"UNDERSTAND\"|\"SANDBOX_FIX\"|\"QUARRY_DESIGN\"|\"TEST_GEN\"|\"EXPERIMENT\"|\"INFRA\", \"confidence\": 0.0..1.0, \"alternative\": \"второй по вероятности примитив или пустая строка\", \"goal_specific\": true|false, \"rationale\": \"одна фраза по-русски\"}\n"
+        "ОТВЕЧАЙ СТРОГО ВАЛИДНЫМ JSON БЕЗ MARKDOWN: {\"primitive\": \"UNDERSTAND\"|\"SANDBOX_FIX\"|\"QUARRY_DESIGN\"|\"TEST_GEN\"|\"EXPERIMENT\"|\"INFRA\", \"detail\": \"<см. ниже>\", \"cursor_binding\": \"NOT_NEEDED\"|\"NEEDED_PRESENT\"|\"NEEDED_MISSING\", \"confidence\": 0.0..1.0, \"alternative\": \"второй по вероятности примитив или пустая строка\", \"goal_specific\": true|false, \"rationale\": \"одна фраза по-русски\"}\n"
         "confidence — НАСКОЛЬКО ТЫ УВЕРЕН в выбранном primitive (0.0 = совсем не уверен, 1.0 = абсолютно уверен). Будь ЧЕСТЕН: на неоднозначных фразах ставь 0.4-0.6 и указывай alternative, не завышай.\n"
         "goal_specific — ДРУГОЕ измерение, не confidence. Даже при 100% уверенности, что это ПРАВКА, отдельно спроси себя: есть ли в goal_text конкретный объект (метод/файл/поведение) и понятно ли, когда правка 'готова'?\n"
         "goal_specific=false — просьба без объекта/критерия: 'сделай лучше', 'почини это', 'оптимизируй', 'наведи порядок' — без указания ЧТО и КАК. goal_specific=true — указан конкретный метод/класс/файл/симптом: 'переименуй getUserName в getUsername', 'исправь утечку в set_pass_hash'. Для UNDERSTAND/INFRA почти всегда true.\n"
+        "detail — уточнение ВНУТРИ primitive (ЧТО именно хочет юзер). Допустимые значения по primitive:\n"
+        "- UNDERSTAND: SIMPLE_READ (показать/что делает ЭТОТ метод), FIND_IMPLEMENTATIONS (все реализации), CALL_CHAIN (кто вызывает), CALL_GRAPH_SUBTREE (кого вызывает), DEPENDENCY_MAP (кто подключает файл / от чего зависит: \"от чего зависит\", \"кто включает заголовок\", \"какие файлы тянут класс\"), DATA_FLOW (откуда берётся значение/трассировка потока), TYPE_USAGE (\"где используется тип/класс\", \"кто использует класс/тип\", \"найди использования класса\" — вопрос про ИСПОЛЬЗОВАНИЯ, а не обзор), LIFECYCLE_TRACE (когда создаётся/уничтожается объект), ANALYZE_INTERFACE, COMPARE_IMPLS (сравни две реализации / в чём разница), DIFF_INTERFACE_IMPL, VIRTUAL_REFACTOR_SIM/FEASIBILITY_CHECK (можно ли ... без правок), DOC_SUMMARY (кратко опиши словами что делает подсистема/класс), DOC_GEN (сгенерируй doc-комментарии), DOC_CHECK (проверь наличие doc-комментариев), TODO_SCAN (найди TODO/FIXME/HACK/XXX), CODE_SMELL (почему этот код плох / запахи / пахнет), DUPLICATE_FIND (где дубликаты / одинаковые методы), COMPLEXITY_HOTSPOT (самые сложные места / хотспоты), SECURITY_AUDIT, INPUT_VALIDATION, THREADING_SAFE, MODERNIZE, API_MIGRATION, PORT_PLATFORM, GENERAL_QUESTION (ОБЗОР/архитектура: \"как устроен класс/модуль/подсистема в целом\", \"что это за класс\", \"опиши архитектуру\" — НЕ про конкретный метод и НЕ про поиск использований).\n"
+        "ВАЖНО про граф вызовов (НЕ путать): 'кто вызывает X' / 'кто использует X' / 'откуда вызывается X' -> CALL_CHAIN. 'кого вызывает X' / 'что вызывает X' / 'что внутри X вызывает' -> CALL_GRAPH_SUBTREE.\n"
+        "- SANDBOX_FIX: LOCAL_FIX, RENAME, SIGNATURE_CHANGE, ADD_OVERRIDE, EXTRACT_METHOD, INLINE_METHOD, EXTRACT_CLASS, MOVE_METHOD, DEAD_CODE_REMOVAL, REMOVE_UNUSED_INCL, ADD_METHOD, ADD_CLASS.\n"
+        "- QUARRY_DESIGN: NEW_INTERFACE, API_DESIGN, APPLY_PATTERN, SPLIT_CLASS, DESIGN_HIERARCHY.\n"
+        "- TEST_GEN: UNIT_TEST, INTEGRATION_TEST, GEN_MOCKS, COVERAGE_GAP.\n"
+        "- EXPERIMENT: PROTOTYPE, BENCHMARK, TRY_ALTERNATIVE.\n"
+        "- INFRA: BUILD_FIX, BUILD_CONFIG, DEPS_UPDATE, CI_PIPELINE.\n"
+        "Сомневаешься в detail — GENERAL_QUESTION для чтения, LOCAL_FIX для правки.\n"
+        "cursor_binding — привязана ли задача к конкретному МЕСТУ в коде: NOT_NEEDED (общий вопрос об архитектуре/подсистеме, новый файл с нуля — курсор не нужен), NEEDED_PRESENT (задача про конкретный метод/класс/строку), NEEDED_MISSING (задача явно про конкретное место, но какое — не названо).\n"
         "КРИТЕРИИ:\n"
-        "1. UNDERSTAND — вопрос/объяснение/поиск/ПРОВЕРКА. Код на диске НЕ меняется. Примеры: \"Что делает этот метод?\", \"Где утечка?\", \"Объясни clang_visitChildren\", \"Проверь корректность реализаций\", \"Дойди до реализации и убедись\"\n"
+        "1. UNDERSTAND — вопрос/объяснение/поиск/ПРОВЕРКА. Код на диске НЕ меняется. Примеры: \"Что делает этот метод?\", \"Где утечка?\", \"Объясни clang_visitChildren\", \"Проверь корректность реализаций\", \"Дойди до реализации и убедись\". Вопросы о МЕСТЕ проблемы без глагола изменения (\"где утечка\", \"где баг\", \"где ошибка\", \"где теряется\") — UNDERSTAND, даже если названы 'класс'/'метод'/'модуль'.\n"
         "ГЛАВНОЕ ПРАВИЛО ГЛАГОЛА: примитив определяется ГЛАГОЛОМ цели, а не упомянутыми именами методов/классов.\n"
         "- Читающие глаголы: \"проверь\", \"убедись\", \"проанализируй\", \"оцени\", \"дойди до\", \"разберись\", \"найди\", \"посмотри\", \"объясни\" — БЕЗ глагола изменения -> UNDERSTAND, даже если названы конкретные методы, классы, файлы и реализацию надо \"дойти\".\n"
         "- Глаголы изменения: \"исправь\", \"замени\", \"добавь\", \"перепиши\", \"отрефактори\", \"оптимизируй\", \"почини\", \"удали\" -> write-примитив.\n"
@@ -220,7 +180,7 @@ PrimitiveGuess LightModelBroker::classifyIntent(const std::string& goalText){
         "Не путай: \"Проверь, корректно ли реализован метод X\" = UNDERSTAND (надо прочитать/проанализировать), НЕ SANDBOX_FIX. Названные имена методов сами по себе НЕ делают задачу правкой.\n"
         "2. SANDBOX_FIX — починить/отрефакторить ОДИН метод/класс под курсором. Локально. Примеры: \"Замени на unique_ptr в этом методе\", \"Исправь выход за границы\"\n"
         "3. QUARRY_DESIGN — новая сущность/файлы/архитектура/воркфлоу >1 компонента. Требует ветки. Примеры: \"Добавь брокер для OpenAI\", \"Вынеси AST в сервис\"\n"
-        "4. TEST_GEN — цель == тесты. Примеры: \"Напиши тесты для compile_commands.cpp на gtest\"\n"
+        "4. TEST_GEN — цель == тесты (написать/покрыть/добавить тесты). Примеры: \"Напиши тесты для compile_commands.cpp на gtest\", \"Покрой тестами этот модуль, нужен gtest\", \"Напиши юнит-тест\". Слова \"покрой тестами\", \"покрыть тестами\", \"gtest\", \"юнит-тест\" — приоритет TEST_GEN, если нет глагола эксперимента/правки логики.\n"
         "5. EXPERIMENT — \"а что если\", гипотеза с откатом/undo. Примеры: \"Давай попробуем на std::async, посмотрим скомпилится ли\"\n"
         "6. INFRA — обслуживание окружения без правки логики .h/.cpp. Примеры: \"Пересобери cmake\", \"Покажи граф таргетов\", \"Обнови compile_commands.json\". НЕ путать: \"покажи связи/зависимости метода/класса в коде\" = UNDERSTAND, а \"покажи граф таргетов / build_graph / cmake\" = INFRA.\n"
         "ПРАВИЛА РАЗРЕШЕНИЯ:\n"
@@ -230,44 +190,28 @@ PrimitiveGuess LightModelBroker::classifyIntent(const std::string& goalText){
         "- Сомнение между FIX и EXPERIMENT -> EXPERIMENT. FIX vs QUARRY -> QUARRY.\n"
         "- Триггер EXPERIMENT: \"гипотеза\" + \"посмотрим\", \"а что если\", \"попробуем/посмотрим скомпилится ли\", \"откат/undo/redo\". Правка + тесты + \"посмотрим скомпилится ли / попробуй\" = EXPERIMENT, а не TEST_GEN.";
 
-    json requestBody = {
-        {"messages", json::array({
-            {{"role","system"},{"content", systemPrompt}},
-            {{"role","user"},{"content", goalText}}
-        })},
-        {"temperature", temperature_},
-        {"max_tokens", 250}
-    };
-    if(!modelName_.empty()) requestBody["model"]=modelName_;
-    std::string url = baseUrl_ + "/v1/chat/completions";
-    json withFormat = requestBody;
-    withFormat["response_format"] = {{"type","json_object"}};
+    ChatRequest req;
+    req.system = systemPrompt;
+    req.user = goalText;
+    req.model = modelName_;
+    req.temperature = temperature_;
+    req.maxTokens = 400;
+    req.wantJson = true;
 
-    HttpResult res = postChatCompletion(url, withFormat);
-    if(!res.ok){
-        HttpResult retry = postChatCompletion(url, requestBody);
-        if(retry.ok) res=retry;
-        else {
-            std::string reason = !res.curlError.empty() ? ("сеть: "+res.curlError) : ("HTTP "+std::to_string(res.httpCode)+": "+res.body);
-            return unavailable("модель недоступна ("+reason+")");
-        }
-    }
-    json responseJson;
-    try{ responseJson=json::parse(res.body); } catch(const std::exception& e){ return unavailable(std::string("ответ сервера не JSON: ")+e.what()); }
-    if(!responseJson.contains("choices") || responseJson["choices"].empty())
-        return unavailable("в ответе нет choices[] — не похоже на OpenAI-совместимый формат");
-    std::string content = responseJson["choices"][0]["message"].value("content","");
-    std::string finishReason = responseJson["choices"][0].value("finish_reason","");
+    ChatResult res = api_->chat(req);
+    if(!res.ok)
+        return unavailable("модель недоступна (" + res.error + ")");
+    std::string content = res.text;
+    std::string finishReason = res.finishReason;
     if(content.empty()) {
         if(finishReason=="length")
             return unavailable("ответ модели обрезан лимитом токенов (finish_reason=length, content пуст)");
-        return unavailable("choices[0].message.content пуст");
+        return unavailable("ответ модели пуст");
     }
     json cls;
     try{ cls=json::parse(content); } catch(...){
         std::string ext=extractFirstJsonObject(content);
         if(ext.empty()) {
-            // Различаем «модель сломалась» и «не хватило токенов» — второе лечится большим лимитом
             if(finishReason=="length")
                 return unavailable("ответ модели обрезан лимитом токенов (finish_reason=length): "+content.substr(0,120));
             return unavailable("модель вернула не-JSON: "+content.substr(0,120));

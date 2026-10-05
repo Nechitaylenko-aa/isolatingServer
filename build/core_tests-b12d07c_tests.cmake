@@ -16,6 +16,10 @@ add_test( [==[CDbManager statement reset allows reuse]==] /home/artem/projects/o
 set_tests_properties( [==[CDbManager statement reset allows reuse]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache does not invalidate an unrelated TU]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache does not invalidate an unrelated TU]==]  )
 set_tests_properties( [==[CTuCache does not invalidate an unrelated TU]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[CTuCache drops stale decl rows after a line shift]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache drops stale decl rows after a line shift]==]  )
+set_tests_properties( [==[CTuCache drops stale decl rows after a line shift]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[CTuCache find_enclosing exposes method extent]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache find_enclosing exposes method extent]==]  )
+set_tests_properties( [==[CTuCache find_enclosing exposes method extent]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache invalidates on compiler flags change]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache invalidates on compiler flags change]==]  )
 set_tests_properties( [==[CTuCache invalidates on compiler flags change]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache invalidates the TU that includes the edited header]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache invalidates the TU that includes the edited header]==]  )
@@ -24,8 +28,12 @@ add_test( [==[CTuCache opening the same fresh database twice does not loop or wi
 set_tests_properties( [==[CTuCache opening the same fresh database twice does not loop or wipe]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache opens and creates schema]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache opens and creates schema]==]  )
 set_tests_properties( [==[CTuCache opens and creates schema]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[CTuCache records and returns call edges]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache records and returns call edges]==]  )
+set_tests_properties( [==[CTuCache records and returns call edges]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache reports a project-level error when compile_commands is missing]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache reports a project-level error when compile_commands is missing]==]  )
 set_tests_properties( [==[CTuCache reports a project-level error when compile_commands is missing]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[CTuCache reports file dependents and dependencies]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache reports file dependents and dependencies]==]  )
+set_tests_properties( [==[CTuCache reports file dependents and dependencies]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache returns zero refs for unknown USR without error]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache returns zero refs for unknown USR without error]==]  )
 set_tests_properties( [==[CTuCache returns zero refs for unknown USR without error]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache scans project once, then serves from cache]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache scans project once\, then serves from cache]==]  )
@@ -40,6 +48,12 @@ add_test( [==[CTuCache wipes everything when libclang version in meta differs]==
 set_tests_properties( [==[CTuCache wipes everything when libclang version in meta differs]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[CTuCache wipes everything when schema version differs]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache wipes everything when schema version differs]==]  )
 set_tests_properties( [==[CTuCache wipes everything when schema version differs]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[CTuCache: identical rewrite stays valid via mtime fast-path]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache: identical rewrite stays valid via mtime fast-path]==]  )
+set_tests_properties( [==[CTuCache: identical rewrite stays valid via mtime fast-path]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[CTuCache::shared returns the same instance per path]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[CTuCache::shared returns the same instance per path]==]  )
+set_tests_properties( [==[CTuCache::shared returns the same instance per path]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[file_mtime_ns: 0 for missing, changes on rewrite]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[file_mtime_ns: 0 for missing\, changes on rewrite]==]  )
+set_tests_properties( [==[file_mtime_ns: 0 for missing, changes on rewrite]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[fnv1a_64 matches known vectors]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[fnv1a_64 matches known vectors]==]  )
 set_tests_properties( [==[fnv1a_64 matches known vectors]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[hash_file on missing file is empty, not a valid hash]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[hash_file on missing file is empty\, not a valid hash]==]  )
@@ -52,6 +66,10 @@ add_test( [==[hash_string differs for UTF-8 multibyte input]==] /home/artem/proj
 set_tests_properties( [==[hash_string differs for UTF-8 multibyte input]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 add_test( [==[hash_string returns stable 16-char hex]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[hash_string returns stable 16-char hex]==]  )
 set_tests_properties( [==[hash_string returns stable 16-char hex]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[queryTodoScan/queryDocCheck find markers and undoc headers]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[queryTodoScan/queryDocCheck find markers and undoc headers]==]  )
+set_tests_properties( [==[queryTodoScan/queryDocCheck find markers and undoc headers]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
+add_test( [==[queryTypeUsage/Complexity/DuplicateFind on the fixture]==] /home/artem/projects/outer/AI-agent/cpp-tool/build/core_tests [==[queryTypeUsage/Complexity/DuplicateFind on the fixture]==]  )
+set_tests_properties( [==[queryTypeUsage/Complexity/DuplicateFind on the fixture]==] PROPERTIES WORKING_DIRECTORY /home/artem/projects/outer/AI-agent/cpp-tool/build SKIP_RETURN_CODE 4)
 set( core_tests_TESTS [==[
   {
     "class-name" : "",
@@ -139,6 +157,26 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 397
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "CTuCache drops stale decl rows after a line shift",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 549
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "CTuCache find_enclosing exposes method extent",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
       "line" : 277
     },
     "tags" :  "cache" 
@@ -149,7 +187,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 296
+      "line" : 416
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -159,7 +197,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 237
+      "line" : 357
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -169,7 +207,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 412
+      "line" : 532
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -179,7 +217,17 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 177
+      "line" : 297
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "CTuCache records and returns call edges",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 583
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -189,7 +237,17 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 345
+      "line" : 465
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "CTuCache reports file dependents and dependencies",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 251
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -199,7 +257,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 331
+      "line" : 451
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -209,7 +267,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 186
+      "line" : 306
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -219,7 +277,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 255
+      "line" : 375
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -229,7 +287,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 210
+      "line" : 330
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -239,7 +297,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 315
+      "line" : 435
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -249,7 +307,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 358
+      "line" : 478
     },
     "tags" :  "cache" 
   }]==] [==[
@@ -259,9 +317,39 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
-      "line" : 386
+      "line" : 506
     },
     "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "CTuCache: identical rewrite stays valid via mtime fast-path",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 612
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "CTuCache::shared returns the same instance per path",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 631
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "file_mtime_ns: 0 for missing, changes on rewrite",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_hash.cpp",
+      "line" : 68
+    },
+    "tags" :  "hash" 
   }]==] [==[
   {
     "class-name" : "",
@@ -299,7 +387,7 @@ set( core_tests_TESTS [==[
     "source-location" : 
     {
       "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_hash.cpp",
-      "line" : 68
+      "line" : 84
     },
     "tags" :  "hash" 
   }]==] [==[
@@ -322,5 +410,25 @@ set( core_tests_TESTS [==[
       "line" : 20
     },
     "tags" :  "hash" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "queryTodoScan/queryDocCheck find markers and undoc headers",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 222
+    },
+    "tags" :  "cache" 
+  }]==] [==[
+  {
+    "class-name" : "",
+    "name" : "queryTypeUsage/Complexity/DuplicateFind on the fixture",
+    "source-location" : 
+    {
+      "filename" : "/home/artem/projects/outer/AI-agent/cpp-tool/core/tests/test_tu_cache.cpp",
+      "line" : 198
+    },
+    "tags" :  "cache" 
   }
-]==] [==[CDbManager creates database file and accepts DDL]==] [==[CDbManager enables WAL journal mode]==] [==[CDbManager move transfers the connection]==] [==[CDbManager persists across reopen]==] [==[CDbManager prepares and binds values]==] [==[CDbManager reports error instead of crashing on bad path]==] [==[CDbManager rolls back an aborted transaction]==] [==[CDbManager statement reset allows reuse]==] [==[CTuCache does not invalidate an unrelated TU]==] [==[CTuCache invalidates on compiler flags change]==] [==[CTuCache invalidates the TU that includes the edited header]==] [==[CTuCache opening the same fresh database twice does not loop or wipe]==] [==[CTuCache opens and creates schema]==] [==[CTuCache reports a project-level error when compile_commands is missing]==] [==[CTuCache returns zero refs for unknown USR without error]==] [==[CTuCache scans project once, then serves from cache]==] [==[CTuCache sees a new reference added via the header-including TU]==] [==[CTuCache survives reopen of the database]==] [==[CTuCache treats a deleted tracked header as a dirty TU, not a crash]==] [==[CTuCache wipes everything when libclang version in meta differs]==] [==[CTuCache wipes everything when schema version differs]==] [==[fnv1a_64 matches known vectors]==] [==[hash_file on missing file is empty, not a valid hash]==] [==[hash_file reads actual content]==] [==[hash_flags separates arguments]==] [==[hash_string differs for UTF-8 multibyte input]==] [==[hash_string returns stable 16-char hex]==])
+]==] [==[CDbManager creates database file and accepts DDL]==] [==[CDbManager enables WAL journal mode]==] [==[CDbManager move transfers the connection]==] [==[CDbManager persists across reopen]==] [==[CDbManager prepares and binds values]==] [==[CDbManager reports error instead of crashing on bad path]==] [==[CDbManager rolls back an aborted transaction]==] [==[CDbManager statement reset allows reuse]==] [==[CTuCache does not invalidate an unrelated TU]==] [==[CTuCache drops stale decl rows after a line shift]==] [==[CTuCache find_enclosing exposes method extent]==] [==[CTuCache invalidates on compiler flags change]==] [==[CTuCache invalidates the TU that includes the edited header]==] [==[CTuCache opening the same fresh database twice does not loop or wipe]==] [==[CTuCache opens and creates schema]==] [==[CTuCache records and returns call edges]==] [==[CTuCache reports a project-level error when compile_commands is missing]==] [==[CTuCache reports file dependents and dependencies]==] [==[CTuCache returns zero refs for unknown USR without error]==] [==[CTuCache scans project once, then serves from cache]==] [==[CTuCache sees a new reference added via the header-including TU]==] [==[CTuCache survives reopen of the database]==] [==[CTuCache treats a deleted tracked header as a dirty TU, not a crash]==] [==[CTuCache wipes everything when libclang version in meta differs]==] [==[CTuCache wipes everything when schema version differs]==] [==[CTuCache: identical rewrite stays valid via mtime fast-path]==] [==[CTuCache::shared returns the same instance per path]==] [==[file_mtime_ns: 0 for missing, changes on rewrite]==] [==[fnv1a_64 matches known vectors]==] [==[hash_file on missing file is empty, not a valid hash]==] [==[hash_file reads actual content]==] [==[hash_flags separates arguments]==] [==[hash_string differs for UTF-8 multibyte input]==] [==[hash_string returns stable 16-char hex]==] [==[queryTodoScan/queryDocCheck find markers and undoc headers]==] [==[queryTypeUsage/Complexity/DuplicateFind on the fixture]==])

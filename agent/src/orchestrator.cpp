@@ -2,6 +2,7 @@
 #include "handlers.h"
 #include "ground_service.h"
 #include "main_model_broker.h"
+#include "task_router.h"
 #include <sstream>
 #include <iomanip>
 #include <utility>
@@ -55,6 +56,7 @@ constexpr const char* kQClassifyLow = "classify-confidence-low";
 constexpr const char* kQBlastWide   = "blast-radius-wide";
 constexpr const char* kQModelDown   = "model-unavailable"; // модель легла, но эвристика хочет ПИСАТЬ
 constexpr const char* kQGoalVague   = "goal-vague";        // goal_text не содержит конкретного объекта/критерия правки
+constexpr const char* kQCursorNeeded= "cursor-needed";     // слой 0: задача привязана к месту, но курсора нет
 
 // Ограничение рекурсии: сколько раз можно задать вопрос в рамках одной задачи.
 // Защита от зацикливания, если handler после ответа снова спросит.
@@ -193,6 +195,10 @@ json Orchestrator::run(const json& task){
                 return errorOutcome("clarification_empty","нужна конкретная формулировка (что именно нужно сделать)","protocol");
             goalText = pick; // заменяем расплывчатую цель уточнённой
             answeredGoalVague = true; // не спрашивать повторно
+        } else if(clar.questionId == kQCursorNeeded){
+            // Слой 0: ответ на "нужен курсор" — это новая попытка с курсором.
+            // Ничего форсировать не нужно: просто проходим заново, и если курсор
+            // теперь есть — NEEDED_MISSING не сработает, Ground отработает.
         } else {
             return errorOutcome("clarification_unknown_question","неизвестный question_id: \"" + clar.questionId + "\"","protocol");
         }
@@ -323,6 +329,25 @@ json Orchestrator::run(const json& task){
     Primitive prim = guess.primitive;
     std::string primStr = primitiveToString(prim);
 
+    // Слой политик доступа (agent.conf: allow_read/write/exec). Детерминированно
+    // и сильнее выбора модели: если запись запрещена — write-примитивы понижаются
+    // до UNDERSTAND; если запрещён exec/read — честная ошибка, а не тихое выполнение.
+    if (!allowWrite_ && prim != Primitive::UNDERSTAND && prim != Primitive::INFRA) {
+        guess.rationale += " [политика: allow_write=NO -> SANDBOX/QUARRY/TEST/EXPERIMENT понижены до UNDERSTAND]";
+        prim = Primitive::UNDERSTAND;
+        primStr = primitiveToString(prim);
+        guess.primitive = prim;
+        guess.primitiveStr = primStr;
+    }
+    if (!allowRead_ && (prim == Primitive::UNDERSTAND)) {
+        return errorOutcome("policy_denied_read",
+            "Чтение/анализ запрещены настройкой allow_read=NO в agent.conf", "policy");
+    }
+    if (!allowExec_ && prim == Primitive::INFRA) {
+        return errorOutcome("policy_denied_exec",
+            "Запуск команд (сборка) запрещён настройкой allow_exec=NO в agent.conf", "policy");
+    }
+
     // Вето-слой (детерминированный, не полагается на модель): если в цели ЯВНО сказано
     // "без правок / не меняй / ничего не менять / только проверь" — любой write-примитив
     // понижается до UNDERSTAND. Модель видит имена методов и склонна выбрать SANDBOX_FIX,
@@ -391,6 +416,30 @@ json Orchestrator::run(const json& task){
         return out;
     }
 
+    // Слой 0 (CursorBinding): NOT_NEEDED -> Ground вообще не нужен (читаем/
+    // отвечаем без libclang); NEEDED_MISSING -> сразу спросить курсор, не тратя
+    // парсинг впустую (arch.md).
+    if(guess.cursorBinding == CursorBinding::NOT_NEEDED){
+        HandlerContext ctx{task, guess, primStr, compileCommandsPath_, {}, GroundResult{}, explicitMode, mainModel_};
+        auto h = makeHandler(prim);
+        json out = h->handle(ctx);
+        if(out.contains("answered_by")) out["answered_by"]["role"] = guess.modelUnavailable ? "deterministic_fallback" : model_.roleName();
+        if(out.contains("debug_facts")) out["debug_facts"]["cursor_binding"] = cursorBindingToString(guess.cursorBinding);
+        if(clar.present && out.contains("debug_facts"))
+            out["debug_facts"]["clarification"] = json{{"question_id",clar.questionId},{"choice",clar.choice()}};
+        return out;
+    }
+    if(guess.cursorBinding == CursorBinding::NEEDED_MISSING && file.empty()){
+        json out = needsInputOutcome(kQCursorNeeded,
+            "Задача сформулирована про конкретное место в коде, но курсор не передан. "
+            "Поставьте курсор на нужный метод/класс и повторите задачу.",
+            json::array({
+                {{"id","retry"}, {"label","Повторю задачу с курсором"}},
+                {{"id","cancel"}, {"label","Отменить"}}
+            }));
+        out["debug_facts"] = json{{"primitive",primStr},{"cursor_binding","NEEDED_MISSING"}};
+        return decorateNeedsInput(out, clar);
+    }
     if(file.empty())
         return errorOutcome("missing_cursor","task.cursor обязателен для примитива "+primStr,"environment");
 
@@ -490,12 +539,60 @@ json Orchestrator::run(const json& task){
         }
     }
 
-    HandlerContext ctx{task, guess, primStr, compileCommandsPath_, {}, ground, explicitMode, mainModel_};
+    // --- Проактивная маршрутизация: кому отдать исполнение (до вызова модели) ---
+    // remote — сильнейший игрок по умолчанию; если он задан, тяжёлые классы задач
+    // уходят туда сразу, а не после того как локальная «заглючит». Без remote —
+    // честный отказ на классы, которые локальная не тянет.
+    MainModelBroker* execMain = mainModel_;
+    RouteInput rin;
+    rin.primitiveStr = primStr;
+    rin.detail = guess.detail;
+    rin.refsFound = ground.scaleFacts.value("refs_found_total", 0);
+    rin.distinctFiles = ground.scaleFacts.value("distinct_files_with_refs", 0);
+    rin.totalFiles = ground.scaleFacts.value("total_files_in_project", 0);
+    rin.remoteAvailable = (remoteMainModel_ != nullptr);
+    // FAIL-CLOSED: способность локальной модели считается неподтверждённой, пока
+    // проба/профиль явно не подтвердит обратное. Stub-main (mainModel_==nullptr)
+    // тоже не считается полноценным кодером.
+    rin.localCapable = localCapable_;
+    rin.localMaxEditFiles = localMaxEditFiles_;
+    RouteDecision route = routeTask(rin);
+    if (route.executor == Executor::REFUSE_LOCAL_INCAPABLE) {
+        json out = json{
+            {"protocol_version","1.0"},
+            {"type","needs_input"},
+            {"needs_input", {
+                {"question_id","local-incapable"},
+                {"text","Эта задача (" + primStr + "/" + detailToString(guess.detail) +
+                        ") превышает возможности локальной модели" +
+                        (route.reason.empty() ? "" : " (" + route.reason + ")") +
+                        ". Настройте remote в ~/.cf_agent/agent.conf или упростите задачу."},
+                {"options", json::array({{{"id","cancel"},{"label","Отменить"}}})},
+                {"free_text_allowed", true}
+            }},
+            {"debug_facts", {{"primitive",primStr},{"detail",detailToString(guess.detail)},
+                             {"executor",executorToString(route.executor)},{"reason",route.reason}}}
+        };
+        return out;
+    }
+    if ((route.executor == Executor::REMOTE || route.executor == Executor::SPLIT) &&
+        remoteMainModel_ != nullptr)
+        execMain = remoteMainModel_;
+
+    HandlerContext ctx{task, guess, primStr, compileCommandsPath_, {}, ground, explicitMode, execMain,
+                       route.executor, route.reason};
     auto handler = makeHandler(prim);
     json out = handler->handle(ctx);
-    if(out.contains("answered_by")) out["answered_by"]["role"] = guess.modelUnavailable ? "deterministic_fallback" : model_.roleName();
+    // DELEGATE_TO_MAIN отвечает основная модель (role=main), не классификатор:
+    // не перезаписываем её роль на light/stub.
+    bool delegatedToMain = out.contains("debug_facts") &&
+                           out["debug_facts"].value("delegated_role", "") == "main";
+    if(out.contains("answered_by") && !delegatedToMain)
+        out["answered_by"]["role"] = guess.modelUnavailable ? "deterministic_fallback" : model_.roleName();
     // диагностика классификатора — чтобы видеть confidence/alternative в каждом ответе
     if(out.contains("debug_facts")){
+        out["debug_facts"]["executor"] = executorToString(route.executor);
+        out["debug_facts"]["route_reason"] = route.reason;
         out["debug_facts"]["classify_confidence"] = guess.confidence;
         out["debug_facts"]["classify_alternative"] = guess.alternativePrimitiveStr;
         if(!scDebug.is_null()) out["debug_facts"]["self_consistency"] = scDebug;

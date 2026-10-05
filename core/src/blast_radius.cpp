@@ -11,7 +11,10 @@ json queryBlastRadius(const std::string& file,
                       const std::vector<std::string>& flags) {
     json outline = json{{"ok", false}};
     json refs = json{{"ok", false}};
-    if (!className.empty()) outline = queryClassOutline(file, className, flags);
+    // queryClassOutline теперь без compile_commands.json работать не может
+    // (источник — кэш, не ad-hoc парсинг) — у single-TU версии (без compileCommandsPath
+    // в сигнатуре этой функции) outline остаётся {ok:false}, это осознанная деградация
+    // этого редко используемого пути, см. комментарий в queries.h про querySymbolRefs.
     if (!methodUSR.empty()) refs = querySymbolRefs(methodUSR, file, flags);
     int pm=0, refsInTU=0;
     if(outline.value("ok",false) && outline.contains("public_methods")) pm=(int)outline["public_methods"].size();
@@ -36,9 +39,8 @@ json queryBlastRadiusCross(const std::string& compileCommandsPath,
                            const std::string& methodUSR,
                            const std::vector<std::string>& flags,
                            const std::string& cachePath) {
-    // public_methods — всё равно из одного TU (класс один)
     json outline = json{{"ok", false}};
-    if(!className.empty()) outline = queryClassOutline(file, className, flags);
+    if(!className.empty()) outline = queryClassOutline(className, compileCommandsPath, file);
     int pm=0;
     if(outline.value("ok",false) && outline.contains("public_methods")) pm=(int)outline["public_methods"].size();
     bool outlineOk=outline.value("ok",false);
@@ -54,12 +56,14 @@ json queryBlastRadiusCross(const std::string& compileCommandsPath,
         std::string cp = cachePath;
         if(cp.empty())
             cp = (ccDir / ".cpp-tool-cache" / "index.db").string();
-        CTuCache cache(cp);
-        if(!cache.opened()){
+        // Общий на процесс экземпляр: locate/overrides/call-chain в рамках одного
+        // прогона не должны заново сканировать проект (см. CTuCache::shared).
+        auto cache = CTuCache::shared(cp);
+        if(!cache->opened()){
             refsOk=false;
-            refsError="не удалось открыть кэш " + cp + ": " + cache.open_error();
+            refsError="не удалось открыть кэш " + cp + ": " + cache->open_error();
         } else {
-            auto res = cache.get_refs_for_usr(compileCommandsPath, methodUSR);
+            auto res = cache->get_refs_for_usr(compileCommandsPath, methodUSR);
             if(!res.ok){ refsOk=false; refsError=res.error; }
             else { totalRefs=res.totalRefs; distinctFiles=res.distinctFilesWithRefs; fromCache=res.fromCache; scanned=res.filesScanned; total=res.filesTotal; }
         }

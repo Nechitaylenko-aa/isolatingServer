@@ -65,6 +65,22 @@ TEST_CASE("hash_file on missing file is empty, not a valid hash", "[hash]")
     CHECK(hash_file("/nonexistent/path/definitely/missing.h") != hash_string(""));
 }
 
+TEST_CASE("file_mtime_ns: 0 for missing, changes on rewrite", "[hash]")
+{
+    namespace fs = std::filesystem;
+    // Отсутствующий файл -> 0 (сигнал «время неизвестно» -> деградация к хэшу).
+    CHECK(file_mtime_ns("/nonexistent/path/definitely/missing.h") == 0);
+
+    fs::path dir = fs::temp_directory_path() / ("cpp_tool_mtime_" + std::to_string(::rand()));
+    fs::create_directories(dir);
+    fs::path file = dir / "m.txt";
+    { std::ofstream out(file); out << "a"; }
+    const int64_t t1 = file_mtime_ns(file.string());
+    CHECK(t1 != 0);
+    CHECK(file_mtime_ns(file.string()) == t1); // без записи не меняется
+    fs::remove_all(dir);
+}
+
 TEST_CASE("hash_flags separates arguments", "[hash]")
 {
     // Без разделителя ["-ab"] и ["-a","b"] дали бы одинаковый хэш — коллизия,

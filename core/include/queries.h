@@ -1,5 +1,6 @@
 #pragma once
 #include "json.hpp"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -7,20 +8,33 @@ namespace cpptool {
 
 using json = nlohmann::json;
 
-// query.locate_symbol: file+line+col -> USR/kind/spelling/enclosing class
+class CTuCache;
+
+// Общий экземпляр кэша на путь БД (см. CTuCache::shared). Единая точка входа
+// для всех query-функций: вместо `CTuCache cache(path)` — `makeQueryCache(path)`,
+// чтобы в рамках одного прогона скан проекта выполнялся один раз, а не на
+// каждый под-запрос.
+std::shared_ptr<CTuCache> makeQueryCache(const std::string& compileCommandsPath);
+
+// query.locate_symbol: file+line+col -> USR/kind/enclosing method/enclosing class.
+// Источник — CTuCache (SQLite): ensure_project_indexed + чистый SELECT, ни одного
+// ParsedUnit::parse внутри. file может быть заголовком без своей записи в
+// compile_commands.json — decl для него заполнится из ЛЮБОГО TU, который его
+// #include-ит, при условии что индекс уже строился хотя бы раз.
 json queryLocateSymbol(const std::string& file, unsigned line, unsigned col,
-                        const std::vector<std::string>& flags);
+                        const std::string& compileCommandsPath);
 
-// query.class_outline: file+class_name -> base_classes[] + public_methods[]
-json queryClassOutline(const std::string& file, const std::string& className,
-                       const std::vector<std::string>& flags);
+// query.class_outline: имя класса (среди ВСЕХ decl проекта) -> base_classes[] +
+// public_methods[]. file — необязательная подсказка для разрешения неоднозначности
+// при нескольких классах с одинаковым именем (предпочитается совпадение по файлу).
+json queryClassOutline(const std::string& className, const std::string& compileCommandsPath,
+                       const std::string& fileHint = "");
 
-// query.locate_usr: USR -> актуальные line/col определения символа в указанном файле.
-// Нужен потому, что cursor.line — снимок: любая правка файла выше сдвигает строки,
-// и сохранённый line/col начинает указывать в пустоту. Якорь на USR переживает сдвиги.
-// Возвращает {ok, line, column, file} либо {ok:false, error:{code:"usr_not_found"}}.
-json queryLocateByUSR(const std::string& file, const std::string& usr,
-                      const std::vector<std::string>& flags);
+// query.locate_usr: USR -> актуальные line/col определения символа.
+// decl теперь глобален по usr — file/flags больше не нужны вовсе, поиск не
+// привязан к тому, в каком TU символ был впервые встречен.
+// Возвращает {ok, line, column, file, is_definition} либо {ok:false, error:{code:"usr_not_found"}}.
+json queryLocateByUSR(const std::string& usr, const std::string& compileCommandsPath);
 
 // query.symbol_refs: ищет все ссылки на символ с данным USR внутри ОДНОГО TU.
 // Ограничение: не агрегирует по всему проекту — для этого пришлось бы
@@ -31,10 +45,48 @@ json queryLocateByUSR(const std::string& file, const std::string& usr,
 json querySymbolRefs(const std::string& targetUSR, const std::string& file,
                       const std::vector<std::string>& flags);
 
-// query.virtual_overrides: USR метода -> все определения-переопределения во ВСЕХ TU проекта.
-// Нужен для C++-иерархий: UNDERSTAND под курсором видит только базовый/диспетчерский метод,
-// а реализации чистого virtual лежат в классах-потомках в других .cpp. Матч по USR базового
-// метода через clang_getOverriddenCursors (не по имени — имена ненадёжны).
+// query.call_chain: USR метода -> кто его ВЫЗЫВАЕТ (входящие рёбра графа
+// вызовов по всему проекту, из таблицы calls кэша).
+// Возвращает {ok, target_usr, direction:"incoming", calls:[{usr,signature,file,line,call_file,call_line}]}.
+json queryCallChain(const std::string& targetUSR, const std::string& compileCommandsPath);
+
+// query.call_subtree: USR метода -> кого ВЫЗЫВАЕТ он сам (исходящие рёбра).
+// Возвращает {ok, target_usr, direction:"outgoing", calls:[...]}.
+json queryCallSubtree(const std::string& targetUSR, const std::string& compileCommandsPath);
+
+// query.dependency_map: файл -> кто его подключает (dependents) и что
+// подключает он сам (dependencies), из таблицы tu_dep кэша. file может быть
+// заголовком без своей записи в compile_commands.json.
+json queryDependencyMap(const std::string& file, const std::string& compileCommandsPath);
+
+// query.todo_scan: находит TODO/FIXME/HACK/XXX в файле (если задан) или во всех
+// файлах класса (classUsr). {ok, markers:[{file,line,marker,text}], files_scanned}.
+json queryTodoScan(const std::string& compileCommandsPath, const std::string& file,
+                   const std::string& classUsr);
+
+// query.doc_check: проверяет наличие заголовочного doc-комментария (///, //!,
+// /**, /*!) в начале файла(ов). {ok, undocumented:[{file,line}], checked:[...]}.
+json queryDocCheck(const std::string& compileCommandsPath, const std::string& file,
+                   const std::string& classUsr);
+
+// query.type_usage: где используется тип (класс/структура) с данным USR —
+// список мест из refs. {ok, locations:[{file,line,column}]}.
+json queryTypeUsage(const std::string& typeUsr, const std::string& compileCommandsPath);
+
+// query.complexity_hotspot: методы области (file или classUsr) с метриками
+// (длина, макс. вложенность, длинные строки), отсортированные по убыванию.
+json queryComplexityHotspot(const std::string& compileCommandsPath, const std::string& file,
+                            const std::string& classUsr);
+
+// query.duplicate_find: ищет методы с одинаковой нормализованной сигнатурой
+// (потенциальные дубликаты). {ok, groups:[{signature, members:[{file,line,name}]}]}.
+json queryDuplicateFind(const std::string& compileCommandsPath, const std::string& file,
+                        const std::string& classUsr);
+
+// query.virtual_overrides: USR метода (базового ИЛИ любого sibling-override) ->
+// все переопределения базового метода во всех TU проекта. Источник — overrides+decl
+// в CTuCache; если targetUSR сам override, подъём к базовому делает сам CTuCache
+// (один SELECT), повторный парсинг TU для этого больше не требуется.
 json queryVirtualOverrides(const std::string& compileCommandsPath,
                            const std::string& targetUSR);
 

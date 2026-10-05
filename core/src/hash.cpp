@@ -4,6 +4,8 @@
 #include <fstream>
 #include <sstream>
 
+#include <sys/stat.h>
+
 namespace cpptool
 {
 
@@ -53,6 +55,17 @@ std::string hash_file(const std::string& path)
     if (in.bad())
         return "";
     return to_hex(fnv1a_64(ss.str()));
+}
+
+int64_t file_mtime_ns(const std::string& path)
+{
+    struct stat st{};
+    if (::stat(path.c_str(), &st) != 0)
+        return 0;
+    // st_mtim (наносекунды) есть на FreeBSD/Linux; на прочих платформах
+    // макрос даст сек pодную точность — этого достаточно для fast-path.
+    return static_cast<int64_t>(st.st_mtim.tv_sec) * 1000000000LL +
+           static_cast<int64_t>(st.st_mtim.tv_nsec);
 }
 
 std::string hash_flags(const std::vector<std::string>& flags)
