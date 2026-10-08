@@ -1,119 +1,158 @@
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-cmake_minimum_required(VERSION 3.19)
-project(cli_agent LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 17)
+project(fcpp-agent VERSION 0.1.0 LANGUAGES C CXX)
+
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
+# --- Language standard ---
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# --- libclang: жёстко одна версия, llvm22 (FreeBSD 14.4) ---
-# Мультиверсионность сознательно не поддерживается: отличаются не только
-# версии API, но и поведение — строковый формат USR и результат разбора AST
-# между версиями clang не совпадают, а это тихий отказ кэша, а не ошибка.
-# Версия задаётся здесь и попадает в кэш (см. core/src/tu_cache.cpp).
-if(NOT LIBCLANG_DIR)
-    set(LIBCLANG_DIR "/usr/local/llvm22")
-endif()
-if(NOT EXISTS "${LIBCLANG_DIR}/include/clang-c/Index.h")
-    message(FATAL_ERROR "clang-c/Index.h не найден в ${LIBCLANG_DIR}/include. Установи llvm22 или укажи -DLIBCLANG_DIR=/путь/к/llvm")
+# --- Default build type ---
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-find_library(LIBCLANG_LIB NAMES clang libclang PATHS "${LIBCLANG_DIR}/lib" NO_DEFAULT_PATH)
-if(NOT LIBCLANG_LIB)
-    message(FATAL_ERROR "libclang не найден в ${LIBCLANG_DIR}/lib")
+# --- Strict warnings ---
+add_compile_options(-Wall -Wextra -Werror)
+
+find_package(Threads REQUIRED)
+
+include(FetchContent)
+
+# --- nlohmann/json (header-only) ---
+FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+)
+
+# --- SQLite3 (amalgamation) ---
+FetchContent_Declare(
+    sqlite3
+    URL https://www.sqlite.org/2024/sqlite-amalgamation-3450100.zip
+)
+
+FetchContent_MakeAvailable(nlohmann_json sqlite3)
+
+# --- libclang (target backend clang 22, ADR-06/ADR-11) ---
+# Hard requirement: absence is a configuration FAIL, not a degradation.
+find_path(LIBCLANG_INCLUDE_DIR clang-c/Index.h
+    PATHS /usr/local/llvm22/include /usr/local/include
+    REQUIRED
+)
+find_library(LIBCLANG_LIBRARY NAMES clang libclang
+    PATHS /usr/local/llvm22/lib /usr/local/lib
+    REQUIRED
+)
+get_filename_component(LIBCLANG_LIB_DIR "${LIBCLANG_LIBRARY}" DIRECTORY)
+message(STATUS "libclang include: ${LIBCLANG_INCLUDE_DIR}")
+message(STATUS "libclang library: ${LIBCLANG_LIBRARY}")
+
+# --- libcurl (HTTP transport for LLM providers, 6b) ---
+find_path(LIBCURL_INCLUDE_DIR curl/curl.h
+    PATHS /usr/local/include /usr/include
+    REQUIRED
+)
+find_library(LIBCURL_LIBRARY NAMES curl libcurl
+    PATHS /usr/local/lib /usr/lib
+    REQUIRED
+)
+message(STATUS "libcurl include: ${LIBCURL_INCLUDE_DIR}")
+message(STATUS "libcurl library: ${LIBCURL_LIBRARY}")
+
+# The SQLite amalgamation archive unpacks into a versioned subdirectory.
+file(GLOB_RECURSE SQLITE3_C_FILE "${sqlite3_SOURCE_DIR}/sqlite3.c")
+if(NOT SQLITE3_C_FILE)
+    message(FATAL_ERROR "sqlite3.c not found under ${sqlite3_SOURCE_DIR}")
 endif()
-message(STATUS "LIBCLANG_LIB=${LIBCLANG_LIB} (llvm ${LIBCLANG_DIR})")
+get_filename_component(SQLITE3_DIR "${SQLITE3_C_FILE}" DIRECTORY)
 
-# --- sqlite3: постоянный кэш TU (core/src/tu_cache.cpp) ---
-find_path(SQLITE3_INCLUDE_DIR sqlite3.h PATHS /usr/local/include /usr/include)
-find_library(SQLITE3_LIB NAMES sqlite3 PATHS /usr/local/lib /usr/lib)
-if(NOT SQLITE3_INCLUDE_DIR OR NOT SQLITE3_LIB)
-    message(FATAL_ERROR "sqlite3 не найден. Установи databases/sqlite3 (FreeBSD)")
-endif()
-message(STATUS "SQLITE3_LIB=${SQLITE3_LIB}")
+add_library(sqlite3 STATIC ${SQLITE3_C_FILE})
+target_include_directories(sqlite3 PUBLIC ${SQLITE3_DIR})
+target_compile_options(sqlite3 PRIVATE -w)
 
-find_package(CURL REQUIRED)
+# --- Core library ---
+add_library(fcpp_core STATIC
+    src/core/CConfigManager.cpp
+    src/core/CExecutor.cpp
+    src/core/CHash.cpp
+    src/core/CCompileCommandsLocator.cpp
+    src/core/CCompileCommandsParser.cpp
+    src/core/CProjectRegistry.cpp
+    src/core/CProjectManager.cpp
+    src/index/CSchemaMigrator.cpp
+    src/index/CSQLiteIndex.cpp
+    src/index/CClang22.cpp
+    src/index/CClangFactory.cpp
+    src/index/CSqlCompilerIndex.cpp
+    src/core/SError.cpp
+    src/core/SConfig.cpp
+    src/core/SStaleReport.cpp
+    src/core/CLogger.cpp
+    src/core/CDoctor.cpp
+    src/core/CPatchParser.cpp
+    src/core/CPatchValidator.cpp
+    src/core/CPatchApplier.cpp
+    src/core/CAgentApi.cpp
+    src/core/SIntent.cpp
+    src/core/SRequestOutcome.cpp
+    src/core/CRequestPipeline.cpp
+    src/core/CIntentAnalyzer.cpp
+    src/llm/CEndpointUtil.cpp
+    src/llm/CUrlTransport.cpp
+    src/llm/CModelOpenAICompat.cpp
+    src/llm/CModelClaude.cpp
+    src/llm/CModelFactory.cpp
+    src/tools/CToolContext.cpp
+    src/tools/CIndexTool.cpp
+    src/tools/CToolRegistry.cpp
+)
+target_include_directories(fcpp_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_include_directories(fcpp_core PRIVATE
+    ${LIBCLANG_INCLUDE_DIR}
+    ${LIBCURL_INCLUDE_DIR}
+)
+target_compile_features(fcpp_core PUBLIC cxx_std_20)
+target_compile_definitions(fcpp_core PRIVATE
+    FCPP_AGENT_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+)
+target_link_libraries(fcpp_core PUBLIC
+    nlohmann_json::nlohmann_json
+    sqlite3
+    ${LIBCLANG_LIBRARY}
+    ${LIBCURL_LIBRARY}
+    Threads::Threads
+)
+target_link_options(fcpp_core PUBLIC "-Wl,-rpath,${LIBCLANG_LIB_DIR}")
 
-# --- core: слой 0 (libclang). НИЧЕГО не знает о моделях — ни один файл
-# здесь не инклюдит model_broker.h/orchestrator.h и не линкует CURL. ---
-add_library(core STATIC
-        core/src/clang_index.cpp
-        core/src/query_locate_symbol.cpp
-        core/src/query_class_outline.cpp
-        core/src/query_symbol_refs.cpp
-        core/src/query_virtual_overrides.cpp
-        core/src/query_clangd_implementations.cpp
-        core/src/query_find_implementors.cpp
-        core/src/query_calls.cpp
-        core/src/query_analysis.cpp
-        core/src/compile_commands.cpp
-        core/src/build_graph.cpp
-        core/src/blast_radius.cpp
-        core/src/db_manager.cpp
-        core/src/hash.cpp
-        core/src/tu_cache.cpp
-        )
-target_include_directories(core PUBLIC core/include third_party "${LIBCLANG_DIR}/include")
-target_include_directories(core PRIVATE ${SQLITE3_INCLUDE_DIR})
-target_link_libraries(core PUBLIC ${LIBCLANG_LIB} ${SQLITE3_LIB})
-set_target_properties(core PROPERTIES BUILD_RPATH "${LIBCLANG_DIR}/lib")
+# --- Executable ---
+add_executable(fcpp-agent
+    src/main.cpp
+)
+target_link_libraries(fcpp-agent PRIVATE fcpp_core)
 
-# --- agent: слой 3-5 (модели, оркестратор). НЕ линкует libclang напрямую —
-# зовёт core только через его публичные json-возвращающие функции (queries.h,
-# compile_commands.h, build_graph.h), которые agent/src/orchestrator.cpp
-# инклюдит из core/include. Разделение осталось, просто не через процесс. ---
-add_library(agent STATIC
-        agent/src/api_ai.cpp
-        agent/src/task_router.cpp
-        agent/src/model_profile.cpp
-        agent/src/model_broker.cpp
-        agent/src/config_reader.cpp
-        agent/src/orchestrator.cpp
-        agent/src/handlers.cpp
-        agent/src/ground_service.cpp
-        agent/src/task_classification.cpp
-        agent/src/main_model_broker.cpp
-        agent/src/execute_service.cpp
-        agent/src/verify_service.cpp
-        )
-target_include_directories(agent PUBLIC
-        agent/include
-        third_party
-        /usr/local/include
-        )
-target_link_libraries(agent PUBLIC CURL::libcurl core)
-
-# --- единый бинарник ---
-add_executable(cli_agent cli/main.cpp)
-target_link_libraries(cli_agent PRIVATE core agent)
-
-# --- тесты (Catch2 3.x) ---
+# --- Tests (Catch2) ---
 enable_testing()
-list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/cmake/Catch2")
-find_package(Catch2 3 QUIET)
-if(Catch2_FOUND)
-    include(Catch) # даёт catch_discover_tests — без него CMake не знает команду
+find_package(Catch2 3 REQUIRED)
 
-    add_executable(core_tests
-        core/tests/test_hash.cpp
-        core/tests/test_db_manager.cpp
-        core/tests/test_tu_cache.cpp
-    )
-    target_link_libraries(core_tests PRIVATE core Catch2::Catch2WithMain)
-    target_include_directories(core_tests PRIVATE core/include third_party "${LIBCLANG_DIR}/include")
-    catch_discover_tests(core_tests)
+add_executable(fcpp_tests
+    tests/project_manager_test.cpp
+    tests/compile_commands_test.cpp
+    tests/compiler_index_test.cpp
+    tests/tools_test.cpp
+    tests/stale_test.cpp
+    tests/stage8a_test.cpp
+    tests/patch_test.cpp
+    tests/agent_api_test.cpp
+    tests/pipeline_test.cpp
+)
+target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 
-    add_executable(agent_tests
-        agent/tests/test_execute_service.cpp
-        agent/tests/test_orchestrator_integration.cpp
-        agent/tests/test_task_classification.cpp
-        agent/tests/test_config_reader.cpp
-        agent/tests/test_api_ai.cpp
-        agent/tests/test_task_router.cpp
-    )
-    target_link_libraries(agent_tests PRIVATE agent core Catch2::Catch2WithMain)
-    target_include_directories(agent_tests PRIVATE agent/include core/include third_party "${LIBCLANG_DIR}/include")
-    catch_discover_tests(agent_tests)
-    message(STATUS "Catch2 found — core_tests и agent_tests включены")
-else()
-    message(STATUS "Catch2 not found — тесты пропущены (установи devel/catch2 или укажи CMAKE_PREFIX_PATH)")
-endif()
+include(Catch)
+catch_discover_tests(fcpp_tests)

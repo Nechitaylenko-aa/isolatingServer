@@ -1,0 +1,126 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unistd.h>
+
+#include "core/CPatchApplier.h"
+#include "core/CPatchParser.h"
+#include "core/CPatchValidator.h"
+#include "fcpp-agent/SPatch.h"
+
+namespace
+{
+
+/** @brief Счётчик временных каталогов. */
+int g_patch_counter = 0;
+
+/**
+ * @brief Создать уникальный временный каталог.
+ * @param prefix Префикс.
+ * @return Путь.
+ */
+std::filesystem::path make_temp_dir(const std::string& prefix)
+{
+    const std::filesystem::path base =
+        std::filesystem::temp_directory_path()
+        / (prefix + "-" + std::to_string(static_cast<long>(::getpid())) + "-" + std::to_string(g_patch_counter++));
+    std::filesystem::create_directories(base);
+    return base;
+}
+
+/**
+ * @brief Прочитать файл.
+ * @param path Путь.
+ * @return Содержимое.
+ */
+std::string slurp(const std::filesystem::path& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    return content;
+}
+
+} // namespace
+
+TEST_CASE("patch parser разбирает unified diff", "[patch]")
+{
+    const std::string diff =
+        "--- a/src/a.cpp\n"
+        "+++ b/src/a.cpp\n"
+        "@@ -1,3 +1,4 @@\n"
+        " int main()\n"
+        " {\n"
+        "-    return 1;\n"
+        "+    int x = 1;\n"
+        "+    return x;\n"
+        " }\n";
+
+    fcpp::SPatchSet patch;
+    REQUIRE(fcpp::CPatchParser::parse(diff, patch));
+    REQUIRE(patch.m_files.size() == 1);
+    REQUIRE(patch.m_files.front().m_old_path == "src/a.cpp");
+    REQUIRE(patch.m_files.front().m_hunks.size() == 1);
+}
+
+TEST_CASE("patch validator применяет hunk и отклоняет конфликт", "[patch]")
+{
+    const std::filesystem::path root = make_temp_dir("fcpp-patch-root");
+    std::filesystem::create_directories(root / "src");
+    std::ofstream(root / "src" / "a.cpp") << "int main()\n{\n    return 1;\n}\n";
+
+    const std::string diff =
+        "--- a/src/a.cpp\n"
+        "+++ b/src/a.cpp\n"
+        "@@ -1,4 +1,5 @@\n"
+        " int main()\n"
+        " {\n"
+        "-    return 1;\n"
+        "+    int x = 1;\n"
+        "+    return x;\n"
+        " }\n";
+
+    fcpp::SPatchSet patch;
+    REQUIRE(fcpp::CPatchParser::parse(diff, patch));
+
+    fcpp::CPatchValidator validator(root);
+    fcpp::SPatchValidation validation;
+    REQUIRE(validator.validate(patch, validation));
+    REQUIRE(validation.m_changes.size() == 1);
+    REQUIRE(validation.m_changes.front().m_updated.find("int x = 1;") != std::string::npos);
+
+    fcpp::CPatchApplier applier;
+    std::string message;
+    REQUIRE(applier.apply(validation.m_changes, message));
+    REQUIRE(slurp(root / "src" / "a.cpp").find("int x = 1;") != std::string::npos);
+
+    // Конфликт: тот же патч повторно не применится (контекст уже изменён).
+    fcpp::SPatchValidation second;
+    REQUIRE_FALSE(validator.validate(patch, second));
+
+    std::filesystem::remove_all(root);
+}
+
+TEST_CASE("patch validator отклоняет выход за пределы проекта", "[patch]")
+{
+    const std::filesystem::path root = make_temp_dir("fcpp-patch-escape");
+    std::ofstream(root / "keep.cpp") << "int a;\n";
+
+    const std::string diff =
+        "--- a/../escape.cpp\n"
+        "+++ b/../escape.cpp\n"
+        "@@ -1,1 +1,1 @@\n"
+        "-int a;\n"
+        "+int b;\n";
+
+    fcpp::SPatchSet patch;
+    REQUIRE(fcpp::CPatchParser::parse(diff, patch));
+
+    fcpp::CPatchValidator validator(root);
+    fcpp::SPatchValidation validation;
+    REQUIRE_FALSE(validator.validate(patch, validation));
+
+    std::filesystem::remove_all(root);
+}
