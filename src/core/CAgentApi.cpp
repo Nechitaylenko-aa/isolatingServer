@@ -378,6 +378,8 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         m_project_manager.restore_session();
     }
 
+    std::string session_context_json = "{}";
+    std::vector<SConversationTurn> conversation_history;
     if (!request.m_session_id.empty())
     {
         const auto session = m_conversation_store.get_session(request.m_session_id);
@@ -390,6 +392,42 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         {
             return make_error(EErrorKind::InvalidRequest, "conversation session belongs to another project");
         }
+
+        session_context_json = session->m_context_json;
+        std::string pending_user;
+        for (const SConversationEvent& event : m_conversation_store.events(request.m_session_id, 0, 1000000))
+        {
+            try
+            {
+                const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
+                if (event.m_kind == "user" && payload.is_object()
+                    && payload.contains("text") && payload["text"].is_string())
+                {
+                    if (!pending_user.empty())
+                    {
+                        conversation_history.push_back(SConversationTurn{event.m_id, pending_user, {}});
+                    }
+                    pending_user = payload["text"].get<std::string>();
+                }
+                else if (event.m_kind == "assistant" && payload.is_object()
+                         && payload.contains("text") && payload["text"].is_string()
+                         && !pending_user.empty())
+                {
+                    conversation_history.push_back(SConversationTurn{
+                        event.m_id, pending_user, payload["text"].get<std::string>()});
+                    pending_user.clear();
+                }
+            }
+            catch (const nlohmann::json::exception&)
+            {
+                // Malformed legacy event payload is ignored for replay, not deleted.
+            }
+        }
+        if (!pending_user.empty())
+        {
+            conversation_history.push_back(SConversationTurn{0, pending_user, {}});
+        }
+
         nlohmann::json user_event = {
             {"text", request.m_text},
             {"editor_file", request.m_editor_file},
@@ -402,7 +440,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
     }
 
-    // Тело запроса ask — text + editor (§94); всё прочее выводит ядро.
+    // Session state remains separate from the project index and build context.
     CAskService service(m_config_manager, m_project_manager);
     SApiResponse response;
     std::string answer;
@@ -411,7 +449,9 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
                                 request.m_editor_file,
                                 request.m_editor_line,
                                 request.m_editor_column,
-                                answer);
+                                answer,
+                                session_context_json,
+                                conversation_history);
     if (!request.m_session_id.empty())
     {
         nlohmann::json assistant_event = {
