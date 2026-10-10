@@ -6,8 +6,6 @@
 #include "llm/CModelOpenAICompat.h"
 
 #include <cstddef>
-#include <filesystem>
-#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -228,23 +226,6 @@ std::string CModelOpenAICompat::build_body(const std::vector<SModelMessage>& mes
     }
 
     const std::string body = document.dump();
-
-    // ДИАГНОСТИКА (временно): дамп фактического тела запроса к модели в файл,
-    // чтобы не мусорить в stderr/stdout. Лежит рядом с build-каталогом проекта.
-    {
-        namespace fs = std::filesystem;
-        std::error_code error_code;
-        fs::path dump_dir = fs::current_path(error_code) / "build";
-        if (!error_code)
-        {
-            fs::create_directories(dump_dir, error_code);
-            std::ofstream dump(dump_dir / "fcpp-request.dump.jsonl", std::ios::app);
-            if (dump.is_open())
-            {
-                dump << body << '\n';
-            }
-        }
-    }
 
     return body;
 }
