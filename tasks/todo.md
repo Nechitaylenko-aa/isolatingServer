@@ -110,6 +110,18 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 * [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.
 * [ ] Авто-выбор remote-модели вне эскалации — задел.
 
+## Следующий этап: Conversation Context → Context Budget → Planner/Worker
+
+Архитектурное решение зафиксировано в [ADR-28](decisions.md#adr-28-conversation-context-и-context-budget-manager).
+
+Порядок реализации:
+1. [ ] Conversation Context: `session_id`, lifecycle API, отдельное хранилище событий диалога и структурированное состояние с provenance (§49/§50; ADR-27/28).
+2. [ ] `CContextManager`: детерминированная сборка контекста на каждый вызов модели, модельный token budget, compaction и unit tests (§64; ADR-28).
+3. [ ] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`; убрать независимую логику усечения.
+4. [ ] После пунктов 1–3 — planner(cloud)/worker(local), handoff и blast-radius routing (ADR-24).
+
+`1 GiB` не использовать как порог compaction: это не размер контекстного окна модели. История сохраняется полностью; сокращается только представление, передаваемое конкретному вызову модели.
+
 ## Известные ограничения
 * `index.db`/`registry.db` — dev-схема без версионирования до релиза v1 (ADR-12); индекс — кэш (пересоздаётся).
 * `ask` собирает Evidence по плану; при отсутствии данных — явный отказ «в индексе недостаточно информации» (§57).
