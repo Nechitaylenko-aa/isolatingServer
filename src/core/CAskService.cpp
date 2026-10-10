@@ -200,7 +200,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
 
     SModelMessage user;
     user.m_role = EModelRole::User;
-    user.m_content = "Question:\\n" + question + "\\n\\nUse only the evidence messages that follow.";
+    user.m_content = "Question:\n" + question + "\n\nUse only the evidence messages that follow.";
     groups.push_back(SContextGroup{"answer-question", {user}, 1, 100, 100, 0, true});
 
     std::size_t section_order = 2;
@@ -212,7 +212,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
         }
         SModelMessage section_message;
         section_message.m_role = EModelRole::User;
-        section_message.m_content = "[" + section.m_title + "]\\n" + section.m_text;
+        section_message.m_content = "[" + section.m_title + "]\n" + section.m_text;
         const std::size_t order = section_order++;
         groups.push_back(SContextGroup{
             "evidence-" + std::to_string(order),

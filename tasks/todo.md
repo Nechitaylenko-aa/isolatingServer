@@ -88,12 +88,12 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 ## Осталось (не блокирует текущий функционал)
 * [ ] **7b** — полный цикл изменения: LLM генерирует патч → конвейер 7a (+ каскад ADR-10, hard-stop).
 * [x] **6c (каскад)** — детерминированный `CModelCascade` (триггеры `EGlitchKind`, бюджет 1 ретрай/уровень, передача ошибки наверх, hard-stop); `CEscalatingIntentAnalyzer` (lite→main→remote) подключён в `ask`. Тест `cascade_test`; CTest 43/43.
-* [ ] **6c (answer-каскад)** — распространить эскалацию на стадию генерации ответа (сейчас каскад покрывает Intent).
+* [x] **6c (answer-каскад)** — генерация ответа по Evidence использует общий `CModelCascade` (lite→main→remote), ограниченный бюджет попыток и повтор с диагностическим контекстом.
 * [ ] **6c (benchmark B)** — LLM-классификация (§71–72).
 * [x] **llama.cpp**: выполняется через `llama-server` (OpenAI-compatible) → используется существующим `CModelOpenAICompat`, отдельный HTTP-клиент не нужен. Имя модели для локального сервера опционально (`is_available()` = только base_url).
 * [x] **Prompt cache**: обеспечивается `llama-server` (cache_n в timings) при стабильном префиксе; наш промт держит неизменяемый system-prefix.
 * [x] **Первый полный цикл на реальной модели**: `ask` → lite-модель (`Qwen2.5-Coder-14B`) → Intent → pipeline → Evidence → main → ответ.
-* [ ] Answer-каскад: распространить эскалацию на генерацию ответа (сейчас — Intent).
+* [x] Answer-каскад: эскалация генерации ответа по Evidence подключена к `CModelCascade`.
 * [ ] Benchmark B: собрать реальные промахи классификации в regression-кейсы.
 * [x] **Evidence-подача** в main внутри `ask`: `CEvidenceCollector` (выполняет план → Zero-Window-секции), `format_evidence` → промт main. Тест `evidence_test`; CTest 39/39.
 * [x] Post-patch автосборка внутри `patch` (флаг `--build`) + **COMPILATION FAIL → авто-откат** (детерминированный триггер ADR-10).
