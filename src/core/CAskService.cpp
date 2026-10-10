@@ -49,6 +49,91 @@ constexpr const char* k_answer_prompt =
 /** @brief Жёсткий лимит числа подзадач (guardrail ADR-16). */
 constexpr std::size_t k_max_subtasks = 6;
 
+/** Return the effective endpoint identity for an answer-cascade level. */
+std::string answer_endpoint_signature(const SConfig& config, EModelLevel level)
+{
+    const SModelConfig* settings = &config.m_model_main;
+    if (level == EModelLevel::Lite)
+    {
+        settings = &config.m_model_light;
+    }
+    else if (level == EModelLevel::Remote)
+    {
+        settings = &config.m_model_remote;
+    }
+
+    std::string url = settings->m_url;
+    std::string name = settings->m_name;
+    if (level == EModelLevel::Lite)
+    {
+        if (url.empty() || url == "same_as_main")
+        {
+            url = config.m_model_main.m_url;
+        }
+        if (name.empty())
+        {
+            name = config.m_model_main.m_name;
+        }
+    }
+
+    std::string signature = url + "|" + name;
+    if (level == EModelLevel::Remote)
+    {
+        signature += config.m_remote_type == EModelRemoteType::Claude
+                         ? "|claude" : "|openai-compatible";
+    }
+    else
+    {
+        signature += "|openai-compatible";
+    }
+    return signature;
+}
+
+/** Keep only configured, available, distinct endpoints in escalation order. */
+std::vector<EModelLevel> available_answer_levels(const SConfig& config)
+{
+    const EModelLevel candidates[] = {
+        EModelLevel::Lite, EModelLevel::Main, EModelLevel::Remote};
+    std::vector<EModelLevel> levels;
+    std::vector<std::string> signatures;
+
+    for (const EModelLevel level : candidates)
+    {
+        EModelRoleKind role = EModelRoleKind::Light;
+        if (level == EModelLevel::Main)
+        {
+            role = EModelRoleKind::Main;
+        }
+        else if (level == EModelLevel::Remote)
+        {
+            role = EModelRoleKind::Remote;
+        }
+
+        std::unique_ptr<IModelApi> model = CModelFactory::create(config, role);
+        if (model == nullptr || !model->is_available())
+        {
+            continue;
+        }
+
+        const std::string signature = answer_endpoint_signature(config, level);
+        bool duplicate = false;
+        for (const std::string& known : signatures)
+        {
+            if (known == signature)
+            {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate)
+        {
+            levels.push_back(level);
+            signatures.push_back(signature);
+        }
+    }
+    return levels;
+}
+
 /**
  * @brief Скомпоновать текст хинта символа под курсором для промпта (B2/ADR-20).
  * @param symbol Сущность под курсором.
@@ -224,8 +309,13 @@ bool CAskService::answer_from_evidence(const std::string& question,
             false});
     }
 
-    const std::vector<EModelLevel> levels{
-        EModelLevel::Lite, EModelLevel::Main, EModelLevel::Remote};
+    const std::vector<EModelLevel> levels = available_answer_levels(config);
+    if (levels.empty())
+    {
+        std::cerr << "fcpp-agent: ANSWER_CASCADE_FAILED: no answer model available\n";
+        return false;
+    }
+
     const SCascadeResult cascade = CModelCascade::run(
         levels,
         [&](EModelLevel level, const std::string& extra_context) -> SCascadeAttempt
