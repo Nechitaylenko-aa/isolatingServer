@@ -14,6 +14,7 @@
 
 #include "core/CConfigManager.h"
 #include "core/CProjectManager.h"
+#include "core/CConversationStore.h"
 #include "fcpp-agent/IClang.h"
 #include "fcpp-agent/SEvidence.h"
 #include "fcpp-agent/SIntent.h"
@@ -57,7 +58,9 @@ public:
              const std::string& cursor_file,
              unsigned cursor_line,
              unsigned cursor_col,
-             std::string& out_answer) const;
+             std::string& out_answer,
+             const std::string& context_json = "{}",
+             const std::vector<SConversationTurn>& history = {}) const;
 
 private:
     /**
