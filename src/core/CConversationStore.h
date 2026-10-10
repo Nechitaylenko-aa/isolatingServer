@@ -72,10 +72,72 @@ public:
     void close();
     bool is_open() const;
 
+    /**
+     * @brief Create a session and append its opening event atomically.
+     * @param session_id Unique session identifier.
+     * @param project_id Project bound to the session, if any.
+     * @param event_kind Opening event kind.
+     * @param event_payload Opening event payload.
+     * @return True when both rows are committed.
+     */
+    bool create_session_with_event(const std::string& session_id,
+                                   const std::string& project_id,
+                                   const std::string& event_kind,
+                                   const std::string& event_payload);
+
+    /**
+     * @brief Create a session without an initial event.
+     * @param session_id Unique session identifier.
+     * @param project_id Project bound to the session, if any.
+     * @return True when the session row is created.
+     */
     bool create_session(const std::string& session_id,
                         const std::string& project_id = {});
+
+    /**
+     * @brief Append a closing event and close the session atomically.
+     * @param session_id Session to close.
+     * @param event_kind Closing event kind.
+     * @param event_payload Closing event payload.
+     * @return True when the event and closed state are committed.
+     */
+    bool close_session_with_event(const std::string& session_id,
+                                  const std::string& event_kind,
+                                  const std::string& event_payload);
+
+    /**
+     * @brief Mark a session closed without appending an event.
+     * @param session_id Session to close.
+     * @return True when the session transitions from open to closed.
+     */
     bool close_session(const std::string& session_id);
+
+    /**
+     * @brief Persist context and its audit event atomically.
+     * @param session_id Session to update.
+     * @param context_json Validated JSON context.
+     * @param event_kind Context update event kind.
+     * @param event_payload Context update event payload.
+     * @return True when both state and event are committed.
+     */
+    bool update_context_with_event(const std::string& session_id,
+                                   const std::string& context_json,
+                                   const std::string& event_kind,
+                                   const std::string& event_payload);
+
+    /**
+     * @brief Replace context for an open session without an event.
+     * @param session_id Session to update.
+     * @param context_json Context JSON.
+     * @return True when the context is updated.
+     */
     bool update_context(const std::string& session_id, const std::string& context_json);
+
+    /**
+     * @brief Retrieve persisted session metadata.
+     * @param session_id Session identifier.
+     * @return Session metadata, or empty when not found.
+     */
     std::optional<SConversationSession> get_session(const std::string& session_id) const;
 
     bool append_event(const std::string& session_id,
