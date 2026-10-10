@@ -11,6 +11,7 @@
 #define FCPP_AGENT_CAGENTAPI_H
 
 #include "core/CConfigManager.h"
+#include "core/CConversationStore.h"
 #include "core/CProjectManager.h"
 #include "fcpp-agent/IAgentApi.h"
 
@@ -68,6 +69,7 @@ private:
 
     const CConfigManager& m_config_manager; ///< Конфигурация.
     CProjectManager m_project_manager;      ///< Менеджер проектов.
+    CConversationStore m_conversation_store; ///< История диалогов вне index.db.
 };
 
 } // namespace fcpp
