@@ -463,6 +463,22 @@ bool CConfigManager::load() const
         return false;
     }
 
+    // A light role sharing the main endpoint inherits its model context settings.
+    if (m_config.m_model_light.m_url.empty()
+        || m_config.m_model_light.m_url == "same_as_main")
+    {
+        if (m_config.m_model_light.m_context_window_tokens == 0)
+        {
+            m_config.m_model_light.m_context_window_tokens =
+                m_config.m_model_main.m_context_window_tokens;
+        }
+        if (m_config.m_model_light.m_output_reserve_tokens == 0)
+        {
+            m_config.m_model_light.m_output_reserve_tokens =
+                m_config.m_model_main.m_output_reserve_tokens;
+        }
+    }
+
     return true;
 }
 
