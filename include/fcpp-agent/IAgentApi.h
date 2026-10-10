@@ -42,6 +42,9 @@ enum class EApiMethod
     Patch,           ///< Применение патча.
     Doctor,          ///< Проверка окружения.
     Ask,             ///< Пользовательский AI-запрос (§89.13, §94).
+    SessionOpen,     ///< Создать conversation session.
+    SessionClose,    ///< Закрыть conversation session.
+    SessionUpdateContext, ///< Обновить структурированный контекст сессии.
     Count            ///< Маркер количества.
 };
 
@@ -62,6 +65,8 @@ struct SApiRequest
 
     // Тело запроса Ask (§94): только текст и опциональный редакторский контекст.
     std::string m_text;               ///< Текст запроса.
+    std::string m_session_id;         ///< Идентификатор диалога (опционален для ask).
+    std::string m_context_json;       ///< Контекст для session.update_context (JSON).
     std::string m_editor_file;        ///< Файл редактора (может быть пустым).
     std::uint32_t m_editor_line = 0;  ///< Строка курсора (0 — нет).
     std::uint32_t m_editor_column = 0;///< Колонка курсора (0 — нет).
@@ -78,6 +83,7 @@ struct SApiResponse
     std::string m_message;                 ///< Сообщение.
     std::string m_state;                   ///< Состояние для протокола (READY/RUNNING/COMPLETED).
     std::string m_project_id;              ///< Идентификатор проекта.
+    std::string m_session_id;              ///< Идентификатор conversation session.
     std::string m_text;                    ///< Текстовый вывод (source/сообщение).
     SIndexStatus m_index_status;           ///< Состояние индекса.
     std::vector<SSymbol> m_symbols;        ///< Сущности (для Tool).
