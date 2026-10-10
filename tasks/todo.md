@@ -97,14 +97,14 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 * [ ] Benchmark B: собрать реальные промахи классификации в regression-кейсы.
 * [x] **Evidence-подача** в main внутри `ask`: `CEvidenceCollector` (выполняет план → Zero-Window-секции), `format_evidence` → промт main. Тест `evidence_test`; CTest 39/39.
 * [x] Post-patch автосборка внутри `patch` (флаг `--build`) + **COMPILATION FAIL → авто-откат** (детерминированный триггер ADR-10).
-* [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.
+* [ ] **Context Budget (§64), первый компонент добавлен**: `CContextManager` и unit tests для priority selection, atomic message groups и mandatory-context hard-stop. Пока не подключён к ReAct/`CAskService`; token counter по умолчанию — fallback-оценка, а не точный tokenizer.
 * [ ] Подключение `CLogger` во все компоненты (сейчас интерфейс + файл).
 * [x] `allow_subtasks` (§48) — двухфазная декомпозиция (ADR-16/ADR-17): Фаза A (lite → текстовые подвопросы) + Фаза B (`CIntentAnalyzer`) + единый dataflow-цикл в `ask` с накоплением Evidence. CTest 47/47.
 * [x] **Качество декомпозиции B-002 (ADR-18)**: якорь через `ancestors`; классификация `UNDERSTAND`/`OVERRIDES` (+ пост-коррекция); маршруты Overrides/References → Source; фильтр по `Subject.kind`.
 * [x] **Fan-out Subject→N (ADR-19, path A)**: `outline(класс) → dispatch_targets(метод) → source(реализация)` в `CEvidenceCollector`; лимиты 10/20. B-002 → **PASS**: вердикт «Все методы реализованы» + таблица Circle/Rectangle × area/name.
 * [x] **B2 (ADR-20): курсор → символ через IClang в промпт lite**. Одиночный вопрос: `[cursor symbol: NAME (KIND)]` уходит в lite → субъект = `Rectangle::area` (B-003 PASS). Составной: подвопросы + якорь иерархии (B-002 сохраняет PASS).
 * [x] `fcpp serve` (Agent API как процесс, JSON-RPC поверх stdio) — реализован (ADR-26).
-* [ ] **Conversation Context (§49/§50)** — не реализован (недоделка, ADR-27): нет `session_id` в `ask`, нет методов `session.open/close/update_context` (§89.10/§89.12), нет хранилища диалога и сериализации. `save_session`/`restore_session` — про проект, не про диалог.
+* [ ] **Conversation Context (§49/§50), частично реализован**: добавлены `session_id` для `ask`, методы `session.open/close/update_context`, отдельный `sessions.sqlite` с append-only event history и API-тест lifecycle. Пока история/`context_json` не подмешиваются в prompt; нет полной state projection с provenance и protocol tests. `save_session`/`restore_session` по-прежнему относятся только к проекту.
 * [ ] **Роутинг planner(cloud)/worker(local) — ADR-24** (недоделка, ADR-27): нет расчёта blast radius из индекса, handoff-пакета, переключения по раундам, sticky-планировщика, тегирования раундов, бюджета cloud. Сейчас есть только эскалация по сбою (ADR-25).
 * [ ] Порядок закрытия (ADR-27): сначала Conversation Context (§49) — базис; затем роутинг + blast radius + handoff (ADR-24/§7).
 * [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.
@@ -115,8 +115,8 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 Архитектурное решение зафиксировано в [ADR-28](decisions.md#adr-28-conversation-context-и-context-budget-manager).
 
 Порядок реализации:
-1. [ ] Conversation Context: `session_id`, lifecycle API, отдельное хранилище событий диалога и структурированное состояние с provenance (§49/§50; ADR-27/28).
-2. [ ] `CContextManager`: детерминированная сборка контекста на каждый вызов модели, модельный token budget, compaction и unit tests (§64; ADR-28).
+1. [x] Базовая инфраструктура Conversation Context: `session_id`, lifecycle API, отдельное хранилище событий и JSON context field (§49/§50; ADR-27/28). [ ] Осталось: prompt injection/replay, state projection с provenance, protocol tests и проверка сборкой.
+2. [ ] `CContextManager`: базовый детерминированный selector и unit tests добавлены; осталось подключение к каждому model call, per-model token limits, compaction/summaries и проверка сборкой (§64; ADR-28).
 3. [ ] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`; убрать независимую логику усечения.
 4. [ ] После пунктов 1–3 — planner(cloud)/worker(local), handoff и blast-radius routing (ADR-24).
 
