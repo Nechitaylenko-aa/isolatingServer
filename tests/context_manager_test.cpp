@@ -62,10 +62,10 @@ TEST_CASE("conversation compaction does not split UTF-8 characters", "[context]"
         {2, "яюаб", ""}
     };
 
-    const auto result = fcpp::compact_conversation_history(history, 0, 3);
+    const auto result = fcpp::compact_conversation_history(history, 0, 14);
 
-    REQUIRE(result.m_summary_text == "Turn");
-    REQUIRE(result.m_summary_text.size() == 3);
+    REQUIRE(result.m_summary_text == "Turn 1 user: ");
+    REQUIRE(result.m_summary_text.size() == 13);
 }
 
 TEST_CASE("conversation compaction does not summarize when all turns fit the recent window", "[context]")
