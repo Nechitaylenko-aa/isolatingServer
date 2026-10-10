@@ -100,3 +100,38 @@ TEST_CASE("context manager estimates each message exactly once", "[context]")
     REQUIRE(result.m_ok);
     REQUIRE(calls == 2);
 }
+
+
+TEST_CASE("context manager reserves completion tokens from the model context window", "[context]")
+{
+    const fcpp::CContextManager manager(
+        [](const fcpp::SModelMessage& message) { return message.m_content.size(); });
+    const auto result = manager.build(
+        {group("system", "policy", 0, 0, true), group("history", std::string(40, 'x'), 1, 1)},
+        {0, 64, 16});
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_budget_tokens == 48);
+    REQUIRE(result.m_estimated_tokens == 46);
+}
+
+TEST_CASE("context manager rejects an output reserve that consumes the full context window", "[context]")
+{
+    const fcpp::CContextManager manager;
+    const auto result = manager.build({group("user", "hello", 0, 1)}, {0, 4096, 4096});
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_error == "output reserve must be smaller than model context window");
+}
+
+TEST_CASE("context manager applies the stricter of prompt cap and model window", "[context]")
+{
+    const fcpp::CContextManager manager(
+        [](const fcpp::SModelMessage& message) { return message.m_content.size(); });
+    const auto result = manager.build(
+        {group("mandatory", std::string(30, 'x'), 0, 1, true)}, {40, 24, 8});
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_budget_tokens == 16);
+    REQUIRE(result.m_error == "mandatory context exceeds prompt token budget");
+}
