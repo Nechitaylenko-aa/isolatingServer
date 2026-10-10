@@ -6,6 +6,7 @@
 #ifndef FCPP_AGENT_SCONFIG_H
 #define FCPP_AGENT_SCONFIG_H
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 
@@ -33,6 +34,8 @@ struct SModelConfig
     std::string m_name;   ///< Имя модели.
     std::string m_type;   ///< Тип провайдера (для remote).
     std::string m_key;    ///< API-ключ (секрет, не логируется, §61).
+    std::size_t m_context_window_tokens = 0; ///< Окно контекста модели; 0 — неизвестно.
+    std::size_t m_output_reserve_tokens = 0; ///< Резерв ответа; 0 у light означает наследование main.
 };
 
 /**
