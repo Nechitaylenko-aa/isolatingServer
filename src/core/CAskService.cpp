@@ -314,7 +314,7 @@ bool CAskService::ask(const std::string& text,
 
     // Bound the state passed to the Intent/composition models independently from the
     // answer and ReAct budgets. Old turns remain in SQLite and are only omitted here.
-    constexpr std::size_t k_intent_context_budget_tokens = 4000;
+    constexpr std::size_t k_intent_context_budget_tokens = 3000;
     const CContextManager intent_context_manager;
     std::vector<SContextGroup> intent_context_groups;
     std::size_t context_order = 0;
