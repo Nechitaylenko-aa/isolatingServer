@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
