@@ -105,3 +105,47 @@ TEST_CASE("conversation replay preserves unanswered user turns and skips malform
     REQUIRE(turns[1].m_assistant_text.empty());
     REQUIRE(turns[1].m_last_event_id == 3);
 }
+
+TEST_CASE("conversation session lifecycle mutations roll back with their events", "[conversation]")
+{
+    const auto path = make_temp_db();
+    std::filesystem::remove(path);
+
+    fcpp::CConversationStore store;
+    REQUIRE(store.open(path));
+
+    // An invalid event kind forces the second step to fail; the session insert must roll back.
+    REQUIRE_FALSE(store.create_session_with_event("atomic-open", "project", "", "{}"));
+    REQUIRE_FALSE(store.get_session("atomic-open").has_value());
+
+    REQUIRE(store.create_session("atomic-context", "project"));
+    REQUIRE(store.update_context("atomic-context", R"({"goal":"original"})"));
+    REQUIRE_FALSE(store.update_context_with_event(
+        "atomic-context", R"({"goal":"changed"})", "", R"({"goal":"changed"})"));
+    const auto unchanged = store.get_session("atomic-context");
+    REQUIRE(unchanged.has_value());
+    REQUIRE(unchanged->m_context_json == R"({"goal":"original"})");
+    REQUIRE(store.events("atomic-context").empty());
+
+    REQUIRE_FALSE(store.close_session_with_event("atomic-context", "", "{}"));
+    const auto still_open = store.get_session("atomic-context");
+    REQUIRE(still_open.has_value());
+    REQUIRE_FALSE(still_open->m_closed);
+    REQUIRE(store.events("atomic-context").empty());
+
+    REQUIRE(store.update_context_with_event(
+        "atomic-context", R"({"goal":"committed"})",
+        "session.context_updated", R"({"goal":"committed"})"));
+    REQUIRE(store.close_session_with_event("atomic-context", "session.close", "{}"));
+
+    const auto closed = store.get_session("atomic-context");
+    REQUIRE(closed.has_value());
+    REQUIRE(closed->m_closed);
+    const auto events = store.events("atomic-context");
+    REQUIRE(events.size() == 2);
+    REQUIRE(events[0].m_kind == "session.context_updated");
+    REQUIRE(events[1].m_kind == "session.close");
+
+    store.close();
+    std::filesystem::remove(path);
+}
