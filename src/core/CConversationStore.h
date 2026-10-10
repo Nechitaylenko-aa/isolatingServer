@@ -8,6 +8,7 @@
 #ifndef FCPP_AGENT_CCONVERSATIONSTORE_H
 #define FCPP_AGENT_CCONVERSATIONSTORE_H
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
