@@ -690,7 +690,7 @@
 
 ### ADR-28: Conversation Context и Context Budget Manager
 
-* **Статус:** ✅ Архитектурное решение принято; базовый SQLite store и API lifecycle реализованы, сборка/тесты и интеграция контекста в модель ещё не подтверждены.
+* **Статус:** Решение принято; SQLite event store, lifecycle API, replay user/assistant turns, `context_json` injection, and deterministic context selection are implemented on `dev`. Build/tests are not run/confirmed. Current budgets are conservative fixed estimates (10k tokens for ReAct/Evidence, 3k for Intent); provider-specific tokenizer/window limits, output reserve, state projection with provenance, and compaction remain open.
 * **Контекст:** История ReAct сейчас живёт в локальном `messages` одного `run`. Для длинных диалогов нельзя ни бесконечно добавлять сообщения в prompt, ни безвозвратно выкидывать старые сообщения по принципу round-buffer. §49/§50 требуют отдельного conversation context и явной иерархии источников; §64 требует управляемого бюджета контекста.
 * **Решение:** Ввести `CContextManager` как компонент **сборки контекста конкретного вызова модели**, а не как синоним истории и не как LLM-резюматор «на глаз». Он выбирает и упорядочивает нужные сведения под текущий шаг ReAct, соблюдая бюджет токенов и обязательные инварианты. Полная история и компактное состояние сессии — отдельные сущности.
 
