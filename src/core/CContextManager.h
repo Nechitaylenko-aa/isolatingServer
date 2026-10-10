@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "core/CConversationStore.h"
 #include "fcpp-agent/IModelApi.h"
 
 namespace fcpp
@@ -39,6 +40,31 @@ struct SContextBudget
     std::size_t m_output_reserve_tokens = 0;
 };
 
+/**
+ * @brief Extractive compaction of old conversation turns for a single prompt.
+ *
+ * The original turn vector and append-only SQLite event log are never modified.
+ * Older turns are represented by bounded, explicitly labelled excerpts; the most
+ * recent turns remain intact.
+ */
+struct SConversationCompaction
+{
+    std::string m_summary_text;
+    std::vector<SConversationTurn> m_recent_turns;
+    std::size_t m_compacted_turn_count = 0;
+};
+
+/**
+ * @brief Keep recent turns intact and create a bounded extractive summary of older ones.
+ * @param history Reconstructed immutable conversation history.
+ * @param keep_recent_turns Number of latest turns to retain verbatim.
+ * @param max_summary_chars Maximum size of the generated summary, excluding the label.
+ */
+SConversationCompaction compact_conversation_history(
+    const std::vector<SConversationTurn>& history,
+    std::size_t keep_recent_turns,
+    std::size_t max_summary_chars);
+
 /** @brief Context build diagnostics and selected model messages. */
 struct SContextBuildResult
 {
@@ -54,8 +80,9 @@ struct SContextBuildResult
 /**
  * @brief Selects whole message groups deterministically under a prompt budget.
  *
- * This first-stage component does not summarize content or mutate stored history.
  * Callers supply mandatory policy/task context and scored optional history/evidence.
+ * The separate extractive compactor bounds old conversation history without
+ * modifying the durable event log or inventing semantic summaries.
  * Token counting can be injected by a provider adapter; the default is a rough
  * estimate for fallback use only and is not a substitute for a model tokenizer.
  */
