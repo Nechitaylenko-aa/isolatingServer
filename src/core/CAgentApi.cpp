@@ -394,8 +394,25 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
 
         session_context_json = session->m_context_json;
-        conversation_history = reconstruct_conversation_turns(
-            m_conversation_store.events(request.m_session_id, 0, 1000000));
+        std::vector<SConversationEvent> stored_events;
+        std::int64_t after_event_id = 0;
+        constexpr std::size_t k_event_page_size = 1000;
+        while (true)
+        {
+            std::vector<SConversationEvent> page = m_conversation_store.events(
+                request.m_session_id, after_event_id, k_event_page_size);
+            if (page.empty())
+            {
+                break;
+            }
+            after_event_id = page.back().m_id;
+            stored_events.insert(stored_events.end(), page.begin(), page.end());
+            if (page.size() < k_event_page_size)
+            {
+                break;
+            }
+        }
+        conversation_history = reconstruct_conversation_turns(stored_events);
 
         nlohmann::json user_event = {
             {"text", request.m_text},
