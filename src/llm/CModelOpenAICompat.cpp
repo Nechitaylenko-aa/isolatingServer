@@ -358,15 +358,22 @@ SModelReply CModelOpenAICompat::complete_stream(const std::vector<SModelMessage>
             return true;
         });
 
-    if (!http.m_ok && !aborted)
+    if (aborted)
+    {
+        reply.m_text = std::move(accumulated);
+        reply.m_error = "stream callback cancelled output";
+        return reply;
+    }
+
+    if (!http.m_ok)
     {
         reply.m_error = http.m_error;
         return reply;
     }
 
-    reply.m_text = accumulated;
-    reply.m_ok = !accumulated.empty();
-    if (!reply.m_ok && !aborted)
+    reply.m_text = std::move(accumulated);
+    reply.m_ok = !reply.m_text.empty();
+    if (!reply.m_ok)
     {
         reply.m_error = "empty streamed response";
     }
