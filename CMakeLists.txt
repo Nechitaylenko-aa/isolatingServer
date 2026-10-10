@@ -83,6 +83,7 @@ add_library(fcpp_core STATIC
     src/core/CCompileCommandsParser.cpp
     src/core/CProjectRegistry.cpp
     src/core/CProjectManager.cpp
+    src/core/CConversationStore.cpp
     src/index/CSchemaMigrator.cpp
     src/index/CSQLiteIndex.cpp
     src/index/CClang22.cpp
@@ -165,6 +166,7 @@ add_executable(fcpp_tests
     tests/evidence_test.cpp
     tests/cascade_test.cpp
     tests/subtask_test.cpp
+    tests/conversation_store_test.cpp
 )
 target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 
