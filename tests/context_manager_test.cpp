@@ -56,6 +56,18 @@ TEST_CASE("conversation compaction is bounded and never changes source history",
     REQUIRE(history.front().m_assistant_text.size() == 300);
 }
 
+TEST_CASE("conversation compaction does not split UTF-8 characters", "[context]")
+{
+    const std::vector<fcpp::SConversationTurn> history{
+        {2, "яюаб", ""}
+    };
+
+    const auto result = fcpp::compact_conversation_history(history, 0, 3);
+
+    REQUIRE(result.m_summary_text == "Turn");
+    REQUIRE(result.m_summary_text.size() == 3);
+}
+
 TEST_CASE("conversation compaction does not summarize when all turns fit the recent window", "[context]")
 {
     const std::vector<fcpp::SConversationTurn> history{
