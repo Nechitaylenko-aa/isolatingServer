@@ -332,9 +332,9 @@ bool CAskService::ask(const std::string& text,
     }
     // Compact only the prompt view; the persisted event history remains untouched.
     constexpr std::size_t k_recent_history_turns = 8;
-    constexpr std::size_t k_history_summary_chars = 3000;
+    constexpr std::size_t k_history_summary_bytes = 3000;
     const SConversationCompaction compacted_history = compact_conversation_history(
-        history, k_recent_history_turns, k_history_summary_chars);
+        history, k_recent_history_turns, k_history_summary_bytes);
     if (!compacted_history.m_summary_text.empty())
     {
         SModelMessage summary;
