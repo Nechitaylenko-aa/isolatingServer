@@ -58,3 +58,17 @@ TEST_CASE("protocol response preserves conversation session identifier", "[proto
     REQUIRE(serialized["result"]["session_id"] == "session-123");
     REQUIRE(serialized["result"]["state"] == "READY");
 }
+
+TEST_CASE("protocol maps project profile setter", "[protocol][profile]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"profile-1","method":"project.profile.set","params":{"profile":"C++20; keep the public API stable"}})",
+        request, id, error));
+    REQUIRE(id == "profile-1");
+    REQUIRE(request.m_method == fcpp::EApiMethod::ProjectProfileSet);
+    REQUIRE(request.m_profile_text == "C++20; keep the public API stable");
+}

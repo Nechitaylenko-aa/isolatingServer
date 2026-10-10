@@ -136,6 +136,20 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     REQUIRE(open_response.m_ok);
     REQUIRE_FALSE(open_response.m_project_id.empty());
 
+    fcpp::SApiRequest profile_request;
+    profile_request.m_method = fcpp::EApiMethod::ProjectProfileSet;
+    profile_request.m_profile_text = "C++20; do not change the public API";
+    const fcpp::SApiResponse profile_response = api.execute(profile_request);
+    REQUIRE(profile_response.m_ok);
+    REQUIRE(profile_response.m_project_id == open_response.m_project_id);
+
+    fcpp::SApiRequest close_before_profile;
+    close_before_profile.m_method = fcpp::EApiMethod::ProjectClose;
+    REQUIRE(api.execute(close_before_profile).m_ok);
+    REQUIRE_FALSE(api.execute(profile_request).m_ok);
+    REQUIRE(api.execute(open_request).m_ok);
+    REQUIRE(api.execute(profile_request).m_ok);
+
     fcpp::SApiRequest index_request;
     index_request.m_method = fcpp::EApiMethod::IndexStatus;
     const fcpp::SApiResponse index_response = api.execute(index_request);

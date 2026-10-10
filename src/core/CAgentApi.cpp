@@ -54,7 +54,8 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "ask",
     "session.open",
     "session.close",
-    "session.update_context"
+    "session.update_context",
+    "project.profile.set"
 };
 
 /**
@@ -324,6 +325,20 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             }
             response.m_ok = true;
             response.m_session_id = request.m_session_id;
+            return response;
+        }
+        case EApiMethod::ProjectProfileSet:
+        {
+            if (!m_project_manager.has_current())
+            {
+                return make_error(EErrorKind::ProjectNotOpen,
+                                  "project not open; call open before setting project profile");
+            }
+            m_project_manager.profile().set(request.m_profile_text);
+            response.m_ok = true;
+            response.m_state = "COMPLETED";
+            response.m_project_id = m_project_manager.current().m_project.m_project_id;
+            response.m_message = "project profile set";
             return response;
         }
         case EApiMethod::SessionUpdateContext:

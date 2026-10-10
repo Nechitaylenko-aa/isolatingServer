@@ -46,6 +46,7 @@ enum class EApiMethod
     SessionOpen,     ///< Создать conversation session.
     SessionClose,    ///< Закрыть conversation session.
     SessionUpdateContext, ///< Обновить структурированный контекст сессии.
+    ProjectProfileSet, ///< Установить паспорт текущего проекта.
     Count            ///< Маркер количества.
 };
 
@@ -68,6 +69,7 @@ struct SApiRequest
     std::string m_text;               ///< Текст запроса.
     std::string m_session_id;         ///< Идентификатор диалога (опционален для ask).
     std::string m_context_json;       ///< Контекст для session.update_context (JSON).
+    std::string m_profile_text;       ///< Текст паспорта для project.profile.set.
     std::string m_editor_file;        ///< Файл редактора (может быть пустым).
     std::uint32_t m_editor_line = 0;  ///< Строка курсора (0 — нет).
     std::uint32_t m_editor_column = 0;///< Колонка курсора (0 — нет).

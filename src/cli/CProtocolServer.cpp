@@ -61,6 +61,11 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::SessionUpdateContext;
         return true;
     }
+    if (name == "project.profile.set")
+    {
+        out = EApiMethod::ProjectProfileSet;
+        return true;
+    }
     if (name == "config.reload")
     {
         out = EApiMethod::ConfigReload;
@@ -197,6 +202,10 @@ bool CProtocolServer::parse_request(const std::string& text,
     if (params.contains("text") && params["text"].is_string())
     {
         out_request.m_text = params["text"].get<std::string>();
+    }
+    if (params.contains("profile") && params["profile"].is_string())
+    {
+        out_request.m_profile_text = params["profile"].get<std::string>();
     }
     if (params.contains("session_id") && params["session_id"].is_string())
     {
