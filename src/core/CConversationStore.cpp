@@ -27,7 +27,6 @@ class Statement
 {
 public:
     Statement(sqlite3* db, const char* sql)
-        : m_db(db)
     {
         m_ok = sqlite3_prepare_v2(db, sql, -1, &m_statement, nullptr) == SQLITE_OK;
     }
@@ -55,7 +54,6 @@ public:
     }
 
 private:
-    sqlite3* m_db = nullptr;
     sqlite3_stmt* m_statement = nullptr;
     bool m_ok = false;
 };
