@@ -49,6 +49,36 @@ struct SConversationTurn
     std::string m_assistant_text;
 };
 
+/**
+ * @brief One current item in the deterministic conversation-state projection.
+ *
+ * State items are derived only from explicitly typed state.* events. Ordinary
+ * assistant text is never promoted to a fact automatically.
+ */
+struct SConversationStateItem
+{
+    std::string m_id;
+    std::string m_kind;
+    std::string m_text;
+    std::string m_status;
+    std::string m_source_ref;
+    std::int64_t m_source_event_id = 0;
+    std::int64_t m_updated_at = 0;
+};
+
+/**
+ * @brief Rebuild current conversation state from append-only state events.
+ *
+ * Supported event kinds are state.goal, state.constraint, state.fact,
+ * state.decision, state.open_question, and state.completed_subtask. Payloads
+ * must be JSON objects with non-empty string fields id and text. Optional
+ * status and source_ref fields are copied verbatim. For a repeated (kind, id),
+ * the latest valid event wins while its event id remains explicit provenance.
+ * Malformed or unrelated events are ignored without mutating the event log.
+ */
+std::vector<SConversationStateItem> reconstruct_conversation_state(
+    const std::vector<SConversationEvent>& events);
+
 /** @brief Reconstruct user/assistant turns from stored JSON events. Malformed payloads are skipped. */
 std::vector<SConversationTurn> reconstruct_conversation_turns(
     const std::vector<SConversationEvent>& events);
