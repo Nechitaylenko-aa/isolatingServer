@@ -1,0 +1,60 @@
+#include <catch2/catch_test_macros.hpp>
+
+#include <string>
+
+#include <nlohmann/json.hpp>
+
+#include "cli/CProtocolServer.h"
+
+TEST_CASE("protocol maps conversation session methods and context payloads", "[protocol][conversation]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"open-1","method":"session.open","params":{}})", request, id, error));
+    REQUIRE(id == "open-1");
+    REQUIRE(request.m_method == fcpp::EApiMethod::SessionOpen);
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"context-1","method":"session.update_context","params":{"sessionId":"s-1","context":{"goal":"inspect","open_questions":["provenance"]}}})",
+        request, id, error));
+    REQUIRE(id == "context-1");
+    REQUIRE(request.m_method == fcpp::EApiMethod::SessionUpdateContext);
+    REQUIRE(request.m_session_id == "s-1");
+    const nlohmann::json context = nlohmann::json::parse(request.m_context_json);
+    REQUIRE(context["goal"] == "inspect");
+    REQUIRE(context["open_questions"][0] == "provenance");
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"close-1","method":"session.close","params":{"session_id":"s-1"}})",
+        request, id, error));
+    REQUIRE(request.m_method == fcpp::EApiMethod::SessionClose);
+    REQUIRE(request.m_session_id == "s-1");
+}
+
+TEST_CASE("protocol rejects non-string method instead of throwing", "[protocol]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"bad-1","method":42})", request, id, error));
+    REQUIRE(error == "field 'method' must be a string");
+}
+
+TEST_CASE("protocol response preserves conversation session identifier", "[protocol][conversation]")
+{
+    fcpp::SApiResponse response;
+    response.m_ok = true;
+    response.m_state = "READY";
+    response.m_session_id = "session-123";
+
+    const nlohmann::json serialized =
+        nlohmann::json::parse(fcpp::CProtocolServer::serialize_response("req-123", response));
+    REQUIRE(serialized["id"] == "req-123");
+    REQUIRE(serialized["result"]["session_id"] == "session-123");
+    REQUIRE(serialized["result"]["state"] == "READY");
+}
