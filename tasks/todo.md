@@ -97,7 +97,7 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 * [ ] Benchmark B: собрать реальные промахи классификации в regression-кейсы.
 * [x] **Evidence-подача** в main внутри `ask`: `CEvidenceCollector` (выполняет план → Zero-Window-секции), `format_evidence` → промт main. Тест `evidence_test`; CTest 39/39.
 * [x] Post-patch автосборка внутри `patch` (флаг `--build`) + **COMPILATION FAIL → авто-откат** (детерминированный триггер ADR-10).
-* [ ] **Context Budget (§64), первый этап интегрирован**: `CContextManager` подключён к каждому вызову ReAct, к Intent/subtask контексту и генерации ответа по Evidence; группы истории и tool rounds отбираются целиком, обязательный контекст при переполнении даёт hard-stop. Бюджеты пока консервативные фиксированные (10k/3k), estimator — fallback-оценка, не tokenizer; нет provider-specific limits, output reserve и compaction/summary.
+* [ ] **Context Budget (§64), первый этап интегрирован**: `CContextManager` подключён к каждому вызову ReAct, к Intent/subtask контексту и генерации ответа по Evidence; группы истории и tool rounds отбираются целиком, обязательный контекст при переполнении даёт hard-stop. Добавлены конфигурируемые per-role `model_{main,light,remote}_context_window_tokens` и `model_{main,light,remote}_output_reserve_tokens`; настройки передаются в упаковщик контекста, output reserve также задаёт `max_tokens` провайдера. Окно `0` означает неизвестный размер и оставляет прежний prompt cap (10k/3k); estimator всё ещё приблизительный, compaction/summary не реализованы.
 * [ ] Подключение `CLogger` во все компоненты (сейчас интерфейс + файл).
 * [x] `allow_subtasks` (§48) — двухфазная декомпозиция (ADR-16/ADR-17): Фаза A (lite → текстовые подвопросы) + Фаза B (`CIntentAnalyzer`) + единый dataflow-цикл в `ask` с накоплением Evidence. CTest 47/47.
 * [x] **Качество декомпозиции B-002 (ADR-18)**: якорь через `ancestors`; классификация `UNDERSTAND`/`OVERRIDES` (+ пост-коррекция); маршруты Overrides/References → Source; фильтр по `Subject.kind`.
@@ -116,8 +116,8 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 
 Порядок реализации:
 1. [x] Базовая инфраструктура и replay Conversation Context: `session_id`, lifecycle API, отдельное хранилище, восстановление turns и передача `context_json` в ask (§49/§50; ADR-27/28). State projection с provenance и транзакционность lifecycle/context событий реализованы; остаются protocol/integration tests.
-2. [ ] `CContextManager`: selector подключён к ReAct, Intent/subtask и Evidence answer; осталось подключить provider-specific token counting/context-window limits из конфига, применить output reserve по ролям моделей, compaction/summaries и проверить сборкой (§64; ADR-28).
-3. [x] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`; [ ] добавить точный tokenizer и per-model budgets.
+2. [ ] `CContextManager`: selector подключён к ReAct, Intent/subtask и Evidence answer; per-role context-window limits/output reserve уже читаются из конфига и применяются. Осталось добавить provider-specific точный подсчёт токенов, compaction/summaries и подтвердить CI для последних изменений (§64; ADR-28).
+3. [x] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`, включая per-model budgets из конфига; [ ] добавить точный tokenizer.
 4. [ ] После пунктов 1–3 — planner(cloud)/worker(local), handoff и blast-radius routing (ADR-24).
 
 `1 GiB` не использовать как порог compaction: это не размер контекстного окна модели. История сохраняется полностью; сокращается только представление, передаваемое конкретному вызову модели.
