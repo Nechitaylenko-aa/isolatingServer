@@ -21,6 +21,43 @@ std::size_t CContextManager::estimate_tokens(const SModelMessage& message)
     return (characters + 2U) / 3U + 4U;
 }
 
+SConversationCompaction compact_conversation_history(
+    const std::vector<SConversationTurn>& history,
+    std::size_t keep_recent_turns,
+    std::size_t max_summary_chars)
+{
+    SConversationCompaction result;
+    const std::size_t recent_count = std::min(keep_recent_turns, history.size());
+    const std::size_t older_count = history.size() - recent_count;
+    result.m_compacted_turn_count = older_count;
+    result.m_recent_turns.assign(
+        history.begin() + static_cast<std::vector<SConversationTurn>::difference_type>(older_count),
+        history.end());
+
+    for (std::size_t index = 0; index < older_count && max_summary_chars > result.m_summary_text.size(); ++index)
+    {
+        const SConversationTurn& turn = history[index];
+        std::string entry = "Turn " + std::to_string(index + 1) + " user: " + turn.m_user_text;
+        if (!turn.m_assistant_text.empty())
+        {
+            entry += "\\n  assistant: " + turn.m_assistant_text;
+        }
+        entry += "\\n";
+
+        const std::size_t remaining = max_summary_chars - result.m_summary_text.size();
+        if (entry.size() > remaining)
+        {
+            if (remaining > 0)
+            {
+                result.m_summary_text += entry.substr(0, remaining);
+            }
+            break;
+        }
+        result.m_summary_text += entry;
+    }
+    return result;
+}
+
 SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& groups,
                                            const SContextBudget& budget) const
 {
