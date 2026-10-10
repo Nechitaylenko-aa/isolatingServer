@@ -128,6 +128,8 @@ add_library(fcpp_core STATIC
     src/core/CPatchValidator.cpp
     src/core/CPatchApplier.cpp
     src/core/CAgentApi.cpp
+    src/core/CConversationStore.cpp
+    src/core/CContextManager.cpp
     src/core/SIntent.cpp
     src/core/SSubtasks.cpp
     src/core/SRequestOutcome.cpp
@@ -191,6 +193,8 @@ add_executable(fcpp_tests
     tests/stage8a_test.cpp
     tests/patch_test.cpp
     tests/agent_api_test.cpp
+    tests/conversation_store_test.cpp
+    tests/context_manager_test.cpp
     tests/pipeline_test.cpp
     tests/model_test.cpp
     tests/evidence_test.cpp
