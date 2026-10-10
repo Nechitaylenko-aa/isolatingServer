@@ -299,15 +299,11 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             const std::string session_id = make_session_id();
             const std::string project_id = m_project_manager.has_current()
                 ? m_project_manager.current().m_project.m_project_id : std::string();
-            if (!m_conversation_store.create_session(session_id, project_id))
+            nlohmann::json payload = {{"project_id", project_id}};
+            if (!m_conversation_store.create_session_with_event(
+                    session_id, project_id, "session.open", payload.dump()))
             {
                 return make_error(EErrorKind::IoError, "cannot create conversation session");
-            }
-            nlohmann::json payload = {{"project_id", project_id}};
-            if (!m_conversation_store.append_event(session_id, "session.open", payload.dump()))
-            {
-                m_conversation_store.close_session(session_id);
-                return make_error(EErrorKind::IoError, "cannot persist session.open event");
             }
             response.m_ok = true;
             response.m_state = "READY";
@@ -321,13 +317,10 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             {
                 return make_error(EErrorKind::InvalidRequest, "missing session_id");
             }
-            if (!m_conversation_store.append_event(request.m_session_id, "session.close", "{}"))
+            if (!m_conversation_store.close_session_with_event(
+                    request.m_session_id, "session.close", "{}"))
             {
-                return make_error(EErrorKind::InvalidRequest, "unknown or closed session");
-            }
-            if (!m_conversation_store.close_session(request.m_session_id))
-            {
-                return make_error(EErrorKind::IoError, "cannot close conversation session");
+                return make_error(EErrorKind::InvalidRequest, "unknown, closed, or uncloseable session");
             }
             response.m_ok = true;
             response.m_session_id = request.m_session_id;
@@ -347,15 +340,14 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             {
                 return make_error(EErrorKind::InvalidRequest, "context must be valid JSON");
             }
-            if (!m_conversation_store.update_context(request.m_session_id, request.m_context_json))
+            if (!m_conversation_store.update_context_with_event(
+                    request.m_session_id,
+                    request.m_context_json,
+                    "session.context_updated",
+                    request.m_context_json))
             {
-                return make_error(EErrorKind::InvalidRequest, "unknown or closed session");
-            }
-            if (!m_conversation_store.append_event(request.m_session_id,
-                                                   "session.context_updated",
-                                                   request.m_context_json))
-            {
-                return make_error(EErrorKind::IoError, "cannot persist context update event");
+                return make_error(EErrorKind::IoError,
+                                  "cannot atomically persist conversation context update");
             }
             response.m_ok = true;
             response.m_session_id = request.m_session_id;
