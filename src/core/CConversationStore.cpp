@@ -66,6 +66,62 @@ std::string column_text(sqlite3_stmt* statement, int column)
     return value == nullptr ? std::string() : reinterpret_cast<const char*>(value);
 }
 
+/** @brief Roll back an unfinished multi-statement store operation. */
+class Transaction
+{
+public:
+    /**
+     * @brief Start an immediate SQLite transaction.
+     * @param db Open SQLite connection.
+     */
+    explicit Transaction(sqlite3* db)
+        : m_db(db)
+    {
+        m_active = m_db != nullptr
+            && sqlite3_exec(m_db, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr) == SQLITE_OK;
+    }
+
+    /** @brief Roll back unless commit() completed successfully. */
+    ~Transaction()
+    {
+        if (m_active)
+        {
+            sqlite3_exec(m_db, "ROLLBACK", nullptr, nullptr, nullptr);
+        }
+    }
+
+    /**
+     * @brief Check whether transaction startup succeeded.
+     * @return True when a transaction is active.
+     */
+    bool ok() const
+    {
+        return m_active;
+    }
+
+    /**
+     * @brief Commit the transaction.
+     * @return True on successful commit.
+     */
+    bool commit()
+    {
+        if (!m_active)
+        {
+            return false;
+        }
+        if (sqlite3_exec(m_db, "COMMIT", nullptr, nullptr, nullptr) != SQLITE_OK)
+        {
+            return false;
+        }
+        m_active = false;
+        return true;
+    }
+
+private:
+    sqlite3* m_db = nullptr;
+    bool m_active = false;
+};
+
 } // namespace
 
 std::vector<SConversationTurn> reconstruct_conversation_turns(
@@ -188,6 +244,27 @@ bool CConversationStore::is_open() const
     return m_db != nullptr;
 }
 
+bool CConversationStore::create_session_with_event(
+    const std::string& session_id,
+    const std::string& project_id,
+    const std::string& event_kind,
+    const std::string& event_payload)
+{
+    if (m_db == nullptr)
+    {
+        return false;
+    }
+
+    Transaction transaction(m_db);
+    if (!transaction.ok()
+        || !create_session(session_id, project_id)
+        || !append_event(session_id, event_kind, event_payload))
+    {
+        return false;
+    }
+    return transaction.commit();
+}
+
 bool CConversationStore::create_session(const std::string& session_id,
                                          const std::string& project_id)
 {
@@ -207,6 +284,26 @@ bool CConversationStore::create_session(const std::string& session_id,
         && sqlite3_step(statement.get()) == SQLITE_DONE;
 }
 
+bool CConversationStore::close_session_with_event(
+    const std::string& session_id,
+    const std::string& event_kind,
+    const std::string& event_payload)
+{
+    if (m_db == nullptr)
+    {
+        return false;
+    }
+
+    Transaction transaction(m_db);
+    if (!transaction.ok()
+        || !append_event(session_id, event_kind, event_payload)
+        || !close_session(session_id))
+    {
+        return false;
+    }
+    return transaction.commit();
+}
+
 bool CConversationStore::close_session(const std::string& session_id)
 {
     if (m_db == nullptr || session_id.empty())
@@ -222,6 +319,27 @@ bool CConversationStore::close_session(const std::string& session_id)
         && statement.bind_text(2, session_id)
         && sqlite3_step(statement.get()) == SQLITE_DONE
         && sqlite3_changes(m_db) == 1;
+}
+
+bool CConversationStore::update_context_with_event(
+    const std::string& session_id,
+    const std::string& context_json,
+    const std::string& event_kind,
+    const std::string& event_payload)
+{
+    if (m_db == nullptr)
+    {
+        return false;
+    }
+
+    Transaction transaction(m_db);
+    if (!transaction.ok()
+        || !update_context(session_id, context_json)
+        || !append_event(session_id, event_kind, event_payload))
+    {
+        return false;
+    }
+    return transaction.commit();
 }
 
 bool CConversationStore::update_context(const std::string& session_id,
