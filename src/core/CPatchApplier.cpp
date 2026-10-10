@@ -41,6 +41,36 @@ bool write_file(const std::filesystem::path& path, const std::string& content)
 
 } // namespace
 
+bool CPatchApplier::revert(const std::vector<SFileChange>& changes, std::string& out_message) const
+{
+    for (const SFileChange& change : changes)
+    {
+        if (change.m_is_delete)
+        {
+            // Удалённый файл восстанавливаем из оригинала.
+            if (!write_file(change.m_path, change.m_original))
+            {
+                out_message = "revert failed: " + change.m_path;
+                return false;
+            }
+        }
+        else if (change.m_existed)
+        {
+            if (!write_file(change.m_path, change.m_original))
+            {
+                out_message = "revert failed: " + change.m_path;
+                return false;
+            }
+        }
+        else
+        {
+            std::error_code error_code;
+            std::filesystem::remove(change.m_path, error_code);
+        }
+    }
+    return true;
+}
+
 bool CPatchApplier::apply(const std::vector<SFileChange>& changes, std::string& out_message) const
 {
     std::vector<std::size_t> applied;

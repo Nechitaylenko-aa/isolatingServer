@@ -7,19 +7,17 @@
  */
 
 #include <cstddef>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "cli/CProtocolServer.h"
 #include "core/CAgentApi.h"
 #include "core/CConfigManager.h"
-#include "core/CProjectManager.h"
-#include "core/CRequestPipeline.h"
 #include "fcpp-agent/IAgentApi.h"
-#include "fcpp-agent/SIntent.h"
-#include "fcpp-agent/SRequestOutcome.h"
 #include "fcpp-agent/ITool.h"
 #include "fcpp-agent/SError.h"
 
@@ -47,7 +45,6 @@ void print_usage(const std::string& program)
     std::cout << "  init                            Инициализировать каталоги и конфиг\n";
     std::cout << "  reload                          Перечитать agent.conf\n";
     std::cout << "  doctor                          Проверка инструментов (ADR-06)\n";
-    std::cout << "  route --area A --relation R --projection P [--subject S] [--project PATH]\n";
     std::cout << "  open <path>                     Открыть проект\n";
     std::cout << "  close                           Закрыть проект\n";
     std::cout << "  projects                        Список проектов\n";
@@ -55,12 +52,12 @@ void print_usage(const std::string& program)
     std::cout << "  index <status|refresh|rebuild> [<path>]\n";
     std::cout << "  build                           Сборка (cmake --build)\n";
     std::cout << "  test                            Тесты (ctest)\n";
-    std::cout << "  patch <file|-> [--yes]          Применить unified diff\n";
+    std::cout << "  patch <file|-> [--yes] [--build]  Применить unified diff (+проверка сборкой)\n";
     std::cout << "\nДетерминированные запросы (tools):\n";
     std::cout << "  outline|callers|callees|refs|includes|overrides|dispatch\n";
     std::cout << "  def|ancestors|derived|search|source <symbol> [<path>]\n";
+    std::cout << "  ask \"<text>\" [--file F --line L --col C] [--stream]   Запрос (с курсором)\n";
     std::cout << "\nОпции: --config PATH --project PATH --compile-commands PATH --yes --json --verbose\n";
-    std::cout << "Не реализовано: ask\n";
 }
 
 /**
@@ -206,6 +203,30 @@ int main(int argc, char* argv[])
         return run_init();
     }
 
+    if (command == "serve")
+    {
+        // Протокольный режим: JSON-RPC поверх stdio (для IDE/плагина).
+        // Опционально: --project <root> — открыть проект до начала цикла.
+        std::string project_root;
+        for (int index = 2; index < argc; ++index)
+        {
+            const std::string arg = argv[index];
+            if (arg == "--project" && index + 1 < argc)
+            {
+                project_root = argv[index + 1];
+            }
+        }
+
+        fcpp::CConfigManager protocol_config;
+        protocol_config.load();
+        fcpp::CProtocolServer server(protocol_config, std::cin, std::cout);
+        if (!project_root.empty())
+        {
+            server.open_project(project_root);
+        }
+        return server.run();
+    }
+
     if (command == "doctor")
     {
         fcpp::CConfigManager config;
@@ -230,79 +251,6 @@ int main(int argc, char* argv[])
         }
         std::cout << "конфигурация перечитана\n";
         return 0;
-    }
-
-    if (command == "route")
-    {
-        // Детерминированная проверка конвейера без LLM: route --area ... [--relation ...]
-        // [--projection ...] [--subject <name>] [--project <path>]
-        fcpp::SIntent intent;
-        std::string project_path;
-        for (int index = 2; index < argc; ++index)
-        {
-            const std::string arg = argv[index];
-            auto next = [&argc, &argv, index]() -> std::string
-            {
-                return (index + 1 < argc) ? std::string(argv[index + 1]) : std::string();
-            };
-            if (arg == "--area")
-            {
-                fcpp::parse_area(next(), intent.m_area);
-            }
-            else if (arg == "--relation")
-            {
-                fcpp::parse_relation(next(), intent.m_relation);
-            }
-            else if (arg == "--projection")
-            {
-                fcpp::parse_projection(next(), intent.m_projection);
-            }
-            else if (arg == "--subject")
-            {
-                intent.m_subject.m_name = next();
-            }
-            else if (arg == "--project")
-            {
-                project_path = next();
-            }
-        }
-
-        fcpp::CConfigManager config;
-        config.load();
-        fcpp::CProjectManager manager(config);
-        if (!project_path.empty())
-        {
-            manager.open(project_path);
-        }
-        else
-        {
-            manager.restore_session();
-        }
-
-        fcpp::CRequestPipeline pipeline(&manager, &config);
-        const fcpp::SRequestOutcome outcome = pipeline.run(intent);
-
-        std::cout << "intent:  " << fcpp::area_name(intent.m_area) << " "
-                  << fcpp::relation_name(intent.m_relation) << " "
-                  << fcpp::projection_name(intent.m_projection) << '\n';
-        std::cout << "stage:   " << fcpp::stage_name(outcome.m_stage) << '\n';
-        std::cout << "outcome: " << fcpp::outcome_kind_name(outcome.m_kind) << '\n';
-        std::cout << "message: " << outcome.m_message << '\n';
-        if (!outcome.m_options.empty())
-        {
-            std::cout << "options:\n";
-            for (const std::string& option : outcome.m_options)
-            {
-                std::cout << "  - " << option << '\n';
-            }
-        }
-        std::cout << "plan:\n";
-        for (const fcpp::EToolName tool : outcome.m_plan.m_tools)
-        {
-            std::cout << "  - " << fcpp::tool_name(tool) << '\n';
-        }
-
-        return (outcome.m_kind == fcpp::EOutcomeKind::NotUnderstood) ? 2 : 0;
     }
 
     fcpp::CConfigManager config;
@@ -415,6 +363,54 @@ int main(int argc, char* argv[])
         std::cout << (command == "build" ? "сборка успешна\n" : "тесты пройдены\n");
         return 0;
     }
+    if (command == "ask")
+    {
+        if (argc < 3)
+        {
+            std::cerr << "fcpp-agent: ask требует текст запроса\n";
+            return 2;
+        }
+
+        // Тело запроса §94: только text + editor{file,cursor}. --stream — режим вывода.
+        fcpp::SApiRequest request;
+        request.m_method = fcpp::EApiMethod::Ask;
+        request.m_text = argv[2];
+        for (int index = 3; index < argc; ++index)
+        {
+            const std::string arg = argv[index];
+            auto next = [&argc, &argv, index]() -> std::string
+            {
+                return (index + 1 < argc) ? std::string(argv[index + 1]) : std::string();
+            };
+            if (arg == "--stream")
+            {
+                request.m_stream = true;
+            }
+            else if (arg == "--file")
+            {
+                request.m_editor_file = next();
+            }
+            else if (arg == "--line")
+            {
+                request.m_editor_line = static_cast<std::uint32_t>(std::strtoul(next().c_str(), nullptr, 10));
+            }
+            else if (arg == "--col")
+            {
+                request.m_editor_column = static_cast<std::uint32_t>(std::strtoul(next().c_str(), nullptr, 10));
+            }
+        }
+
+        const fcpp::SApiResponse response = api.execute(request);
+        if (!response.m_text.empty())
+        {
+            std::cout << response.m_text << '\n';
+        }
+        else if (!response.m_ok && !response.m_message.empty())
+        {
+            std::cerr << "fcpp-agent: " << response.m_message << '\n';
+        }
+        return response.m_ok ? 0 : 1;
+    }
     if (command == "patch")
     {
         if (argc < 3)
@@ -434,9 +430,14 @@ int main(int argc, char* argv[])
         request.m_payload = text;
         for (int index = 3; index < argc; ++index)
         {
-            if (std::string(argv[index]) == "--yes")
+            const std::string arg = argv[index];
+            if (arg == "--yes")
             {
                 request.m_assume_yes = true;
+            }
+            else if (arg == "--build")
+            {
+                request.m_build_after = true;
             }
         }
 
@@ -447,6 +448,10 @@ int main(int argc, char* argv[])
             return 1;
         }
         std::cout << response.m_text << '\n';
+        if (request.m_build_after)
+        {
+            std::cout << "сборка успешна\n";
+        }
         return 0;
     }
 

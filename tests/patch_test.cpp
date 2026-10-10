@@ -100,6 +100,11 @@ TEST_CASE("patch validator применяет hunk и отклоняет кон�
     fcpp::SPatchValidation second;
     REQUIRE_FALSE(validator.validate(patch, second));
 
+    // Откат (COMPILATION FAIL) возвращает исходное содержимое.
+    REQUIRE(applier.revert(validation.m_changes, message));
+    REQUIRE(slurp(root / "src" / "a.cpp").find("return 1;") != std::string::npos);
+    REQUIRE(slurp(root / "src" / "a.cpp").find("int x = 1;") == std::string::npos);
+
     std::filesystem::remove_all(root);
 }
 

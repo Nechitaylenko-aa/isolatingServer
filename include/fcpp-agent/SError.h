@@ -29,6 +29,7 @@ enum class EErrorKind
     PermissionDenied,///< Операция запрещена политикой (§47).
     PatchInvalid,   ///< Патч невалиден (§46).
     PatchApplyFailed,///< Ошибка применения патча (§77).
+    BuildFailed,    ///< Сборка не прошла (COMPILATION FAIL, ADR-10).
     Count           ///< Маркер количества для инициализации массива.
 };
 

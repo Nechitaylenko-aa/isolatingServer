@@ -113,6 +113,107 @@ const char* tool_name(EToolName name)
     return m_tool_names[static_cast<std::size_t>(name)];
 }
 
+namespace
+{
+
+/** @brief Краткие описания инструментов для модели (ReAct), по EToolName. */
+static const char* const m_tool_descriptions[static_cast<std::size_t>(EToolName::Count)]
+{
+    "List members (methods/fields/nested types) of a class or struct by qualified name.",
+    "List functions that call the given symbol.",
+    "List symbols called by the given function.",
+    "List locations where the given symbol is referenced/used.",
+    "List files included by the given file path.",
+    "List methods that override the given virtual method.",
+    "Resolve a virtual method to all its implementations in derived classes.",
+    "Return the canonical definition of a symbol.",
+    "List base classes (ancestors) of the given class.",
+    "List classes derived from the given class.",
+    "Find symbols by (qualified) name.",
+    "Return the source code slice (body/signature) of a symbol.",
+};
+
+} // namespace
+
+SModelTool tool_schema(EToolName name)
+{
+    SModelTool schema;
+    schema.m_name = tool_name(name);
+    schema.m_description = m_tool_descriptions[static_cast<std::size_t>(name)];
+
+    SModelToolParam target;
+    target.m_name = (name == EToolName::Includes) ? "path" : "name";
+    target.m_type = "string";
+    target.m_description = (name == EToolName::Includes)
+                               ? "File path (relative to project root)."
+                               : "Qualified name (or USR) of the target symbol.";
+    target.m_required = true;
+    schema.m_params.push_back(std::move(target));
+    return schema;
+}
+
+std::vector<SModelTool> tool_schemas()
+{
+    std::vector<SModelTool> schemas;
+    schemas.reserve(static_cast<std::size_t>(EToolName::Count));
+    for (std::size_t index = 0; index < static_cast<std::size_t>(EToolName::Count); ++index)
+    {
+        schemas.push_back(tool_schema(static_cast<EToolName>(index)));
+    }
+    return schemas;
+}
+
+std::string format_tool_result(const SToolResult& result)
+{
+    if (!result.m_ok)
+    {
+        std::string text = std::string("ERROR: ") + error_kind_name(result.m_error) + ": " + result.m_message;
+        if (!result.m_names.empty())
+        {
+            text += "\nCandidates:";
+            for (const std::string& name : result.m_names)
+            {
+                text += "\n  " + name;
+            }
+        }
+        return text;
+    }
+
+    std::string text;
+    for (const SSymbol& symbol : result.m_symbols)
+    {
+        text += symbol_kind_name(symbol.m_kind);
+        text += " ";
+        text += symbol.m_qualified_name;
+        if (!symbol.m_signature.empty())
+        {
+            text += "  // ";
+            text += symbol.m_signature;
+        }
+        text += "\n";
+    }
+    for (const std::string& name : result.m_names)
+    {
+        text += name;
+        text += "\n";
+    }
+    for (const SSymbolLocation& location : result.m_locations)
+    {
+        text += location.m_file + ":" + std::to_string(location.m_range.m_line);
+        text += "\n";
+    }
+    if (!result.m_text.empty())
+    {
+        text += result.m_text;
+        text += "\n";
+    }
+    if (text.empty())
+    {
+        text = "(no matches)\n";
+    }
+    return text;
+}
+
 const char* symbol_kind_name(ESymbolKind kind)
 {
     return m_symbol_kind_names[static_cast<std::size_t>(kind)];
@@ -131,8 +232,10 @@ EToolName CIndexTool::name() const
 bool CIndexTool::resolve_usr(const SToolRequest& request,
                              CToolContext& context,
                              std::string& out_usr,
+                             std::vector<SSymbol>& out_candidates,
                              SError& out_error) const
 {
+    out_candidates.clear();
     if (!request.m_file.empty() && request.m_line > 0 && context.clang() != nullptr)
     {
         std::vector<std::string> arguments;
@@ -223,8 +326,11 @@ bool CIndexTool::resolve_usr(const SToolRequest& request,
         return true;
     }
 
+    // Неоднозначность: отдаём кандидатов, чтобы модель выбрала следующий вызов.
+    out_candidates = candidates;
     out_error.m_kind = EErrorKind::Ambiguous;
-    out_error.m_message = "ambiguous target: " + request.m_target;
+    out_error.m_message = "ambiguous target: " + request.m_target
+                          + " (candidates listed; call again with a qualified name)";
     return false;
 }
 
@@ -282,10 +388,20 @@ SToolResult CIndexTool::execute(const SToolRequest& request, CToolContext& conte
     }
 
     std::string usr;
+    std::vector<SSymbol> candidates;
     SError error;
-    if (!resolve_usr(request, context, usr, error))
+    if (!resolve_usr(request, context, usr, candidates, error))
     {
-        return make_error(error.m_kind, error.m_message);
+        SToolResult failed;
+        failed.m_ok = false;
+        failed.m_error = error.m_kind;
+        failed.m_message = error.m_message;
+        // Для модели: список кандидатов (qualified_name) при неоднозначности.
+        for (const SSymbol& symbol : candidates)
+        {
+            failed.m_names.push_back(symbol.m_qualified_name);
+        }
+        return failed;
     }
 
     SToolResult result;

@@ -20,11 +20,11 @@ namespace fcpp
 {
 
 /**
- * @brief Уровень воздействия операции.
+ * @brief Уровень воздействия выполняемой команды (не путать с осью Effect Intent).
  *
  * Порядок возрастания опасности: READ_ONLY < WRITE_SOURCE < EXECUTE < WRITE_BUILD.
  */
-enum EEffect
+enum EExecEffect
 {
     EFFECT_READ_ONLY,    ///< Только чтение.
     EFFECT_WRITE_SOURCE, ///< Изменение исходников.
@@ -54,7 +54,7 @@ struct SCommandArgs
     std::vector<std::string> m_arguments;///< Аргументы командной строки.
     std::filesystem::path m_working_dir; ///< Рабочая директория.
     std::uint32_t m_timeout_seconds;     ///< Таймаут выполнения (0 — без таймаута).
-    EEffect m_effect;                    ///< Уровень воздействия операции.
+    EExecEffect m_effect;                ///< Уровень воздействия операции.
 };
 
 /**

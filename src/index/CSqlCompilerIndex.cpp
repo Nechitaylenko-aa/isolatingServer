@@ -35,6 +35,29 @@ std::string column_text(sqlite3_stmt* statement, int index)
     return (text != nullptr) ? reinterpret_cast<const char*>(text) : std::string();
 }
 
+/**
+ * @brief Сопоставить текстовое имя категории символу (коды enum-массива).
+ * @param name Текстовая категория из индекса.
+ * @return Категория (Symbol по умолчанию).
+ */
+ESymbolKind kind_from_name(const std::string& name)
+{
+    static const char* const names[static_cast<std::size_t>(ESymbolKind::Count)]
+    {
+        "namespace", "class", "struct", "union", "enum", "enum_constant",
+        "typedef", "function", "method", "constructor", "destructor",
+        "variable", "field", "parameter"
+    };
+    for (std::size_t index = 0; index < static_cast<std::size_t>(ESymbolKind::Count); ++index)
+    {
+        if (name == names[index])
+        {
+            return static_cast<ESymbolKind>(index);
+        }
+    }
+    return ESymbolKind::Variable;
+}
+
 } // namespace
 
 CSqlCompilerIndex::CSqlCompilerIndex(sqlite3* db)
@@ -286,6 +309,55 @@ std::vector<std::string> CSqlCompilerIndex::dispatch_targets(const std::string& 
         }
     }
 
+    return result;
+}
+
+std::optional<SSymbol> CSqlCompilerIndex::symbol_at(const std::string& file,
+                                                    std::uint32_t line,
+                                                    std::uint32_t column) const
+{
+    if (m_db == nullptr || file.empty() || line == 0)
+    {
+        return std::nullopt;
+    }
+
+    (void)column;
+    const std::string sql =
+        "SELECT s.usr, s.kind, s.qualified_name, s.name, s.signature, s.access, "
+        "s.is_definition, s.flags "
+        "FROM symbol_location sl JOIN symbol s ON s.id = sl.symbol_id "
+        "JOIN file f ON f.id = sl.file_id "
+        "WHERE f.path = ?1 AND s.generation = " + std::string(k_active_generation)
+        + " AND sl.line <= ?2 AND sl.end_line >= ?2 "
+        "ORDER BY (sl.end_line - sl.line) ASC LIMIT 1;";
+
+    sqlite3_stmt* statement = nullptr;
+    if (sqlite3_prepare_v2(m_db, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK)
+    {
+        return std::nullopt;
+    }
+    sqlite3_bind_text(statement, 1, file.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 2, static_cast<int>(line));
+
+    std::optional<SSymbol> result;
+    if (sqlite3_step(statement) == SQLITE_ROW)
+    {
+        SSymbol symbol;
+        symbol.m_usr = column_text(statement, 0);
+        symbol.m_kind = kind_from_name(column_text(statement, 1));
+        symbol.m_qualified_name = column_text(statement, 2);
+        symbol.m_name = column_text(statement, 3);
+        symbol.m_signature = column_text(statement, 4);
+        symbol.m_access = column_text(statement, 5);
+        symbol.m_is_definition = (sqlite3_column_int(statement, 6) != 0);
+        const int flags = sqlite3_column_int(statement, 7);
+        symbol.m_is_virtual = ((flags & 1) != 0);
+        symbol.m_is_pure_virtual = ((flags & 2) != 0);
+        symbol.m_is_static = ((flags & 4) != 0);
+        symbol.m_location.m_file = file;
+        result = std::move(symbol);
+    }
+    sqlite3_finalize(statement);
     return result;
 }
 

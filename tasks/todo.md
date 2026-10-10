@@ -1,104 +1,116 @@
 # fcpp-agent: Глобальный Бэклог
 
+Порядок реализации (ADR-12): детерминизм вперёд, LLM — последним.
+CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
+
+> **НОВОЕ направление (план):** LLM-driven loop (ReAct) поверх детерминированных tools.
+> Эксперимент подтвердил: локальная `Qwen2.5-Coder-14B` нативно умеет `tools`/`tool_calls`.
+> Детальный план: [`plans/react-loop-todo.md`](../plans/react-loop-todo.md);
+> отчёт эксперимента: [`plans/local-model-loop-test.md`](../plans/local-model-loop-test.md).
+
 ## [x] Этап 0: Архитектурное проектирование и устранение неопределенностей
-* [x] Сформировать предложения по Блоку 1 (Инфраструктура и CLI) в `decisions.md`
-* [x] Сформировать предложения по Блоку 2 (Индексация и C++ Парсинг) в `decisions.md`
-* [x] Сформировать предложения по Блоку 3 (LLM, Промптинг и Безопасность) в `decisions.md`
-* [x] Утвердить базовые абстракции (интерфейсы `IIndex`, `ILLMClient`, `IExecutor`) до реализации плагинов.
+* [x] ADR Блоки 1–3 в `decisions.md`; ADR-11 (IClang/API libclang); ADR-12 (политика схемы и порядок).
+* [x] Базовые абстракции: `IIndex`, `ILLMClient`, `IExecutor`, `IClang`, `ITool`, `IModelApi`, `IAgentApi`.
 
 ## [x] Этап 1: Скелет проекта и CLI Инфраструктура
-* [x] Инициализировать проект (C++20 + CMake + Ninja, `-Wall -Wextra -Werror`, FetchContent: nlohmann/json, sqlite3).
-* [x] Настроить парсинг базовых CLI-команд (`init`, `open`, `close`, `projects`, `status`, `index`).
-* [x] Настроить инициализацию SQLite (миграции + схема; `CSchemaMigrator`).
-* [x] Конфигурация агента в стиле rc.conf (`CConfigManager`, bootstrap + load/validate).
-* [x] Логирование — отсутствует (открытая задача).
+* [x] C++20 + CMake + Ninja; FetchContent: nlohmann/json, sqlite3; hard-require libclang 22 и libcurl.
+* [x] Конфигурация rc.conf (`CConfigManager`): bootstrap + load/validate + **merge недостающих ключей** + `reload_config()`.
+* [x] Структура каталогов `~/.fcpp-agent/{db,projects}`.
 
-## [x] Этап 2: CMake & Сборщик контекста
-* [x] Реализовать модуль `compile_commands.json` (детерминированный локатор, 3 источника; FAIL при отсутствии).
+## [x] Этап 2: CMake & compile_commands
+* [x] Детерминированный локатор `compile_commands.json` (3 источника: flag/config/`<root>/<default_build>`; FAIL при отсутствии).
 * [x] Парсер `compile_commands.json` (nlohmann/json).
-* [x] Инвентаризация translation units в `index.db` (`file`, `compile_command`), реальный `index status`.
+* [x] Инвентаризация TU в `index.db` (`file`, `compile_command`); реальный `index status`.
 
-## [x] Этап 3: Project Manager, безопасность и тесты
-* [x] Реестр проектов (`registry_project`), идентификация по каноническому пути, `db_path` из SHA-256 (`CHash`).
-* [x] `CProjectManager`: `open`/`close`/`current`/`list`; миграции per-project БД; идемпотентный `open`.
-* [x] `CExecutor` (ADR-08): whitelist, защита от инъекций, `fork`/`execvp` (ещё не подключён к CLI).
-* [x] Catch2 3.x: интеграционные тесты Project Manager и compile_commands (10 кейсов, CTest).
+## [x] Этап 3: Project Manager и безопасность
+* [x] Реестр проектов (`registry_project`), идентификация по каноническому пути, `db_path` из SHA-256.
+* [x] `CProjectManager`: `open/close/current/list`; идемпотентный `open`; `find_symbols`; сессия.
+* [x] `CExecutor` (ADR-08): whitelist, защита от инъекций, `fork`/`execvp`; **подключён к CLI** (`build`/`test`/`patch`).
 
-## [x] Этап 4: libclang-индексация (символы и связи)
-* [x] `migrations/0004_relations.sql` — таблицы `include/inheritance/override/reference/call` (схема v4).
-* [x] `IClang` + `CClang22` (libclang 22; hard-require, санитайз `-o/-c`, system-header фильтр).
+## [x] Этап 4: libclang-индексация
+* [x] `IClang` + `CClang22` (system-header фильтр; санитайз `-o/-c`); провайдеры в CMake (libclang 22).
 * [x] `ICompilerIndex` + `CSqlCompilerIndex` (`base_types/ancestors/derived_types/overrides/base_method/dispatch_targets/file_includes/included_by`).
-* [x] Прогрев кэша в `open()`: libclang → `symbol`/`symbol_location`/`include`/`inheritance`/`override`/`reference`/`call` (дедуп по USR/ребру).
-* [x] Проверено на dogfood: 36 символов, Shape→Circle/Rectangle, `dispatch_targets(area)=3`.
-* [x] `index rebuild` в новую generation; `cursor_at` (getLocation + getCursor, точный резолв).
+* [x] Прогрев: `symbol`/`symbol_location`/`include`/`inheritance`/`override`/`reference`/`call` (дедуп по USR/ребру).
+* [x] `index rebuild` в новую generation; точный `cursor_at` (getLocation + getCursor).
 
 ## [x] Этап 4.1: Stale index & pointwise refresh
-* [x] `migrations/0005_symbol_parent_usr.sql` (parent_usr для перелинковки без полного rebuild).
-* [x] `SStaleReport` + `detect_stale`/`refresh_if_stale` + fingerprint `compile_commands.json`.
-* [x] Детекция: mtime+size → подтверждение SHA-256; транзитивные include → dirty TU; add/drop; инвалидация окружения.
-* [x] Точечный `refresh`: переиндексация только dirty TU и их заголовков, `relink_parent_ids`, обновление хэшей.
-* [x] `open` авто-refresh при устаревании; `index status` показывает `stale`/`dirty`.
-* [x] Тест `stale_test`: изменение заголовка → 2 dirty TU → точечный refresh → индекс снова актуален. CTest 18/18.
+* [x] Детекция: mtime+size → SHA-256; транзитивные include → dirty TU; add/drop; инвалидация окружения.
+* [x] Точечный `refresh` (только dirty TU), `relink_parent_ids`, обновление хэшей; `open` авто-refresh.
 
 ## [x] Этап 5: Tools и query layer
-* [x] `ITool` + `CIndexTool` + `CToolRegistry` — типизированные инструменты (Task/Request/Result).
-* [x] Инструменты: `outline`, `callers`, `callees`, `refs`, `includes`, `overrides`, `dispatch`, `def`, `ancestors`, `derived`, `search`, `source` (Zero-Window-срез).
-* [x] Типизированные ошибки `EErrorKind` (Секция 3, enum-массив).
-* [x] `CToolContext` — единое соединение (индекс владеет, граф делит).
-* [x] CLI-команды детерминированных запросов + исправленная справка (`ask/build/test/tidy` помечены как нереализованные).
-* [x] Устранён дефект неинициализированных полей DTO (default member initializers во всех публичных структурах).
-* [x] Тесты: `tools_test` (реестр + dogfood), CTest 17/17.
-* [ ] Deterministic Evidence Planner (Intent -> [tools]) — Этап 6.
-
-## Порядок дальнейших этапов (ADR-12: детерминизм вперёд, LLM — последним)
+* [x] `ITool` + `CIndexTool` + `CToolRegistry`; инструменты: `outline/callers/callees/refs/includes/overrides/dispatch/def/ancestors/derived/search/source`.
+* [x] Типизированные ошибки `EErrorKind`; `CToolContext` (единое соединение).
+* [x] CLI детерминированных запросов; DTO с default member initializers.
 
 ## [x] Этап 8a: Инфраструктурный минимум
-* [x] `allow_read`/`allow_write`/`allow_exec`/`allow_subtasks` в конфиге (§47/§48), безопасные дефолты.
-* [x] `fcpp doctor` — preflight инструментов через `CExecutor` (ADR-06).
-* [x] Structured logging (§60): `ILogger` + `CLogger` (файл вне проекта, enum-уровни).
-* [x] Персистентный «текущий проект»: `open` сохраняет сессию, `status`/`index`/tools восстанавливают, `close` очищает.
-* [x] Тест `stage8a_test` (permissions + session + doctor); CTest 21/21.
-* [ ] Замечание: логирование реализовано, но пока не подключено во все компоненты (базово — интерфейс + файл).
+* [x] `allow_read/write/exec/subtasks` (§47/§48) в конфиге, безопасные дефолты.
+* [x] `fcpp doctor` (preflight через `CExecutor`); structured logging `ILogger`/`CLogger`.
+* [x] Персистентный «текущий проект» (session: save/restore/clear).
 
-## [ ] Этап 6a: Детерминированное ядро запроса (без LLM) — СЛЕДУЮЩИЙ
-* [ ] `Intent` (Area/Subject/Relation/Projection/Effect), реестры маппинга (enum-массивы).
-* [ ] Subject Resolver (надстройка над `cursor_at`), дедупликация неоднозначностей (§21/§50).
-* [ ] Evidence Planner — table-driven `Intent -> [tools]`; проверка полноты tools на канонических вопросах.
-* [ ] Context Budget (§64) — лимиты и top-N.
+## [x] Этап 6a: Детерминированное ядро запроса (без LLM)
+* [x] `SIntent` IR (Area×Subject×Relation×Projection×Effect) + enum-массивы/парсеры.
+* [x] `CRequestPipeline` — **весь конвейер в одном классе**: стадии + ворота + монотонная цепочка исходов.
+* [x] `SRequestOutcome` (`OK/DEGRADE/CLARIFY/NOT_UNDERSTOOD/REFUSED/FAILED`); дефолт неизвестного → `NOT_UNDERSTOOD`.
+* [x] Evidence Planner — table-driven `Intent → [tools]` (14 маршрутов); CLI `route` (проверка без LLM).
+* [x] Benchmark уровня A (детерминированный): `pipeline_test` (5 кейсов).
+* [ ] Context Budget (§64) — лимиты и top-N в упаковке Evidence.
 
 ## [x] Этап 7a: Patch-pipeline без LLM
-* [x] `SPatch` модель + `CPatchParser` (unified diff).
-* [x] `CPatchValidator`: dry-run сопоставление контекста, защита от выхода за корень проекта, план изменений.
-* [x] `CPatchApplier`: атомарное применение (all-or-nothing) с откатом при ошибке (§77).
-* [x] Policy: `allow_write` (§47) + интерактивное Y/N (`--yes` для non-interactive).
-* [x] CLI `patch <file|->`, `build` (cmake --build), `test` (ctest) через `CExecutor`.
-* [x] Тесты `patch_test` (parse/apply/conflict/escape); CTest 24/24.
-* [ ] Post-patch автосборка внутри `patch` (сейчас отдельная команда `build`).
+* [x] `SPatch` + `CPatchParser` (unified diff); `CPatchValidator` (dry-run, escape-guard); `CPatchApplier` (атомарно + откат).
+* [x] Policy: `allow_write` + Y/N (`--yes`); CLI `patch`, `build`, `test`.
 
 ## [x] Этап 8b: Agent API (тонкий CLI, §93)
-* [x] `IAgentApi` + `SApiRequest/SApiResponse` + `EApiMethod` (типизированный API).
-* [x] `CAgentApi` — методы: agent.status/capabilities, project.*, index.*, build, tests, tool, patch, doctor.
-* [x] CLI переписан как **тонкий клиент** (argv → SApiRequest → CAgentApi); прямые вызовы core убраны.
-* [x] API не экспонирует `Intent/Area/Relation/Tool` как обязательные (§89.39); `SApiRequest` с `m_payload` (патч).
-* [x] Тест `agent_api_test` (open/status/tool/patch/close); CTest 25/25.
+* [x] `IAgentApi` + `SApiRequest/SApiResponse` + `EApiMethod`; `CAgentApi` (project/index/build/tests/tool/patch/doctor/config.reload).
+* [x] CLI — тонкий клиент (argv → SApiRequest → CAgentApi); API не экспонирует `Intent/Area/Relation` (§89.39).
 
-## [ ] Этап 6b: LLM-биндинг
-* [ ] `ILLMClient`: llama-cpp (`prompt_cache`, стриминг), XML-обмен (Aider-style).
-* [ ] `lite` заполняет `Intent`; `main` формирует ответ.
+## [x] Этап 6b: LLM-биндинг
+* [x] `IModelApi` + DTO; `CUrlTransport` (libcurl); `CEndpointUtil` (base_url до `/v1` + `/chat/completions`).
+* [x] `CModelOpenAICompat` (SSE), `CModelClaude` (`/v1/messages`); `CModelFactory` (main/light/remote, `same_as_main`).
+* [x] `CIntentAnalyzer` (XML→Intent) + `CAskService` (lite→pipeline→main) + CLI `ask --stream`.
 
-## [ ] Этап 7b: Полный цикл изменения
-* [ ] LLM генерирует патч → конвейер 7a.
+## [x] Конфигурация (расширение)
+* [x] Все ключи: модели (`model_main/light/remote_*`), `db_dir`, `default_build`, `tool_*`, `enable_tidy`, `allow_*`.
+* [x] `init`: нет файла → полный; есть → merge недостающих; `reload_config()` + CLI `reload`.
 
-## [ ] Этап 6c: Каскад моделей и benchmark
-* [ ] Cascading Lite → Main → Cloud (ADR-10).
-* [ ] Benchmark классификации (§71–72).
+## [x] Контракт `ask` и разрешение курсора (ADR-13, ADR-14, §94)
+* [x] **ADR-14/§94**: клиент `ask` шлёт только `text + editor{file,cursor}`; внутренние сущности (`Area/Relation/Projection/Tool/target`) выводит ядро. `EApiMethod::Ask`; CLI вызывает через `CAgentApi` (§93); команда `route` удалена.
+* [x] **ADR-13**: вид (`m_kind`) задаёт фраза и не затирается курсором; курсор разрешает имя как ближайшую охватывающую сущность запрошенного вида (§21); вызов `resolve_cursor` только при пустом имени; промпт lite запрещает выдумывать имя для дейктики.
+* [x] `IClang`/`CClang22`: `EFocusKind` + `cursor_at(..., focus)` с подъёмом по семантическим родителям.
+* [x] Устранена коллизия `EEffect` (Intent) ↔ исполнительский enum → переименован в `EExecEffect`.
+* [x] Прогон: `ask "Что делает этот класс?"` @ `shape.hpp:25:15` → `UNDERSTAND CLASS dogfood::model::Shape / SELF / EXPLANATION`. CTest 43/43.
 
-## [x] Инфраструктура обкатки (tooling)
-* [x] Обкаточный C++/CMake-проект вне репозитория: `/home/artem/projects/outer/sandbox/dogfood`
-      (Shape → Circle/Rectangle: inheritance, overrides, call-graph, include-граф; Ninja; real `compile_commands.json`).
-* [x] Проверено end-to-end: сборка dogfood → `fcpp-agent open <path>` → инвентарь 3 TU с реальными флагами
-      (`-I.../src -std=gnu++20`) в `index.db`.
-* [ ] TODO: fixture-набор в репозитории `tests/fixtures/` (минимальные проекты + зафиксированный `compile_commands.json`).
-* Примечание по среде: доступны clang/libclang 19 (base) и **libclang 22** (`/usr/local/llvm22`, соответствует §2.2);
-      cmake 3.31.10, ninja 1.13.2.
-* Известный техдолг: `status`/`index status` в отдельном процессе не видят проект (нет персистентной сессии) → Этап 8.
+## Обкатка (tooling)
+* [x] Проект вне репозитория: `/home/artem/projects/outer/sandbox/dogfood`.
+* [ ] TODO: fixture-набор `tests/fixtures/` (минимальные проекты + зафиксированный `compile_commands.json`).
+
+---
+
+## Осталось (не блокирует текущий функционал)
+* [ ] **7b** — полный цикл изменения: LLM генерирует патч → конвейер 7a (+ каскад ADR-10, hard-stop).
+* [x] **6c (каскад)** — детерминированный `CModelCascade` (триггеры `EGlitchKind`, бюджет 1 ретрай/уровень, передача ошибки наверх, hard-stop); `CEscalatingIntentAnalyzer` (lite→main→remote) подключён в `ask`. Тест `cascade_test`; CTest 43/43.
+* [ ] **6c (answer-каскад)** — распространить эскалацию на стадию генерации ответа (сейчас каскад покрывает Intent).
+* [ ] **6c (benchmark B)** — LLM-классификация (§71–72).
+* [x] **llama.cpp**: выполняется через `llama-server` (OpenAI-compatible) → используется существующим `CModelOpenAICompat`, отдельный HTTP-клиент не нужен. Имя модели для локального сервера опционально (`is_available()` = только base_url).
+* [x] **Prompt cache**: обеспечивается `llama-server` (cache_n в timings) при стабильном префиксе; наш промт держит неизменяемый system-prefix.
+* [x] **Первый полный цикл на реальной модели**: `ask` → lite-модель (`Qwen2.5-Coder-14B`) → Intent → pipeline → Evidence → main → ответ.
+* [ ] Answer-каскад: распространить эскалацию на генерацию ответа (сейчас — Intent).
+* [ ] Benchmark B: собрать реальные промахи классификации в regression-кейсы.
+* [x] **Evidence-подача** в main внутри `ask`: `CEvidenceCollector` (выполняет план → Zero-Window-секции), `format_evidence` → промт main. Тест `evidence_test`; CTest 39/39.
+* [x] Post-patch автосборка внутри `patch` (флаг `--build`) + **COMPILATION FAIL → авто-откат** (детерминированный триггер ADR-10).
+* [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.
+* [ ] Подключение `CLogger` во все компоненты (сейчас интерфейс + файл).
+* [x] `allow_subtasks` (§48) — двухфазная декомпозиция (ADR-16/ADR-17): Фаза A (lite → текстовые подвопросы) + Фаза B (`CIntentAnalyzer`) + единый dataflow-цикл в `ask` с накоплением Evidence. CTest 47/47.
+* [x] **Качество декомпозиции B-002 (ADR-18)**: якорь через `ancestors`; классификация `UNDERSTAND`/`OVERRIDES` (+ пост-коррекция); маршруты Overrides/References → Source; фильтр по `Subject.kind`.
+* [x] **Fan-out Subject→N (ADR-19, path A)**: `outline(класс) → dispatch_targets(метод) → source(реализация)` в `CEvidenceCollector`; лимиты 10/20. B-002 → **PASS**: вердикт «Все методы реализованы» + таблица Circle/Rectangle × area/name.
+* [x] **B2 (ADR-20): курсор → символ через IClang в промпт lite**. Одиночный вопрос: `[cursor symbol: NAME (KIND)]` уходит в lite → субъект = `Rectangle::area` (B-003 PASS). Составной: подвопросы + якорь иерархии (B-002 сохраняет PASS).
+* [x] `fcpp serve` (Agent API как процесс, JSON-RPC поверх stdio) — реализован (ADR-26).
+* [ ] **Conversation Context (§49/§50)** — не реализован (недоделка, ADR-27): нет `session_id` в `ask`, нет методов `session.open/close/update_context` (§89.10/§89.12), нет хранилища диалога и сериализации. `save_session`/`restore_session` — про проект, не про диалог.
+* [ ] **Роутинг planner(cloud)/worker(local) — ADR-24** (недоделка, ADR-27): нет расчёта blast radius из индекса, handoff-пакета, переключения по раундам, sticky-планировщика, тегирования раундов, бюджета cloud. Сейчас есть только эскалация по сбою (ADR-25).
+* [ ] Порядок закрытия (ADR-27): сначала Conversation Context (§49) — базис; затем роутинг + blast radius + handoff (ADR-24/§7).
+* [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.
+* [ ] Авто-выбор remote-модели вне эскалации — задел.
+
+## Известные ограничения
+* `index.db`/`registry.db` — dev-схема без версионирования до релиза v1 (ADR-12); индекс — кэш (пересоздаётся).
+* `ask` собирает Evidence по плану; при отсутствии данных — явный отказ «в индексе недостаточно информации» (§57).
+* Среда: clang/libclang 19 (base) и **libclang 22** (`/usr/local/llvm22`, §2.2); libcurl 8.19; cmake 3.31.10; ninja 1.13.2.

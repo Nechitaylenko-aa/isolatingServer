@@ -118,6 +118,16 @@ public:
     bool restore_session();
 
     /**
+     * @brief Лёгкое восстановление сессии: идентификация проекта + статус из БД.
+     *
+     * Не выполняет open/warm/refresh — только вычисляет пути и читает состояние
+     * индекса (read-only). Для команд `status`/`index.status`, где тяжёлая
+     * индексация недопустима.
+     * @return true если проект идентифицирован.
+     */
+    bool restore_session_light();
+
+    /**
      * @brief Очистить сессию (текущий проект).
      */
     void clear_session() const;

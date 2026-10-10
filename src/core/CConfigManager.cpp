@@ -185,7 +185,7 @@ bool CConfigManager::bootstrap()
     // Каноническая схема конфига: порядок и значения по умолчанию.
     std::vector<std::pair<std::string, std::string>> defaults =
     {
-        {"model_main", "http://127.0.0.1:8080"},
+        {"model_main", "http://127.0.0.1:8080/v1"},
         {"model_main_name", ""},
         {"model_light", "same_as_main"},
         {"model_light_name", ""},
@@ -205,7 +205,9 @@ bool CConfigManager::bootstrap()
         {"allow_read", "YES"},
         {"allow_write", "YES"},
         {"allow_exec", "YES"},
-        {"allow_subtasks", "NO"}
+        {"allow_subtasks", "NO"},
+        {"react_loop", "YES"},
+        {"loop_model", "main"}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -238,7 +240,11 @@ bool CConfigManager::bootstrap()
         content << "allow_read=\"" << defaults[17].second << "\"\n";
         content << "allow_write=\"" << defaults[18].second << "\"\n";
         content << "allow_exec=\"" << defaults[19].second << "\"\n";
-        content << "allow_subtasks=\"" << defaults[20].second << "\"\n";
+        content << "allow_subtasks=\"" << defaults[20].second << "\"\n\n";
+        content << "# --- ReAct loop (ADR-23): LLM управляет вызовом tools ---\n";
+        content << "react_loop=\"" << defaults[21].second << "\"\n";
+        content << "# Which model role drives the loop: main | light | remote\n";
+        content << "loop_model=\"" << defaults[22].second << "\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -370,6 +376,10 @@ bool CConfigManager::load() const
     m_config.m_allow_write = read_bool("allow_write", true);
     m_config.m_allow_exec = read_bool("allow_exec", true);
     m_config.m_allow_subtasks = read_bool("allow_subtasks", false);
+    m_config.m_react_loop = read_bool("react_loop", true);
+
+    const std::string loop_model = value_or_empty(entries, "loop_model");
+    m_config.m_loop_model = loop_model.empty() ? "main" : loop_model;
 
     // Пути/сборка.
     const std::string db_dir_value = value_or_empty(entries, "db_dir");

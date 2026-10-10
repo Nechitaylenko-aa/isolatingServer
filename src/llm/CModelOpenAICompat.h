@@ -50,6 +50,15 @@ public:
     SModelReply complete(const std::vector<SModelMessage>& messages) override;
 
     /**
+     * @brief Синхронный запрос с описанием инструментов (ReAct).
+     * @param messages Сообщения.
+     * @param tools Схемы инструментов.
+     * @return Ответ (может содержать tool_calls).
+     */
+    SModelReply complete(const std::vector<SModelMessage>& messages,
+                         const std::vector<SModelTool>& tools) override;
+
+    /**
      * @brief Потоковый запрос (SSE).
      * @param messages Сообщения.
      * @param on_chunk Callback порций.
@@ -63,9 +72,12 @@ private:
      * @brief Собрать JSON-тело запроса.
      * @param messages Сообщения.
      * @param stream Признак потокового режима.
+     * @param tools Схемы инструментов (пусто — без tools).
      * @return JSON-строка.
      */
-    std::string build_body(const std::vector<SModelMessage>& messages, bool stream) const;
+    std::string build_body(const std::vector<SModelMessage>& messages,
+                           bool stream,
+                           const std::vector<SModelTool>& tools) const;
 
     /**
      * @brief Собрать заголовки запроса (включая ключ).

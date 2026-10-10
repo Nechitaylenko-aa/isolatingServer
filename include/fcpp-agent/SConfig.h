@@ -55,6 +55,9 @@ struct SConfig
     bool m_allow_exec = true;                ///< Разрешает запуск build/tests/tidy (§47).
     bool m_allow_subtasks = false;           ///< Разрешает дочерние задачи (§48, v2.0 не обязателен).
 
+    bool m_react_loop = true;                ///< Управление loop'ом моделью (ReAct, ADR-23). Дефолт YES.
+    std::string m_loop_model = "main";       ///< Какая роль ведёт loop: main|light|remote (`same_as_main`).
+
     std::filesystem::path m_db_dir;          ///< Каталог баз данных агента (вне проектов).
     std::string m_default_build = "build";   ///< Имя build-каталога по умолчанию (§2.3).
 

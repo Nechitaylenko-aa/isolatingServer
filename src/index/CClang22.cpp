@@ -683,10 +683,44 @@ bool CClang22::extract(const std::filesystem::path& source_file,
     return true;
 }
 
+/**
+ * @brief Проверить, соответствует ли сущность запрошенному уровню охвата (§21).
+ * @param kind Категория сущности.
+ * @param focus Запрошенный уровень.
+ * @return true если категория попадает под уровень.
+ */
+static bool matches_focus(ESymbolKind kind, EFocusKind focus)
+{
+    if (focus == EFocusKind::Innermost)
+    {
+        return true;
+    }
+    if (focus == EFocusKind::Type)
+    {
+        return kind == ESymbolKind::Class
+            || kind == ESymbolKind::Struct
+            || kind == ESymbolKind::Union
+            || kind == ESymbolKind::Enum;
+    }
+    if (focus == EFocusKind::Callable)
+    {
+        return kind == ESymbolKind::Function
+            || kind == ESymbolKind::Method
+            || kind == ESymbolKind::Constructor
+            || kind == ESymbolKind::Destructor;
+    }
+    if (focus == EFocusKind::Namespace)
+    {
+        return kind == ESymbolKind::Namespace;
+    }
+    return false;
+}
+
 std::optional<SClangSymbol> CClang22::cursor_at(const std::filesystem::path& source_file,
                                                 std::uint32_t line,
                                                 std::uint32_t column,
-                                                const std::vector<std::string>& arguments) const
+                                                const std::vector<std::string>& arguments,
+                                                EFocusKind focus) const
 {
     CXIndex index = nullptr;
     CXTranslationUnit translation_unit = nullptr;
@@ -713,16 +747,32 @@ std::optional<SClangSymbol> CClang22::cursor_at(const std::filesystem::path& sou
             clang_getLocation(translation_unit, file, line, column);
         CXCursor cursor = clang_getCursor(translation_unit, location);
 
+        std::optional<SClangSymbol> innermost;
+        bool matched = false;
         while (!clang_Cursor_isNull(cursor)
                && clang_getCursorKind(cursor) != CXCursor_TranslationUnit)
         {
             SClangSymbol symbol;
             if (fill_symbol(cursor, symbol) && !symbol.m_usr.empty())
             {
-                result = std::move(symbol);
-                break;
+                if (!innermost.has_value())
+                {
+                    innermost = symbol;
+                }
+                if (matches_focus(symbol.m_kind, focus))
+                {
+                    result = std::move(symbol);
+                    matched = true;
+                    break;
+                }
             }
             cursor = clang_getCursorSemanticParent(cursor);
+        }
+
+        // Вид не найден — сохраняем прежнее поведение (Innermost-совместимость).
+        if (!matched)
+        {
+            result = std::move(innermost);
         }
     }
 

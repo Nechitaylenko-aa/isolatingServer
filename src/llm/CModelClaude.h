@@ -50,6 +50,19 @@ public:
     SModelReply complete(const std::vector<SModelMessage>& messages) override;
 
     /**
+     * @brief Синхронный запрос с инструментами (Claude tool_use).
+     *
+     * Полноценный tool_use: схемы передаются в поле `tools`, tool_calls
+     * возвращаются в ответе (`content[]` с type=tool_use). Это делает Claude
+     * пригодным как ведущая модель ReAct-цикла.
+     * @param messages Сообщения.
+     * @param tools Схемы инструментов.
+     * @return Ответ.
+     */
+    SModelReply complete(const std::vector<SModelMessage>& messages,
+                         const std::vector<SModelTool>& tools) override;
+
+    /**
      * @brief Потоковый запрос (SSE).
      * @param messages Сообщения.
      * @param on_chunk Callback порций.
@@ -63,9 +76,12 @@ private:
      * @brief Собрать JSON-тело запроса Claude.
      * @param messages Сообщения.
      * @param stream Признак потока.
+     * @param tools Схемы инструментов (пусто — без tools).
      * @return JSON-строка.
      */
-    std::string build_body(const std::vector<SModelMessage>& messages, bool stream) const;
+    std::string build_body(const std::vector<SModelMessage>& messages,
+                           bool stream,
+                           const std::vector<SModelTool>& tools) const;
 
     /**
      * @brief Собрать заголовки (x-api-key и версия).

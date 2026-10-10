@@ -56,6 +56,16 @@ private:
      */
     SApiResponse handle_patch(const SApiRequest& request);
 
+    /**
+     * @brief Обработать пользовательский AI-запрос (§89.13, §94).
+     *
+     * Тело запроса — только текст и опциональный редакторский контекст;
+     * внутренние сущности (Area/Relation/Projection/Tool) выводит ядро.
+     * @param request Запрос.
+     * @return Ответ.
+     */
+    SApiResponse handle_ask(const SApiRequest& request);
+
     const CConfigManager& m_config_manager; ///< Конфигурация.
     CProjectManager m_project_manager;      ///< Менеджер проектов.
 };

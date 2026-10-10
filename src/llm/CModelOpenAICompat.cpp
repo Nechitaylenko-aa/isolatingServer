@@ -6,6 +6,8 @@
 #include "llm/CModelOpenAICompat.h"
 
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,7 +44,55 @@ const char* role_to_string(EModelRole role)
     {
         return "assistant";
     }
+    if (role == EModelRole::Tool)
+    {
+        return "tool";
+    }
     return "user";
+}
+
+/**
+ * @brief Разобрать tool_calls из сообщения ответа.
+ * @param message JSON-объект message.
+ * @return Список вызовов.
+ */
+std::vector<SModelToolCall> parse_tool_calls(const nlohmann::json& message)
+{
+    std::vector<SModelToolCall> calls;
+    if (!message.contains("tool_calls") || !message["tool_calls"].is_array())
+    {
+        return calls;
+    }
+    for (const nlohmann::json& entry : message["tool_calls"])
+    {
+        if (!entry.contains("function"))
+        {
+            continue;
+        }
+        const nlohmann::json& function = entry["function"];
+        SModelToolCall call;
+        if (entry.contains("id") && entry["id"].is_string())
+        {
+            call.m_id = entry["id"].get<std::string>();
+        }
+        if (function.contains("name") && function["name"].is_string())
+        {
+            call.m_name = function["name"].get<std::string>();
+        }
+        if (function.contains("arguments"))
+        {
+            if (function["arguments"].is_string())
+            {
+                call.m_arguments = function["arguments"].get<std::string>();
+            }
+            else
+            {
+                call.m_arguments = function["arguments"].dump();
+            }
+        }
+        calls.push_back(std::move(call));
+    }
+    return calls;
 }
 
 /**
@@ -95,7 +145,9 @@ CModelOpenAICompat::CModelOpenAICompat(SModelEndpoint endpoint, double temperatu
 
 bool CModelOpenAICompat::is_available() const
 {
-    return !m_endpoint.m_base_url.empty() && !m_endpoint.m_model.empty();
+    // base_url обязателен; имя модели опционально (локальные серверы, напр.
+    // llama.cpp, подставляют загруженную модель при пустом "model").
+    return !m_endpoint.m_base_url.empty();
 }
 
 std::vector<std::string> CModelOpenAICompat::build_headers() const
@@ -108,7 +160,9 @@ std::vector<std::string> CModelOpenAICompat::build_headers() const
     return headers;
 }
 
-std::string CModelOpenAICompat::build_body(const std::vector<SModelMessage>& messages, bool stream) const
+std::string CModelOpenAICompat::build_body(const std::vector<SModelMessage>& messages,
+                                           bool stream,
+                                           const std::vector<SModelTool>& tools) const
 {
     nlohmann::json document;
     document["model"] = m_endpoint.m_model;
@@ -119,11 +173,80 @@ std::string CModelOpenAICompat::build_body(const std::vector<SModelMessage>& mes
     nlohmann::json array = nlohmann::json::array();
     for (const SModelMessage& message : messages)
     {
-        array.push_back({{"role", role_to_string(message.m_role)}, {"content", message.m_content}});
+        nlohmann::json entry;
+        entry["role"] = role_to_string(message.m_role);
+        entry["content"] = message.m_content;
+
+        if (message.m_role == EModelRole::Tool && !message.m_tool_call_id.empty())
+        {
+            entry["tool_call_id"] = message.m_tool_call_id;
+        }
+
+        if (message.m_role == EModelRole::Assistant && !message.m_tool_calls.empty())
+        {
+            nlohmann::json calls = nlohmann::json::array();
+            for (const SModelToolCall& call : message.m_tool_calls)
+            {
+                calls.push_back({{"id", call.m_id},
+                                 {"type", "function"},
+                                 {"function", {{"name", call.m_name},
+                                               {"arguments", call.m_arguments}}}});
+            }
+            entry["tool_calls"] = calls;
+        }
+
+        array.push_back(std::move(entry));
     }
     document["messages"] = array;
 
-    return document.dump();
+    if (!tools.empty())
+    {
+        nlohmann::json tool_array = nlohmann::json::array();
+        for (const SModelTool& tool : tools)
+        {
+            nlohmann::json properties = nlohmann::json::object();
+            nlohmann::json required = nlohmann::json::array();
+            for (const SModelToolParam& param : tool.m_params)
+            {
+                properties[param.m_name] = {{"type", param.m_type},
+                                            {"description", param.m_description}};
+                if (param.m_required)
+                {
+                    required.push_back(param.m_name);
+                }
+            }
+            nlohmann::json parameters = {{"type", "object"},
+                                         {"properties", properties},
+                                         {"required", required}};
+            tool_array.push_back({{"type", "function"},
+                                  {"function", {{"name", tool.m_name},
+                                                {"description", tool.m_description},
+                                                {"parameters", parameters}}}});
+        }
+        document["tools"] = tool_array;
+        document["tool_choice"] = "auto";
+    }
+
+    const std::string body = document.dump();
+
+    // ДИАГНОСТИКА (временно): дамп фактического тела запроса к модели в файл,
+    // чтобы не мусорить в stderr/stdout. Лежит рядом с build-каталогом проекта.
+    {
+        namespace fs = std::filesystem;
+        std::error_code error_code;
+        fs::path dump_dir = fs::current_path(error_code) / "build";
+        if (!error_code)
+        {
+            fs::create_directories(dump_dir, error_code);
+            std::ofstream dump(dump_dir / "fcpp-request.dump.jsonl", std::ios::app);
+            if (dump.is_open())
+            {
+                dump << body << '\n';
+            }
+        }
+    }
+
+    return body;
 }
 
 std::string CModelOpenAICompat::extract_content(const std::string& body)
@@ -150,6 +273,12 @@ std::string CModelOpenAICompat::extract_content(const std::string& body)
 
 SModelReply CModelOpenAICompat::complete(const std::vector<SModelMessage>& messages)
 {
+    return complete(messages, {});
+}
+
+SModelReply CModelOpenAICompat::complete(const std::vector<SModelMessage>& messages,
+                                         const std::vector<SModelTool>& tools)
+{
     SModelReply reply;
     if (!is_available())
     {
@@ -160,7 +289,7 @@ SModelReply CModelOpenAICompat::complete(const std::vector<SModelMessage>& messa
     const CUrlTransport transport;
     const SHttpResult http = transport.post_json(
         CEndpointUtil::join(m_endpoint.m_base_url, k_chat_path),
-        build_headers(), build_body(messages, false), k_timeout_seconds, nullptr);
+        build_headers(), build_body(messages, false, tools), k_timeout_seconds, nullptr);
 
     if (!http.m_ok)
     {
@@ -168,8 +297,34 @@ SModelReply CModelOpenAICompat::complete(const std::vector<SModelMessage>& messa
         return reply;
     }
 
-    reply.m_text = extract_content(http.m_body);
-    reply.m_ok = !reply.m_text.empty();
+    try
+    {
+        const nlohmann::json document = nlohmann::json::parse(http.m_body);
+        if (document.contains("choices") && document["choices"].is_array() && !document["choices"].empty())
+        {
+            const nlohmann::json& choice = document["choices"][0];
+            if (choice.contains("finish_reason") && choice["finish_reason"].is_string())
+            {
+                reply.m_finish_reason = choice["finish_reason"].get<std::string>();
+            }
+            if (choice.contains("message"))
+            {
+                const nlohmann::json& message = choice["message"];
+                if (message.contains("content") && message["content"].is_string())
+                {
+                    reply.m_text = message["content"].get<std::string>();
+                }
+                reply.m_tool_calls = parse_tool_calls(message);
+            }
+        }
+    }
+    catch (const nlohmann::json::exception&)
+    {
+        reply.m_error = "invalid model json";
+        return reply;
+    }
+
+    reply.m_ok = !reply.m_text.empty() || !reply.m_tool_calls.empty();
     if (!reply.m_ok)
     {
         reply.m_error = "empty model response";
@@ -194,7 +349,7 @@ SModelReply CModelOpenAICompat::complete_stream(const std::vector<SModelMessage>
     const CUrlTransport transport;
     const SHttpResult http = transport.post_json(
         CEndpointUtil::join(m_endpoint.m_base_url, k_chat_path),
-        build_headers(), build_body(messages, true), k_timeout_seconds,
+        build_headers(), build_body(messages, true, {}), k_timeout_seconds,
         [&](const std::string& chunk) -> bool
         {
             line_buffer.append(chunk);

@@ -41,6 +41,7 @@ enum class EApiMethod
     Tool,            ///< Детерминированный запрос к индексу.
     Patch,           ///< Применение патча.
     Doctor,          ///< Проверка окружения.
+    Ask,             ///< Пользовательский AI-запрос (§89.13, §94).
     Count            ///< Маркер количества.
 };
 
@@ -51,11 +52,20 @@ struct SApiRequest
 {
     EApiMethod m_method = EApiMethod::AgentStatus; ///< Метод.
     std::string m_path;   ///< Путь (проект, патч, файл).
+    std::string m_project_root; ///< Корень проекта для шага open (protocol-имя projectRoot).
     std::string m_target; ///< Цель (символ/файл) для Tool.
     std::string m_tool;   ///< Имя инструмента для Tool.
     std::string m_payload;///< Данные (например, текст патча).
     bool m_assume_yes = false; ///< Автоподтверждение (patch).
+    bool m_build_after = false;///< Проверить сборкой после patch (COMPILATION FAIL → откат).
     std::uint32_t m_limit = 0; ///< Лимит результатов (0 — без лимита).
+
+    // Тело запроса Ask (§94): только текст и опциональный редакторский контекст.
+    std::string m_text;               ///< Текст запроса.
+    std::string m_editor_file;        ///< Файл редактора (может быть пустым).
+    std::uint32_t m_editor_line = 0;  ///< Строка курсора (0 — нет).
+    std::uint32_t m_editor_column = 0;///< Колонка курсора (0 — нет).
+    bool m_stream = false;            ///< Режим вывода (транспорт CLI, не семантика запроса).
 };
 
 /**
@@ -66,6 +76,7 @@ struct SApiResponse
     bool m_ok = false;                     ///< Успех.
     EErrorKind m_error = EErrorKind::Ok;   ///< Категория ошибки.
     std::string m_message;                 ///< Сообщение.
+    std::string m_state;                   ///< Состояние для протокола (READY/RUNNING/COMPLETED).
     std::string m_project_id;              ///< Идентификатор проекта.
     std::string m_text;                    ///< Текстовый вывод (source/сообщение).
     SIndexStatus m_index_status;           ///< Состояние индекса.

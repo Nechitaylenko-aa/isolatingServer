@@ -26,7 +26,8 @@ static const char* const m_error_kind_names[static_cast<std::size_t>(EErrorKind:
     "ProjectNotOpen",
     "PermissionDenied",
     "PatchInvalid",
-    "PatchApplyFailed"
+    "PatchApplyFailed",
+    "BuildFailed"
 };
 
 } // namespace

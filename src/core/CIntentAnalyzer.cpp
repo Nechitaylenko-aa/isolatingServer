@@ -23,7 +23,21 @@ constexpr const char* k_system_prompt =
     "  <relation>SELF|CALLERS|CALLEES|OVERRIDES|REFERENCES|INCLUDES</relation>\n"
     "  <projection>SIGNATURE|SOURCE|EXPLANATION|LOCATIONS|GRAPH</projection>\n"
     "  <subject kind=\"CLASS|METHOD|FUNCTION|FILE|SYMBOL|...\" name=\"qualified_name\"/>\n"
-    "</intent>\n";
+    "</intent>\n"
+    "Rules for <area>:\n"
+    "- Questions about the STATE of existing code are UNDERSTAND (not VERIFY). "
+    "VERIFY is ONLY for building/running tests; DESIGN is ONLY for proposing new design.\n"
+    "Rules for <relation>:\n"
+    "- 'реализован/переопределён/override/заглушка/implemented/overridden/stub' -> OVERRIDES "
+    "(NOT REFERENCES). REFERENCES is for plain usages.\n"
+    "Rules for <subject>:\n"
+    "- kind is the grammatical category the user names (e.g. 'класс' -> CLASS, 'метод' -> METHOD).\n"
+    "- name must contain ONLY a symbol actually named in the request.\n"
+    "- If a '[cursor symbol: NAME (KIND)]' hint is present, treat NAME as the subject the "
+    "user points at: if the question is about it, set name=NAME and selection=CURSOR. "
+    "If the question is not about it (global/project question), ignore the hint.\n"
+    "- If the request is deictic ('этот класс', 'эта функция', 'this', 'here') and no symbol "
+    "is named explicitly, set name=\"\" (empty). NEVER guess a name from the file name or path.\n";
 
 /**
  * @brief Извлечь содержимое тега.
@@ -89,6 +103,65 @@ std::string trim(const std::string& text)
     return text.substr(first, last - first + 1);
 }
 
+/**
+ * @brief Привести строку к нижнему регистру (ASCII + кириллица не требуется — ключи латиницей/кириллицей).
+ * @param text Текст.
+ * @return Строка в нижнем регистре.
+ */
+std::string to_lower(std::string text)
+{
+    for (char& symbol : text)
+    {
+        if (symbol >= 'A' && symbol <= 'Z')
+        {
+            symbol = static_cast<char>(symbol - 'A' + 'a');
+        }
+    }
+    return text;
+}
+
+/**
+ * @brief Содержит ли текст одну из подстрок.
+ * @param haystack Текст (нижний регистр).
+ * @param needles Подстроки.
+ * @return true если найдена хотя бы одна.
+ */
+bool contains_any(const std::string& haystack, const std::vector<std::string>& needles)
+{
+    for (const std::string& needle : needles)
+    {
+        if (haystack.find(needle) != std::string::npos)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Детерминированная пост-коррекция Intent по ключевым словам (Секция 3, ADR-18 №1).
+ * @param user_text Текст запроса.
+ * @param intent Корректируемый Intent.
+ */
+void apply_keyword_correction(const std::string& user_text, SIntent& intent)
+{
+    const std::string text = to_lower(user_text);
+
+    // "реализован/переопределён/заглушка/override/stub" -> OVERRIDES (§23).
+    if (contains_any(text, {"реализов", "переопредел", "override", "заглушк",
+                            "overriden", "overridden", "stub", "not implemented"}))
+    {
+        intent.m_relation = ERelation::Overrides;
+    }
+
+    // Вопрос о состоянии кода -> UNDERSTAND, а не DESIGN (§19).
+    if (intent.m_area == EArea::Design
+            && contains_any(text, {"реализов", "переопредел", "заглушк", "override"}))
+    {
+        intent.m_area = EArea::Understand;
+    }
+}
+
 } // namespace
 
 bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_intent, std::string& out_error)
@@ -141,8 +214,7 @@ bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_inte
 
 bool CIntentAnalyzer::analyze(IModelApi& model,
                               const std::string& user_text,
-                              const std::string& cursor_file,
-                              unsigned cursor_line,
+                              const std::string& cursor_hint,
                               SIntent& out_intent,
                               std::string& out_error) const
 {
@@ -156,9 +228,9 @@ bool CIntentAnalyzer::analyze(IModelApi& model,
     messages.push_back(SModelMessage{EModelRole::System, k_system_prompt});
 
     std::string user_content = user_text;
-    if (!cursor_file.empty() && cursor_line > 0)
+    if (!cursor_hint.empty())
     {
-        user_content += "\n[cursor: " + cursor_file + ":" + std::to_string(cursor_line) + "]";
+        user_content += "\n" + cursor_hint;
     }
     messages.push_back(SModelMessage{EModelRole::User, user_content});
 
@@ -169,7 +241,13 @@ bool CIntentAnalyzer::analyze(IModelApi& model,
         return false;
     }
 
-    return parse_intent_xml(reply.m_text, out_intent, out_error);
+    if (!parse_intent_xml(reply.m_text, out_intent, out_error))
+    {
+        return false;
+    }
+
+    apply_keyword_correction(user_text, out_intent);
+    return true;
 }
 
 } // namespace fcpp

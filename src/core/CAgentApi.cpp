@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include "core/CAskService.h"
 #include "core/CDoctor.h"
 #include "core/CPatchApplier.h"
 #include "core/CPatchParser.h"
@@ -43,7 +44,8 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "tests.run",
     "tool",
     "patch",
-    "doctor"
+    "doctor",
+    "ask"
 };
 
 /**
@@ -119,12 +121,17 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
         }
         case EApiMethod::ProjectOpen:
         {
-            if (request.m_path.empty() || !m_project_manager.open(request.m_path))
+            // Шаг протокола `open`: корень проекта приходит как `projectRoot`
+            // (m_project_root) либо как `m_path` (CLI). Приоритет — projectRoot.
+            const std::string& target =
+                !request.m_project_root.empty() ? request.m_project_root : request.m_path;
+            if (target.empty() || !m_project_manager.open(target))
             {
-                return make_error(EErrorKind::InvalidRequest, "cannot open project: " + request.m_path);
+                return make_error(EErrorKind::InvalidRequest, "cannot open project: " + target);
             }
             m_project_manager.save_session();
             response.m_ok = true;
+            response.m_state = "READY";
             response.m_project_id = m_project_manager.current().m_project.m_project_id;
             response.m_index_status = m_project_manager.current().m_index_status;
             return response;
@@ -138,7 +145,8 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
         }
         case EApiMethod::ProjectStatus:
         {
-            if (!m_project_manager.has_current() && !m_project_manager.restore_session())
+            // Read-only: лёгкое восстановление (без open/warm/refresh).
+            if (!m_project_manager.has_current() && !m_project_manager.restore_session_light())
             {
                 return make_error(EErrorKind::ProjectNotOpen, "project not open");
             }
@@ -162,9 +170,10 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
         }
         case EApiMethod::IndexStatus:
         {
+            // Read-only: лёгкое восстановление (без open/warm/refresh).
             if (!m_project_manager.has_current())
             {
-                m_project_manager.restore_session();
+                m_project_manager.restore_session_light();
             }
             if (!m_project_manager.has_current())
             {
@@ -260,9 +269,47 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             response.m_ok = CDoctor().run(m_config_manager.config());
             return response;
         }
+        case EApiMethod::Ask:
+            return handle_ask(request);
         default:
             return make_error(EErrorKind::InvalidRequest, "unknown method");
     }
+}
+
+SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
+{
+    if (request.m_text.empty())
+    {
+        return make_error(EErrorKind::InvalidRequest, "empty ask text");
+    }
+
+    if (!m_project_manager.has_current())
+    {
+        m_project_manager.restore_session();
+    }
+
+    // Тело запроса ask — только text + editor (§94); всё прочее выводит ядро.
+    CAskService service(m_config_manager, m_project_manager);
+    SApiResponse response;
+    std::string answer;
+    response.m_ok = service.ask(request.m_text,
+                                request.m_stream,
+                                request.m_editor_file,
+                                request.m_editor_line,
+                                request.m_editor_column,
+                                answer);
+    if (response.m_ok)
+    {
+        response.m_state = "COMPLETED";
+        response.m_text = answer;
+    }
+    else if (!answer.empty())
+    {
+        // Уточняющий вопрос (§22): ответ несёт вопрос со списком вариантов.
+        response.m_error = EErrorKind::Ambiguous;
+        response.m_message = answer;
+    }
+    return response;
 }
 
 SApiResponse CAgentApi::handle_tool(const SApiRequest& request)
@@ -343,6 +390,41 @@ SApiResponse CAgentApi::handle_patch(const SApiRequest& request)
     if (!applier.apply(validation.m_changes, message))
     {
         return make_error(EErrorKind::PatchApplyFailed, message);
+    }
+
+    // COMPILATION FAIL (детерминированный триггер ADR-10): при провале сборки — откат.
+    if (request.m_build_after)
+    {
+        if (!m_config_manager.config().m_allow_exec)
+        {
+            applier.revert(validation.m_changes, message);
+            return make_error(EErrorKind::PermissionDenied, "allow_exec is NO; patch reverted");
+        }
+
+        const std::filesystem::path build_dir =
+            m_project_manager.current().m_project.m_canonical_path / m_config_manager.config().m_default_build;
+
+        CExecutor executor;
+        SCommandArgs args;
+        args.m_tool = m_config_manager.config().m_cmake_path.empty()
+                          ? "cmake"
+                          : m_config_manager.config().m_cmake_path.string();
+        args.m_arguments = {"--build", build_dir.string()};
+        args.m_working_dir = m_project_manager.current().m_project.m_canonical_path;
+        args.m_effect = EFFECT_WRITE_BUILD;
+        args.m_timeout_seconds = 600;
+
+        const SExecutionResult build = executor.execute(args, nullptr);
+        if (!build.m_allowed || build.m_exit_code != 0)
+        {
+            std::string revert_message;
+            applier.revert(validation.m_changes, revert_message);
+            SApiResponse failed;
+            failed.m_ok = false;
+            failed.m_error = EErrorKind::BuildFailed;
+            failed.m_message = "COMPILATION FAIL; patch reverted\n" + build.m_stderr;
+            return failed;
+        }
     }
 
     SApiResponse response;

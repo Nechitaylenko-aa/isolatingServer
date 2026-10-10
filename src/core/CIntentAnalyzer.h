@@ -38,16 +38,14 @@ public:
      * @brief Проанализировать текст пользователя через модель.
      * @param model Провайдер lite-модели.
      * @param user_text Текст запроса.
-     * @param cursor_file Текущий файл (опционально).
-     * @param cursor_line Текущая строка (0 — нет).
+     * @param cursor_hint Готовый хинт символа под курсором (может быть пустой).
      * @param out_intent Выходной Intent.
      * @param out_error Сообщение об ошибке.
      * @return true при успехе разбора.
      */
     bool analyze(IModelApi& model,
                  const std::string& user_text,
-                 const std::string& cursor_file,
-                 unsigned cursor_line,
+                 const std::string& cursor_hint,
                  SIntent& out_intent,
                  std::string& out_error) const;
 

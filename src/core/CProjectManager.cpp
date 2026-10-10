@@ -349,6 +349,69 @@ bool CProjectManager::restore_session()
     return open(path);
 }
 
+bool CProjectManager::restore_session_light()
+{
+    if (m_has_current)
+    {
+        return true;
+    }
+
+    const std::filesystem::path session_path = m_config_manager.agent_dir() / "session";
+
+    std::error_code error_code;
+    if (!std::filesystem::exists(session_path, error_code) || error_code)
+    {
+        return false;
+    }
+
+    std::ifstream input(session_path);
+    if (!input.is_open())
+    {
+        return false;
+    }
+
+    std::string path;
+    std::getline(input, path);
+    if (path.empty())
+    {
+        return false;
+    }
+
+    // Идентификация проекта без open/warm/refresh (read-only).
+    const std::filesystem::path canonical = std::filesystem::canonical(path, error_code);
+    if (error_code)
+    {
+        return false;
+    }
+
+    const std::string full_hash = CHash::sha256_hex(canonical.string());
+    const std::filesystem::path db_path =
+        m_config_manager.db_dir() / full_hash.substr(0, k_db_hash_length) / k_index_db_name;
+
+    SProject project;
+    project.m_project_id = std::string(k_project_id_prefix) + full_hash.substr(0, k_project_id_hash_length);
+    project.m_canonical_path = canonical;
+    project.m_db_path = db_path;
+    project.m_name = canonical.filename().string();
+
+    // Читаем состояние индекса напрямую из БД (без индексации).
+    SIndexStatus index_status;
+    if (std::filesystem::exists(db_path, error_code) && !error_code)
+    {
+        CSQLiteIndex index(db_path);
+        if (index.open_db())
+        {
+            index_status = index.status();
+            index.close_db();
+        }
+    }
+
+    m_current.m_project = project;
+    m_current.m_index_status = index_status;
+    m_has_current = true;
+    return true;
+}
+
 void CProjectManager::clear_session() const
 {
     const std::filesystem::path session_path = m_config_manager.agent_dir() / "session";

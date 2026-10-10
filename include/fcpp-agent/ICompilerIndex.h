@@ -10,8 +10,12 @@
 #ifndef FCPP_AGENT_ICOMPILERINDEX_H
 #define FCPP_AGENT_ICOMPILERINDEX_H
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
+
+#include "fcpp-agent/IIndex.h"
 
 namespace fcpp
 {
@@ -93,6 +97,21 @@ public:
      * @return Список имён включающих файлов.
      */
     virtual std::vector<std::string> included_by(long long file_id) const = 0;
+
+    /**
+     * @brief Позиционный резолв сущности над индексом (ADR-22).
+     *
+     * Возвращает самую внутреннюю сущность, чей диапазон содержит позицию
+     * (file, line, column). Используется как кэш-путь для разрешения курсора
+     * (fallback — IClang::cursor_at по свежему/непокрытому файлу).
+     * @param file Путь файла (как в индексе).
+     * @param line Строка (1-базовая).
+     * @param column Колонка (1-базовая).
+     * @return Сущность либо пустое значение.
+     */
+    virtual std::optional<SSymbol> symbol_at(const std::string& file,
+                                             std::uint32_t line,
+                                             std::uint32_t column) const = 0;
 };
 
 } // namespace fcpp

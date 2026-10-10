@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "fcpp-agent/IIndex.h"
+
 #include "core/CConfigManager.h"
 #include "core/CProjectManager.h"
 
@@ -40,11 +42,16 @@ static const std::vector<SRoute>& routes()
     {
         {EArea::Understand, ERelation::Self,       EProjection::Explanation, {EToolName::Outline, EToolName::Source}, false, false},
         {EArea::Understand, ERelation::Self,       EProjection::Signature,   {EToolName::Definition},                  false, false},
+        {EArea::Understand, ERelation::Overrides,  EProjection::Signature,   {EToolName::Overrides, EToolName::Dispatch, EToolName::Definition}, false, false},
         {EArea::Understand, ERelation::Self,       EProjection::Source,      {EToolName::Source},                      false, false},
         {EArea::Understand, ERelation::Callers,    EProjection::Locations,   {EToolName::Callers},                     false, false},
         {EArea::Understand, ERelation::Callees,    EProjection::Locations,   {EToolName::Callees},                     false, false},
         {EArea::Understand, ERelation::References, EProjection::Locations,   {EToolName::References},                  false, false},
         {EArea::Understand, ERelation::Overrides,  EProjection::Locations,   {EToolName::Overrides, EToolName::Dispatch}, false, false},
+        {EArea::Understand, ERelation::Overrides,  EProjection::Source,      {EToolName::Overrides, EToolName::Dispatch, EToolName::Source}, false, false},
+        {EArea::Understand, ERelation::References, EProjection::Source,      {EToolName::References, EToolName::Source}, false, false},
+        {EArea::Understand, ERelation::Overrides,  EProjection::Explanation, {EToolName::Overrides, EToolName::Dispatch, EToolName::Source}, false, false},
+        {EArea::Understand, ERelation::References, EProjection::Explanation, {EToolName::References, EToolName::Source}, false, false},
         {EArea::Understand, ERelation::Includes,   EProjection::Graph,       {EToolName::Includes},                    false, false},
         {EArea::Understand, ERelation::Self,       EProjection::Graph,       {EToolName::Ancestors, EToolName::Derived}, false, false},
         {EArea::Review,     ERelation::Self,       EProjection::Explanation, {EToolName::Outline, EToolName::Source}, false, false},
@@ -55,6 +62,64 @@ static const std::vector<SRoute>& routes()
         {EArea::Verify,     ERelation::Self,       EProjection::Explanation, {EToolName::Outline},                     false, true}
     };
     return table;
+}
+
+/**
+ * @brief Проверить, задан ли у вида субъекта конкретный фильтр (§20).
+ * @param kind Вид субъекта.
+ * @return true если для вида нужен фильтр по категории символа.
+ */
+bool subject_kind_is_specific(ESubjectKind kind)
+{
+    return kind == ESubjectKind::Class
+        || kind == ESubjectKind::Struct
+        || kind == ESubjectKind::Enum
+        || kind == ESubjectKind::Namespace
+        || kind == ESubjectKind::Function
+        || kind == ESubjectKind::Method
+        || kind == ESubjectKind::Variable
+        || kind == ESubjectKind::Field;
+}
+
+/**
+ * @brief Соответствует ли категория символа запрошенному виду субъекта (§20).
+ * @param symbol_kind Категория символа из индекса.
+ * @param subject_kind Запрошенный вид субъекта.
+ * @return true если символ подходит.
+ */
+bool symbol_matches_subject_kind(ESymbolKind symbol_kind, ESubjectKind subject_kind)
+{
+    if (subject_kind == ESubjectKind::Class || subject_kind == ESubjectKind::Struct)
+    {
+        return symbol_kind == ESymbolKind::Class || symbol_kind == ESymbolKind::Struct;
+    }
+    if (subject_kind == ESubjectKind::Enum)
+    {
+        return symbol_kind == ESymbolKind::Enum;
+    }
+    if (subject_kind == ESubjectKind::Namespace)
+    {
+        return symbol_kind == ESymbolKind::Namespace;
+    }
+    if (subject_kind == ESubjectKind::Function)
+    {
+        return symbol_kind == ESymbolKind::Function;
+    }
+    if (subject_kind == ESubjectKind::Method)
+    {
+        return symbol_kind == ESymbolKind::Method
+            || symbol_kind == ESymbolKind::Constructor
+            || symbol_kind == ESymbolKind::Destructor;
+    }
+    if (subject_kind == ESubjectKind::Variable)
+    {
+        return symbol_kind == ESymbolKind::Variable;
+    }
+    if (subject_kind == ESubjectKind::Field)
+    {
+        return symbol_kind == ESymbolKind::Field;
+    }
+    return true;
 }
 
 /**
@@ -138,11 +203,44 @@ SRequestOutcome CRequestPipeline::resolve_subject(const SIntent& intent) const
         return make_outcome(EOutcomeKind::Ok, EStage::Resolved, "subject accepted (no index)");
     }
 
-    const std::vector<SSymbol> matches = m_project_manager->find_symbols(intent.m_subject.m_name);
+    // Резолвинг: короткое имя, а для квалифицированного — по последнему сегменту + фильтр по суффиксу.
+    std::vector<SSymbol> matches = m_project_manager->find_symbols(intent.m_subject.m_name);
+    const std::string& name = intent.m_subject.m_name;
+    const std::size_t separator = name.rfind("::");
+    if (matches.empty() && separator != std::string::npos)
+    {
+        const std::string short_name = name.substr(separator + 2);
+        const std::string suffix = "::" + name;
+        for (const SSymbol& symbol : m_project_manager->find_symbols(short_name))
+        {
+            if (symbol.m_qualified_name == name || symbol.m_qualified_name.ends_with(suffix))
+            {
+                matches.push_back(symbol);
+            }
+        }
+    }
+
     if (matches.empty())
     {
         return make_outcome(EOutcomeKind::NotUnderstood, EStage::Resolved,
                             "symbol not found: " + intent.m_subject.m_name);
+    }
+
+    // Фильтр по запрошенному виду субъекта (§20): CLASS не должен совпадать с конструктором.
+    if (matches.size() > 1 && subject_kind_is_specific(intent.m_subject.m_kind))
+    {
+        std::vector<SSymbol> filtered;
+        for (const SSymbol& symbol : matches)
+        {
+            if (symbol_matches_subject_kind(symbol.m_kind, intent.m_subject.m_kind))
+            {
+                filtered.push_back(symbol);
+            }
+        }
+        if (!filtered.empty())
+        {
+            matches = std::move(filtered);
+        }
     }
     if (matches.size() == 1)
     {

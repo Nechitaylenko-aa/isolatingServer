@@ -80,6 +80,17 @@ public:
     std::vector<std::string> dispatch_targets(const std::string& method_usr) const override;
 
     /**
+     * @brief Позиционный резолв сущности над индексом (ADR-22).
+     * @param file Путь файла.
+     * @param line Строка (1-базовая).
+     * @param column Колонка (1-базовая).
+     * @return Самая внутренняя сущность, содержащая позицию.
+     */
+    std::optional<SSymbol> symbol_at(const std::string& file,
+                                     std::uint32_t line,
+                                     std::uint32_t column) const override;
+
+    /**
      * @brief Файлы, напрямую включаемые данным файлом.
      * @param file_id Идентификатор файла.
      * @return Список включаемых путей.

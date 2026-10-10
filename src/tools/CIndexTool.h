@@ -54,12 +54,14 @@ private:
      * @param request Запрос.
      * @param context Контекст.
      * @param out_usr Выходной USR.
+     * @param out_candidates Кандидаты при неоднозначности (для модели).
      * @param out_error Выходная ошибка.
      * @return true при успехе.
      */
     bool resolve_usr(const SToolRequest& request,
                      CToolContext& context,
                      std::string& out_usr,
+                     std::vector<SSymbol>& out_candidates,
                      SError& out_error) const;
 
     /**

@@ -98,9 +98,18 @@ add_library(fcpp_core STATIC
     src/core/CPatchApplier.cpp
     src/core/CAgentApi.cpp
     src/core/SIntent.cpp
+    src/core/SSubtasks.cpp
     src/core/SRequestOutcome.cpp
     src/core/CRequestPipeline.cpp
     src/core/CIntentAnalyzer.cpp
+    src/core/CAskService.cpp
+    src/core/SEvidence.cpp
+    src/core/CEvidenceCollector.cpp
+    src/core/SCascade.cpp
+    src/core/CModelCascade.cpp
+    src/core/CEscalatingIntentAnalyzer.cpp
+    src/core/CSubtaskComposer.cpp
+    src/core/CReActAgent.cpp
     src/llm/CEndpointUtil.cpp
     src/llm/CUrlTransport.cpp
     src/llm/CModelOpenAICompat.cpp
@@ -134,6 +143,7 @@ target_link_options(fcpp_core PUBLIC "-Wl,-rpath,${LIBCLANG_LIB_DIR}")
 # --- Executable ---
 add_executable(fcpp-agent
     src/main.cpp
+    src/cli/CProtocolServer.cpp
 )
 target_link_libraries(fcpp-agent PRIVATE fcpp_core)
 
@@ -151,6 +161,10 @@ add_executable(fcpp_tests
     tests/patch_test.cpp
     tests/agent_api_test.cpp
     tests/pipeline_test.cpp
+    tests/model_test.cpp
+    tests/evidence_test.cpp
+    tests/cascade_test.cpp
+    tests/subtask_test.cpp
 )
 target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 

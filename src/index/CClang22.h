@@ -61,16 +61,21 @@ public:
 
     /**
      * @brief Найти ближайшую семантическую сущность по позиции.
+     *
+     * При `focus != Innermost` поднимается по семантическим родителям до первой
+     * сущности запрошенного вида. Если совпадения нет — возвращает ближайшую.
      * @param source_file Файл.
      * @param line Строка (1-базовая).
      * @param column Колонка (1-базовая).
      * @param arguments Аргументы компиляции.
+     * @param focus Желаемый уровень охватывающей сущности.
      * @return Сущность либо пустое значение.
      */
     std::optional<SClangSymbol> cursor_at(const std::filesystem::path& source_file,
                                           std::uint32_t line,
                                           std::uint32_t column,
-                                          const std::vector<std::string>& arguments) const override;
+                                          const std::vector<std::string>& arguments,
+                                          EFocusKind focus = EFocusKind::Innermost) const override;
 };
 
 } // namespace fcpp

@@ -41,6 +41,14 @@ public:
      * @return true при успехе; false с полным откатом.
      */
     bool apply(const std::vector<SFileChange>& changes, std::string& out_message) const;
+
+    /**
+     * @brief Откатить ранее применённые изменения (восстановить оригиналы).
+     * @param changes Изменения из CPatchValidator.
+     * @param out_message Сообщение об ошибке (при неуспехе).
+     * @return true при успехе.
+     */
+    bool revert(const std::vector<SFileChange>& changes, std::string& out_message) const;
 };
 
 } // namespace fcpp

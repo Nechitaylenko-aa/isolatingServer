@@ -41,6 +41,38 @@ constexpr const char* k_backup_suffix = ".bak";
 constexpr const char* k_active_generation =
     "(SELECT generation FROM index_generation WHERE state = 'ACTIVE' ORDER BY generation DESC LIMIT 1)";
 
+/**
+ * @brief Является ли файл внешним (системный/сторонний) — не подлежит индексации (§15).
+ *
+ * Отсекаем системные пути, зависимости FetchContent (`_deps`) и всё, что лежит
+ * вне корня проекта. Иначе индекс засоряется символами сторонних библиотек.
+ * @param path Путь к файлу.
+ * @param project_root Корень проекта (может быть пустым).
+ * @return true если файл внешний.
+ */
+bool is_external_path(const std::string& path, const std::string& project_root)
+{
+    if (path.empty())
+    {
+        return true;
+    }
+    if (path.rfind("/usr/", 0) == 0 || path.rfind("/opt/", 0) == 0
+            || path.rfind("/etc/", 0) == 0 || path.rfind("/Library/", 0) == 0)
+    {
+        return true;
+    }
+    if (path.find("/_deps/") != std::string::npos || path.find("/build/_deps/") != std::string::npos)
+    {
+        return true;
+    }
+    // Абсолютный путь вне корня проекта — внешний.
+    if (!project_root.empty() && path.front() == '/' && path.rfind(project_root, 0) != 0)
+    {
+        return true;
+    }
+    return false;
+}
+
 /** @brief Имена категорий символов, индексированные по ESymbolKind (Секция 3). */
 static const char* const m_symbol_kind_names[static_cast<std::size_t>(ESymbolKind::Count)]
 {
@@ -570,6 +602,13 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
 
     for (const SCompileCommand& command : commands)
     {
+        // Не регистрируем внешние TU (системные/сторонние: /usr, _deps) — в индекс
+        // попадает только код проекта (§15).
+        if (is_external_path(command.m_file.string(), m_project_root.string()))
+        {
+            continue;
+        }
+
         std::error_code error_code;
         const std::uint64_t size = std::filesystem::file_size(command.m_file, error_code);
         const std::uint64_t resolved_size = error_code ? 0u : size;
@@ -1432,6 +1471,12 @@ bool CSQLiteIndex::warm(IClang& clang, const std::vector<std::string>& reindex_p
                 continue;
             }
 
+            // Не индексируем внешние/системные символы (заголовки stdlib, _deps).
+            if (is_external_path(symbol.m_location.m_file, m_project_root.string()))
+            {
+                continue;
+            }
+
             const auto existing = staged_symbols.find(symbol.m_usr);
             const bool has_existing = (existing != staged_symbols.end());
             if (has_existing && !(symbol.m_is_definition && !existing->second.m_is_definition))
@@ -1538,6 +1583,10 @@ bool CSQLiteIndex::warm(IClang& clang, const std::vector<std::string>& reindex_p
         }
         for (const SStagedInclude& include : staged_includes)
         {
+            if (is_external_path(include.m_to_path, m_project_root.string()))
+            {
+                continue;
+            }
             if (!include.m_to_path.empty() && path_to_file.find(include.m_to_path) == path_to_file.end())
             {
                 extra_files.insert(include.m_to_path);

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "fcpp-agent/IIndex.h"
+#include "fcpp-agent/IModelApi.h"
 #include "fcpp-agent/SError.h"
 
 namespace fcpp
@@ -108,6 +109,30 @@ const char* tool_name(EToolName name);
  * @return Стабильное текстовое имя.
  */
 const char* symbol_kind_name(ESymbolKind kind);
+
+/**
+ * @brief Схемы всех детерминированных инструментов (для ReAct-режима модели).
+ *
+ * Единый источник правды — EToolName: имя (tool_name), описание, параметры.
+ * @return Список схем инструментов.
+ */
+std::vector<SModelTool> tool_schemas();
+
+/**
+ * @brief Описание одного инструмента для модели.
+ * @param name Имя инструмента.
+ * @return Схема.
+ */
+SModelTool tool_schema(EToolName name);
+
+/**
+ * @brief Сериализовать результат инструмента в компактный текст для модели.
+ *
+ * Zero-Window: только срезы/relationships, без файлов целиком (§56/§63).
+ * @param result Результат инструмента.
+ * @return Текст для передачи модели.
+ */
+std::string format_tool_result(const SToolResult& result);
 
 } // namespace fcpp
 

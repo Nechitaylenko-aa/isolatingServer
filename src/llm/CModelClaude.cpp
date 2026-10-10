@@ -60,6 +60,42 @@ std::string parse_sse_delta(const std::string& line)
     return {};
 }
 
+/**
+ * @brief Разобрать tool_use-блоки из content ответа Claude.
+ * @param content Массив content.
+ * @return Список вызовов инструментов.
+ */
+std::vector<SModelToolCall> parse_tool_use(const nlohmann::json& content)
+{
+    std::vector<SModelToolCall> calls;
+    if (!content.is_array())
+    {
+        return calls;
+    }
+    for (const nlohmann::json& block : content)
+    {
+        if (!block.contains("type") || block["type"] != "tool_use")
+        {
+            continue;
+        }
+        SModelToolCall call;
+        if (block.contains("id") && block["id"].is_string())
+        {
+            call.m_id = block["id"].get<std::string>();
+        }
+        if (block.contains("name") && block["name"].is_string())
+        {
+            call.m_name = block["name"].get<std::string>();
+        }
+        if (block.contains("input"))
+        {
+            call.m_arguments = block["input"].dump();
+        }
+        calls.push_back(std::move(call));
+    }
+    return calls;
+}
+
 } // namespace
 
 CModelClaude::CModelClaude(SModelEndpoint endpoint, double temperature, int max_tokens)
@@ -88,7 +124,9 @@ std::vector<std::string> CModelClaude::build_headers() const
     return headers;
 }
 
-std::string CModelClaude::build_body(const std::vector<SModelMessage>& messages, bool stream) const
+std::string CModelClaude::build_body(const std::vector<SModelMessage>& messages,
+                                     bool stream,
+                                     const std::vector<SModelTool>& tools) const
 {
     nlohmann::json document;
     document["model"] = m_endpoint.m_model;
@@ -109,6 +147,45 @@ std::string CModelClaude::build_body(const std::vector<SModelMessage>& messages,
             system_text += message.m_content;
             continue;
         }
+
+        if (message.m_role == EModelRole::Assistant && !message.m_tool_calls.empty())
+        {
+            // Ассистент запросил инструменты: content = tool_use-блоки.
+            nlohmann::json blocks = nlohmann::json::array();
+            if (!message.m_content.empty())
+            {
+                blocks.push_back({{"type", "text"}, {"text", message.m_content}});
+            }
+            for (const SModelToolCall& call : message.m_tool_calls)
+            {
+                nlohmann::json input = nlohmann::json::object();
+                try
+                {
+                    input = nlohmann::json::parse(call.m_arguments);
+                }
+                catch (const nlohmann::json::exception&)
+                {
+                    input = nlohmann::json::object();
+                }
+                blocks.push_back({{"type", "tool_use"},
+                                  {"id", call.m_id},
+                                  {"name", call.m_name},
+                                  {"input", input}});
+            }
+            array.push_back({{"role", "assistant"}, {"content", blocks}});
+            continue;
+        }
+
+        if (message.m_role == EModelRole::Tool)
+        {
+            // Результат инструмента: user-сообщение с tool_result-блоком.
+            nlohmann::json block = {{"type", "tool_result"},
+                                    {"tool_use_id", message.m_tool_call_id},
+                                    {"content", message.m_content}};
+            array.push_back({{"role", "user"}, {"content", nlohmann::json::array({block})}});
+            continue;
+        }
+
         const char* role = (message.m_role == EModelRole::Assistant) ? "assistant" : "user";
         array.push_back({{"role", role}, {"content", message.m_content}});
     }
@@ -118,7 +195,87 @@ std::string CModelClaude::build_body(const std::vector<SModelMessage>& messages,
     }
     document["messages"] = array;
 
+    if (!tools.empty())
+    {
+        nlohmann::json tool_array = nlohmann::json::array();
+        for (const SModelTool& tool : tools)
+        {
+            nlohmann::json properties = nlohmann::json::object();
+            nlohmann::json required = nlohmann::json::array();
+            for (const SModelToolParam& param : tool.m_params)
+            {
+                properties[param.m_name] = {{"type", param.m_type},
+                                            {"description", param.m_description}};
+                if (param.m_required)
+                {
+                    required.push_back(param.m_name);
+                }
+            }
+            tool_array.push_back({{"name", tool.m_name},
+                                  {"description", tool.m_description},
+                                  {"input_schema", {{"type", "object"},
+                                                     {"properties", properties},
+                                                     {"required", required}}}});
+        }
+        document["tools"] = tool_array;
+    }
+
     return document.dump();
+}
+
+SModelReply CModelClaude::complete(const std::vector<SModelMessage>& messages,
+                                   const std::vector<SModelTool>& tools)
+{
+    SModelReply reply;
+    if (!is_available())
+    {
+        reply.m_error = "model endpoint not configured";
+        return reply;
+    }
+
+    const CUrlTransport transport;
+    const SHttpResult http = transport.post_json(
+        CEndpointUtil::join(m_endpoint.m_base_url, k_messages_path),
+        build_headers(), build_body(messages, false, tools), k_timeout_seconds, nullptr);
+
+    if (!http.m_ok)
+    {
+        reply.m_error = http.m_error;
+        return reply;
+    }
+
+    try
+    {
+        const nlohmann::json document = nlohmann::json::parse(http.m_body);
+        if (document.contains("stop_reason") && document["stop_reason"].is_string())
+        {
+            reply.m_finish_reason = document["stop_reason"].get<std::string>();
+        }
+        if (document.contains("content") && document["content"].is_array())
+        {
+            for (const nlohmann::json& block : document["content"])
+            {
+                if (block.contains("type") && block["type"] == "text"
+                        && block.contains("text") && block["text"].is_string())
+                {
+                    reply.m_text += block["text"].get<std::string>();
+                }
+            }
+            reply.m_tool_calls = parse_tool_use(document["content"]);
+        }
+    }
+    catch (const nlohmann::json::exception&)
+    {
+        reply.m_error = "invalid model json";
+        return reply;
+    }
+
+    reply.m_ok = !reply.m_text.empty() || !reply.m_tool_calls.empty();
+    if (!reply.m_ok)
+    {
+        reply.m_error = "empty model response";
+    }
+    return reply;
 }
 
 SModelReply CModelClaude::complete(const std::vector<SModelMessage>& messages)
@@ -133,7 +290,7 @@ SModelReply CModelClaude::complete(const std::vector<SModelMessage>& messages)
     const CUrlTransport transport;
     const SHttpResult http = transport.post_json(
         CEndpointUtil::join(m_endpoint.m_base_url, k_messages_path),
-        build_headers(), build_body(messages, false), k_timeout_seconds, nullptr);
+        build_headers(), build_body(messages, false, {}), k_timeout_seconds, nullptr);
 
     if (!http.m_ok)
     {
@@ -179,7 +336,7 @@ SModelReply CModelClaude::complete_stream(const std::vector<SModelMessage>& mess
     const CUrlTransport transport;
     const SHttpResult http = transport.post_json(
         CEndpointUtil::join(m_endpoint.m_base_url, k_messages_path),
-        build_headers(), build_body(messages, true), k_timeout_seconds,
+        build_headers(), build_body(messages, true, {}), k_timeout_seconds,
         [&](const std::string& chunk) -> bool
         {
             line_buffer.append(chunk);
