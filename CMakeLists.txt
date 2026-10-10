@@ -108,6 +108,7 @@ target_compile_options(sqlite3 PRIVATE -w)
 # --- Core library ---
 add_library(fcpp_core STATIC
     src/core/CConfigManager.cpp
+    src/core/CProjectProfile.cpp
     src/core/CExecutor.cpp
     src/core/CHash.cpp
     src/core/CCompileCommandsLocator.cpp
@@ -200,6 +201,7 @@ add_executable(fcpp_tests
     tests/context_manager_test.cpp
     tests/pipeline_test.cpp
     tests/model_test.cpp
+    tests/project_profile_test.cpp
     tests/evidence_test.cpp
     tests/cascade_test.cpp
     tests/subtask_test.cpp

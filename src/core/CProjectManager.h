@@ -87,6 +87,10 @@ public:
      */
     const SProjectContext& current() const;
 
+    /** @brief Получить паспорт текущего проекта для явной установки/чтения. */
+    CProjectProfile& profile();
+    const CProjectProfile& profile() const;
+
     /**
      * @brief Получить список зарегистрированных проектов.
      * @return Список проектов из реестра.

@@ -441,6 +441,17 @@ bool CReActAgent::run(const std::string& question,
     system.m_content = k_loop_prompt;
     prompt_groups.push_back(SContextGroup{"system", {system}, next_order++, 100, 100, 0, true});
 
+    const std::string& project_profile = m_project_manager.profile().get();
+    if (!project_profile.empty())
+    {
+        SModelMessage profile;
+        profile.m_role = EModelRole::System;
+        profile.m_content =
+            "[Project profile: follow these user-provided project rules]\n" + project_profile;
+        prompt_groups.push_back(SContextGroup{
+            "project-profile", {profile}, next_order++, 100, 100, 0, true});
+    }
+
     if (!context_json.empty() && context_json != "{}")
     {
         SModelMessage state;

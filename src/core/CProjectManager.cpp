@@ -186,6 +186,10 @@ bool CProjectManager::open(const std::filesystem::path& path)
 
     index.set_compile_commands_fingerprint(compile_commands.string());
 
+    if (m_has_current && m_current.m_project.m_project_id != project.m_project_id)
+    {
+        m_current.m_profile = CProjectProfile{};
+    }
     m_current.m_project = project;
     m_current.m_index_status = index.status();
     index.close_db();
@@ -227,6 +231,16 @@ bool CProjectManager::has_current() const
 const SProjectContext& CProjectManager::current() const
 {
     return m_current;
+}
+
+CProjectProfile& CProjectManager::profile()
+{
+    return m_current.m_profile;
+}
+
+const CProjectProfile& CProjectManager::profile() const
+{
+    return m_current.m_profile;
 }
 
 bool CProjectManager::refresh_index()

@@ -284,12 +284,23 @@ bool CAskService::answer_from_evidence(const std::string& question,
     system.m_content = k_answer_prompt;
     groups.push_back(SContextGroup{"answer-policy", {system}, 0, 100, 100, 0, true});
 
+    const std::string& project_profile = m_project_manager.profile().get();
+    if (!project_profile.empty())
+    {
+        SModelMessage profile;
+        profile.m_role = EModelRole::System;
+        profile.m_content =
+            "[Project profile: follow these user-provided project rules]\n" + project_profile;
+        groups.push_back(SContextGroup{
+            "project-profile", {profile}, 1, 100, 100, 0, true});
+    }
+
     SModelMessage user;
     user.m_role = EModelRole::User;
     user.m_content = "Question:\n" + question + "\n\nUse only the evidence messages that follow.";
-    groups.push_back(SContextGroup{"answer-question", {user}, 1, 100, 100, 0, true});
+    groups.push_back(SContextGroup{"answer-question", {user}, 2, 100, 100, 0, true});
 
-    std::size_t section_order = 2;
+    std::size_t section_order = 3;
     for (const SEvidenceSection& section : evidence.m_sections)
     {
         if (section.m_text.empty())
@@ -540,6 +551,17 @@ bool CAskService::ask(const std::string& text,
         intent_context_groups.push_back(SContextGroup{
             "session-context", {state}, context_order++, 100, 100, 0, true});
     }
+    const std::string& project_profile = m_project_manager.profile().get();
+    if (!project_profile.empty())
+    {
+        SModelMessage profile;
+        profile.m_role = EModelRole::System;
+        profile.m_content =
+            "[Project profile: follow these user-provided project rules]\n" + project_profile;
+        intent_context_groups.push_back(SContextGroup{
+            "project-profile", {profile}, context_order++, 100, 100, 0, true});
+    }
+
     // Compact only the prompt view; the persisted event history remains untouched.
     constexpr std::size_t k_recent_history_turns = 8;
     constexpr std::size_t k_history_summary_bytes = 3000;

@@ -11,6 +11,7 @@
 #include <string>
 
 #include "fcpp-agent/IIndex.h"
+#include "fcpp-agent/CProjectProfile.h"
 
 namespace fcpp
 {
@@ -38,6 +39,7 @@ struct SProjectContext
 {
     SProject m_project;         ///< Проект.
     SIndexStatus m_index_status;///< Снимок состояния индекса.
+    CProjectProfile m_profile; ///< Паспорт текущего проекта (пока только в памяти).
 };
 
 } // namespace fcpp
