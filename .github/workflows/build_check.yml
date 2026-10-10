@@ -4,7 +4,10 @@ on:
   push:
     branches: [ main, master, dev ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, dev ]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -20,18 +23,7 @@ jobs:
           version: 22
           platform: x64
 
-      # 2. Убеждаемся, что Ninja доступен
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
-
-      # 3. Настраиваем ccache через специализированный action
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}-${{ runner.os }}-clang-22
-          max-size: "500M"
-          verbose: 1
-
+      # 2. Устанавливаем зависимости сборки одним вызовом apt
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -40,6 +32,14 @@ jobs:
             libclang-22-dev \
             libcurl4-openssl-dev \
             catch2
+
+      # 3. Настраиваем ccache через специализированный action
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ runner.os }}-clang-22
+          max-size: "500M"
+          verbose: 1
       
       # 4. Конфигурируем CMake с указанием компилятора и ccache как launcher
       - name: Configure CMake
@@ -58,7 +58,7 @@ jobs:
 
       # 6. Тесты (если настроен CTest)
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --no-tests=error
 
       # 7. Показываем статистику ccache для отладки
       - name: Show ccache stats
