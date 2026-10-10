@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -130,6 +131,31 @@ std::string value_or_empty(const std::map<std::string, std::string>& entries,
     return iterator->second;
 }
 
+/** Parse an unsigned size from config without overflow. */
+bool parse_size_value(const std::string& value, std::size_t& result)
+{
+    if (value.empty())
+    {
+        return false;
+    }
+    std::size_t parsed = 0;
+    for (const unsigned char character : value)
+    {
+        if (character < '0' || character > '9')
+        {
+            return false;
+        }
+        const std::size_t digit = static_cast<std::size_t>(character - '0');
+        if (parsed > (std::numeric_limits<std::size_t>::max() - digit) / 10U)
+        {
+            return false;
+        }
+        parsed = parsed * 10U + digit;
+    }
+    result = parsed;
+    return true;
+}
+
 } // namespace
 
 CConfigManager::CConfigManager()
@@ -207,7 +233,13 @@ bool CConfigManager::bootstrap()
         {"allow_exec", "YES"},
         {"allow_subtasks", "NO"},
         {"react_loop", "YES"},
-        {"loop_model", "main"}
+        {"loop_model", "main"},
+        {"model_main_context_window_tokens", "0"},
+        {"model_main_output_reserve_tokens", "4096"},
+        {"model_light_context_window_tokens", "0"},
+        {"model_light_output_reserve_tokens", "0"},
+        {"model_remote_context_window_tokens", "0"},
+        {"model_remote_output_reserve_tokens", "4096"}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -245,6 +277,12 @@ bool CConfigManager::bootstrap()
         content << "react_loop=\"" << defaults[21].second << "\"\n";
         content << "# Which model role drives the loop: main | light | remote\n";
         content << "loop_model=\"" << defaults[22].second << "\"\n";
+        content << "model_main_context_window_tokens=\"" << defaults[23].second << "\"\n";
+        content << "model_main_output_reserve_tokens=\"" << defaults[24].second << "\"\n";
+        content << "model_light_context_window_tokens=\"" << defaults[25].second << "\"\n";
+        content << "model_light_output_reserve_tokens=\"" << defaults[26].second << "\"\n";
+        content << "model_remote_context_window_tokens=\"" << defaults[27].second << "\"\n";
+        content << "model_remote_output_reserve_tokens=\"" << defaults[28].second << "\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -397,6 +435,33 @@ bool CConfigManager::load() const
     m_config.m_model_remote.m_name = value_or_empty(entries, "model_remote_name");
     m_config.m_model_remote.m_key = value_or_empty(entries, "model_remote_key");
     m_config.m_remote_type = remote_type_from_name(m_config.m_model_remote.m_type);
+
+    auto read_size = [&entries](const std::string& key, std::size_t fallback,
+                                std::size_t& output) -> bool
+    {
+        const auto iterator = entries.find(key);
+        if (iterator == entries.end())
+        {
+            output = fallback;
+            return true;
+        }
+        return parse_size_value(iterator->second, output);
+    };
+    if (!read_size("model_main_context_window_tokens", 0,
+                   m_config.m_model_main.m_context_window_tokens)
+        || !read_size("model_main_output_reserve_tokens", 4096,
+                      m_config.m_model_main.m_output_reserve_tokens)
+        || !read_size("model_light_context_window_tokens", 0,
+                      m_config.m_model_light.m_context_window_tokens)
+        || !read_size("model_light_output_reserve_tokens", 0,
+                      m_config.m_model_light.m_output_reserve_tokens)
+        || !read_size("model_remote_context_window_tokens", 0,
+                      m_config.m_model_remote.m_context_window_tokens)
+        || !read_size("model_remote_output_reserve_tokens", 4096,
+                      m_config.m_model_remote.m_output_reserve_tokens))
+    {
+        return false;
+    }
 
     return true;
 }
