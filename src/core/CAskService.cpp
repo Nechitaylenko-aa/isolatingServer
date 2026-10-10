@@ -230,7 +230,10 @@ bool CAskService::answer_from_evidence(const std::string& question,
     }
 
     const SContextBuildResult built = context_manager.build(
-        groups, SContextBudget{k_prompt_budget_tokens});
+        groups, SContextBudget{
+            k_prompt_budget_tokens,
+            m_config_manager.config().m_model_main.m_context_window_tokens,
+            m_config_manager.config().m_model_main.m_output_reserve_tokens});
     if (!built.m_ok)
     {
         std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED: " << built.m_error << '\n';
