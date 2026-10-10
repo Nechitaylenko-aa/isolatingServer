@@ -58,7 +58,7 @@ struct SConversationCompaction
  * @brief Keep recent turns intact and create a bounded extractive summary of older ones.
  * @param history Reconstructed immutable conversation history.
  * @param keep_recent_turns Number of latest turns to retain verbatim.
- * @param max_summary_chars Maximum size of the generated summary, excluding the label.
+ * @param max_summary_bytes Maximum byte size of the generated summary, excluding the label.
  */
 SConversationCompaction compact_conversation_history(
     const std::vector<SConversationTurn>& history,
