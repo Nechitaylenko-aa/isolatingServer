@@ -1,7 +1,7 @@
 # fcpp-agent: Глобальный Бэклог
 
 Порядок реализации (ADR-12): детерминизм вперёд, LLM — последним.
-CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
+CTest: число тестов отслеживается в последнем CI-run (сборка `-Wall -Wextra -Werror`).
 
 > **НОВОЕ направление (план):** LLM-driven loop (ReAct) поверх детерминированных tools.
 > Эксперимент подтвердил: локальная `Qwen2.5-Coder-14B` нативно умеет `tools`/`tool_calls`.
@@ -104,7 +104,7 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 * [x] **Fan-out Subject→N (ADR-19, path A)**: `outline(класс) → dispatch_targets(метод) → source(реализация)` в `CEvidenceCollector`; лимиты 10/20. B-002 → **PASS**: вердикт «Все методы реализованы» + таблица Circle/Rectangle × area/name.
 * [x] **B2 (ADR-20): курсор → символ через IClang в промпт lite**. Одиночный вопрос: `[cursor symbol: NAME (KIND)]` уходит в lite → субъект = `Rectangle::area` (B-003 PASS). Составной: подвопросы + якорь иерархии (B-002 сохраняет PASS).
 * [x] `fcpp serve` (Agent API как процесс, JSON-RPC поверх stdio) — реализован (ADR-26).
-* [x] **Conversation Context (§49/§50), replay подключён**: `ask(session_id)` восстанавливает user/assistant turns и `context_json` из `sessions.sqlite`; события остаются append-only, replay выделен в тестируемую функцию. Добавлены регрессионные тесты на восстановление между открытиями store, незавершённый turn и malformed event; protocol regression tests проходят CI, end-to-end integration tests ещё нужны. State projection с provenance и атомарность обновления context/close реализованы; CI подтверждён зелёным на коммитах этих изменений. `save_session`/`restore_session` относятся только к проекту.
+* [x] **Conversation Context (§49/§50), replay подключён**: `ask(session_id)` восстанавливает user/assistant turns и `context_json` из `sessions.sqlite`; события остаются append-only, replay выделен в тестируемую функцию. Добавлены регрессионные тесты на восстановление между открытиями store, незавершённый turn и malformed event; protocol regression tests проходят CI, end-to-end integration tests добавлены: проверяется, что persisted context и предыдущие user/assistant turns после повторного открытия store попадают в следующий model prompt. State projection с provenance и атомарность обновления context/close реализованы; CI подтверждён зелёным на коммитах этих изменений. `save_session`/`restore_session` относятся только к проекту.
 * [ ] **Роутинг planner(cloud)/worker(local) — ADR-24** (недоделка, ADR-27): нет расчёта blast radius из индекса, handoff-пакета, переключения по раундам, sticky-планировщика, тегирования раундов, бюджета cloud. Сейчас есть только эскалация по сбою (ADR-25).
 * [ ] Порядок закрытия (ADR-27): сначала Conversation Context (§49) — базис; затем роутинг + blast radius + handoff (ADR-24/§7).
 * [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.

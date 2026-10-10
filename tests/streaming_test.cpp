@@ -23,6 +23,7 @@
 
 #include "core/CAgentApi.h"
 #include "core/CConfigManager.h"
+#include "core/CConversationStore.h"
 #include "fcpp-agent/IAgentApi.h"
 #include "fcpp-agent/IModelApi.h"
 #include "llm/CModelOpenAICompat.h"
@@ -484,4 +485,74 @@ TEST_CASE("streaming integration: tool-enabled completion preserves tool_calls a
     const nlohmann::json request = nlohmann::json::parse(request_body(server.requests()[0]));
     REQUIRE_FALSE(request["stream"].get<bool>());
     REQUIRE(request.contains("tools"));
+}
+
+TEST_CASE("conversation context integration: persisted state and previous turns reach the next model request",
+          "[conversation][integration]")
+{
+    CTempDir home("fcpp-conversation-integration-home");
+    CHomeScope home_scope(home.path());
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+
+    std::string config_text = read_file(config.config_path());
+    const std::string intent_content =
+        "<intent>\n"
+        "<area>UNDERSTAND</area>\n"
+        "<relation>SELF</relation>\n"
+        "<projection>EXPLANATION</projection>\n"
+        "<subject kind=\"SYMBOL\" name=\"\"/>\n"
+        "</intent>";
+    const nlohmann::json intent_response = {
+        {"choices", nlohmann::json::array({
+            {{"finish_reason", "stop"},
+             {"message", {{"role", "assistant"}, {"content", intent_content}}}}
+        })}
+    };
+    CMockOpenAIServer server({{intent_response.dump(), "application/json", 0}});
+    replace_config_value(config_text, "model_main", server.base_url());
+    replace_config_value(config_text, "model_main_name", "conversation-integration-model");
+    replace_config_value(config_text, "react_loop", "NO");
+    write_file(config.config_path(), config_text);
+    REQUIRE(config.load());
+
+    const std::filesystem::path database = config.agent_dir() / "sessions.sqlite";
+    {
+        fcpp::CConversationStore store;
+        REQUIRE(store.open(database));
+        REQUIRE(store.create_session_with_event(
+            "conversation-integration-session", "", "session.open", "{}"));
+        const std::string context =
+            R"({"goal":"preserve the project's conventions","open_questions":["whether to add tests"]})";
+        REQUIRE(store.update_context_with_event(
+            "conversation-integration-session", context,
+            "session.context_updated", context));
+        REQUIRE(store.append_event(
+            "conversation-integration-session", "user",
+            R"({"text":"Remember the red bicycle"})"));
+        REQUIRE(store.append_event(
+            "conversation-integration-session", "assistant",
+            R"({"text":"We discussed the red bicycle yesterday."})"));
+        store.close();
+    }
+
+    fcpp::CAgentApi api(config);
+    fcpp::SApiRequest ask;
+    ask.m_method = fcpp::EApiMethod::Ask;
+    ask.m_session_id = "conversation-integration-session";
+    ask.m_text = "What did we discuss?";
+    const fcpp::SApiResponse response = api.execute(ask);
+    (void)response;
+
+    const std::vector<std::string> requests = server.requests();
+    REQUIRE_FALSE(requests.empty());
+    const nlohmann::json request = nlohmann::json::parse(request_body(requests.front()));
+    const std::string serialized_prompt = request.dump();
+
+    REQUIRE(serialized_prompt.find("preserve the project's conventions") != std::string::npos);
+    REQUIRE(serialized_prompt.find("whether to add tests") != std::string::npos);
+    REQUIRE(serialized_prompt.find("Remember the red bicycle") != std::string::npos);
+    REQUIRE(serialized_prompt.find("We discussed the red bicycle yesterday.") != std::string::npos);
+    REQUIRE(serialized_prompt.find("What did we discuss?") != std::string::npos);
 }
