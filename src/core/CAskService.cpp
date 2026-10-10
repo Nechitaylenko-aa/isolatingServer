@@ -5,6 +5,7 @@
 
 #include "core/CAskService.h"
 #include "core/CContextManager.h"
+#include "core/CModelCascade.h"
 
 #include <iostream>
 #include <memory>
