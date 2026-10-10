@@ -36,7 +36,7 @@ constexpr std::size_t k_max_include_follow = 3;
 /** Number of recent turns kept verbatim when preparing a prompt. */
 constexpr std::size_t k_recent_history_turns = 8;
 /** Hard character bound for the extractive summary of older turns. */
-constexpr std::size_t k_history_summary_chars = 3000;
+constexpr std::size_t k_history_summary_bytes = 3000;
 
 /** Return the model settings used for a particular escalation level. */
 const SModelConfig& model_config_for_role(const SConfig& config, EModelRoleKind role)
@@ -451,7 +451,7 @@ bool CReActAgent::run(const std::string& question,
 
     // Compact only the per-call view. SQLite retains every original turn.
     const SConversationCompaction compacted_history = compact_conversation_history(
-        history, k_recent_history_turns, k_history_summary_chars);
+        history, k_recent_history_turns, k_history_summary_bytes);
     if (!compacted_history.m_summary_text.empty())
     {
         SModelMessage summary;
