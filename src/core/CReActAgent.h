@@ -17,6 +17,7 @@
 
 #include "core/CConfigManager.h"
 #include "core/CProjectManager.h"
+#include "core/CConversationStore.h"
 #include "fcpp-agent/IModelApi.h"
 
 namespace fcpp
@@ -49,6 +50,8 @@ public:
      */
     bool run(const std::string& question,
              const std::string& cursor_hint,
+             const std::string& context_json,
+             const std::vector<SConversationTurn>& history,
              std::string& out_answer) const;
 
 private:
