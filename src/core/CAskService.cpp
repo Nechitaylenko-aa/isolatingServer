@@ -218,13 +218,14 @@ bool CAskService::answer_from_evidence(const std::string& question,
         SModelMessage section_message;
         section_message.m_role = EModelRole::User;
         section_message.m_content = "[" + section.m_title + "]\n" + section.m_text;
+        const std::size_t order = section_order++;
         groups.push_back(SContextGroup{
-            "evidence-" + std::to_string(section_order),
+            "evidence-" + std::to_string(order),
             {std::move(section_message)},
-            section_order++,
+            order,
             50,
             50,
-            section_order,
+            order,
             false});
     }
 
