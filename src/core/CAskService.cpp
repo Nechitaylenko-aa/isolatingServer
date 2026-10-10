@@ -347,7 +347,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
     {
         std::cerr << "fcpp-agent: ANSWER_CASCADE_FAILED: "
                   << model_level_name(cascade.m_level) << ": "
-                  << cascade.m_message << '\\n';
+                  << cascade.m_message << '\n';
         return false;
     }
 
