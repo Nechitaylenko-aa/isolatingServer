@@ -49,6 +49,10 @@ struct SConversationTurn
     std::string m_assistant_text;
 };
 
+/** @brief Reconstruct user/assistant turns from stored JSON events. Malformed payloads are skipped. */
+std::vector<SConversationTurn> reconstruct_conversation_turns(
+    const std::vector<SConversationEvent>& events);
+
 /**
  * @brief SQLite store for session metadata and append-only conversation events.
  *
