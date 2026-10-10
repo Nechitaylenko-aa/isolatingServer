@@ -40,6 +40,8 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
 
     std::vector<Candidate> candidates;
     candidates.reserve(groups.size());
+    std::vector<std::string> seen_ids;
+    seen_ids.reserve(groups.size());
     for (const SContextGroup& group : groups)
     {
         if (group.m_id.empty() || group.m_messages.empty())
@@ -47,6 +49,13 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
             result.m_error = "context group must have an id and at least one message";
             return result;
         }
+        if (std::find(seen_ids.begin(), seen_ids.end(), group.m_id) != seen_ids.end())
+        {
+            result.m_error = "context group ids must be unique";
+            return result;
+        }
+        seen_ids.push_back(group.m_id);
+
         Candidate candidate{&group, 0};
         for (const SModelMessage& message : group.m_messages)
         {
@@ -55,8 +64,8 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
         candidates.push_back(candidate);
     }
 
-    std::vector<const SContextGroup*> selected;
-    std::vector<const SContextGroup*> optional;
+    std::vector<const Candidate*> selected;
+    std::vector<const Candidate*> optional;
     for (const Candidate& candidate : candidates)
     {
         if (candidate.m_group->m_mandatory)
@@ -70,44 +79,39 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
                 return result;
             }
             result.m_estimated_tokens += candidate.m_tokens;
-            selected.push_back(candidate.m_group);
+            selected.push_back(&candidate);
         }
         else
         {
-            optional.push_back(candidate.m_group);
+            optional.push_back(&candidate);
         }
     }
 
     std::stable_sort(optional.begin(), optional.end(),
-        [](const SContextGroup* left, const SContextGroup* right)
+        [](const Candidate* left, const Candidate* right)
         {
-            if (left->m_priority != right->m_priority)
+            if (left->m_group->m_priority != right->m_group->m_priority)
             {
-                return left->m_priority > right->m_priority;
+                return left->m_group->m_priority > right->m_group->m_priority;
             }
-            if (left->m_relevance != right->m_relevance)
+            if (left->m_group->m_relevance != right->m_group->m_relevance)
             {
-                return left->m_relevance > right->m_relevance;
+                return left->m_group->m_relevance > right->m_group->m_relevance;
             }
-            if (left->m_recency != right->m_recency)
+            if (left->m_group->m_recency != right->m_group->m_recency)
             {
-                return left->m_recency > right->m_recency;
+                return left->m_group->m_recency > right->m_group->m_recency;
             }
-            return left->m_order < right->m_order;
+            return left->m_group->m_order < right->m_group->m_order;
         });
 
-    for (const SContextGroup* group : optional)
+    for (const Candidate* candidate : optional)
     {
-        std::size_t group_tokens = 0;
-        for (const SModelMessage& message : group->m_messages)
+        const SContextGroup* group = candidate->m_group;
+        if (candidate->m_tokens <= budget.m_max_prompt_tokens - result.m_estimated_tokens)
         {
-            group_tokens += m_token_counter(message);
-        }
-
-        if (group_tokens <= budget.m_max_prompt_tokens - result.m_estimated_tokens)
-        {
-            result.m_estimated_tokens += group_tokens;
-            selected.push_back(group);
+            result.m_estimated_tokens += candidate->m_tokens;
+            selected.push_back(candidate);
         }
         else
         {
@@ -116,22 +120,22 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
     }
 
     std::stable_sort(selected.begin(), selected.end(),
-        [](const SContextGroup* left, const SContextGroup* right)
+        [](const Candidate* left, const Candidate* right)
         {
-            if (left->m_order != right->m_order)
+            if (left->m_group->m_order != right->m_group->m_order)
             {
-                return left->m_order < right->m_order;
+                return left->m_group->m_order < right->m_group->m_order;
             }
-            return left->m_id < right->m_id;
+            return left->m_group->m_id < right->m_group->m_id;
         });
 
-    for (const SContextGroup* group : selected)
+    for (const Candidate* candidate : selected)
     {
+        const SContextGroup* group = candidate->m_group;
         result.m_included_group_ids.push_back(group->m_id);
         result.m_messages.insert(result.m_messages.end(),
                                  group->m_messages.begin(), group->m_messages.end());
     }
-
     result.m_ok = true;
     return result;
 }
