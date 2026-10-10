@@ -394,39 +394,8 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
 
         session_context_json = session->m_context_json;
-        std::string pending_user;
-        for (const SConversationEvent& event : m_conversation_store.events(request.m_session_id, 0, 1000000))
-        {
-            try
-            {
-                const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
-                if (event.m_kind == "user" && payload.is_object()
-                    && payload.contains("text") && payload["text"].is_string())
-                {
-                    if (!pending_user.empty())
-                    {
-                        conversation_history.push_back(SConversationTurn{event.m_id, pending_user, {}});
-                    }
-                    pending_user = payload["text"].get<std::string>();
-                }
-                else if (event.m_kind == "assistant" && payload.is_object()
-                         && payload.contains("text") && payload["text"].is_string()
-                         && !pending_user.empty())
-                {
-                    conversation_history.push_back(SConversationTurn{
-                        event.m_id, pending_user, payload["text"].get<std::string>()});
-                    pending_user.clear();
-                }
-            }
-            catch (const nlohmann::json::exception&)
-            {
-                // Malformed legacy event payload is ignored for replay, not deleted.
-            }
-        }
-        if (!pending_user.empty())
-        {
-            conversation_history.push_back(SConversationTurn{0, pending_user, {}});
-        }
+        conversation_history = reconstruct_conversation_turns(
+            m_conversation_store.events(request.m_session_id, 0, 1000000));
 
         nlohmann::json user_event = {
             {"text", request.m_text},
