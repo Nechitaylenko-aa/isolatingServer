@@ -358,7 +358,10 @@ bool CAskService::ask(const std::string& text,
 
     std::string contextual_text;
     const SContextBuildResult intent_context = intent_context_manager.build(
-        intent_context_groups, SContextBudget{k_intent_context_budget_tokens});
+        intent_context_groups, SContextBudget{
+            k_intent_context_budget_tokens,
+            config.m_model_light.m_context_window_tokens,
+            config.m_model_light.m_output_reserve_tokens});
     if (!intent_context.m_ok)
     {
         std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED for Intent: "
