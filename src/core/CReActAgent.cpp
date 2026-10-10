@@ -412,7 +412,7 @@ bool CReActAgent::run(const std::string& question,
     const std::vector<SModelTool> tools = tool_schemas();
 
     // Rebuild the prompt before each model call; the durable event log is never trimmed.
-    constexpr std::size_t k_prompt_budget_tokens = 12000;
+    constexpr std::size_t k_prompt_budget_tokens = 10000;
     const CContextManager context_manager;
     std::vector<SContextGroup> prompt_groups;
     std::size_t next_order = 0;
