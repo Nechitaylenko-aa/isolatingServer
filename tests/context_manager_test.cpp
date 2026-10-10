@@ -21,6 +21,54 @@ fcpp::SContextGroup group(std::string id, std::string text, std::size_t order,
 }
 }
 
+TEST_CASE("conversation compaction summarizes old turns and keeps recent turns intact", "[context]")
+{
+    const std::vector<fcpp::SConversationTurn> history{
+        {2, "old question one", "old answer one"},
+        {4, "old question two", "old answer two"},
+        {6, "recent question", "recent answer"}
+    };
+
+    const auto result = fcpp::compact_conversation_history(history, 1, 200);
+
+    REQUIRE(result.m_compacted_turn_count == 2);
+    REQUIRE(result.m_recent_turns.size() == 1);
+    REQUIRE(result.m_recent_turns.front().m_user_text == "recent question");
+    REQUIRE(result.m_recent_turns.front().m_assistant_text == "recent answer");
+    REQUIRE(result.m_summary_text.find("old question one") != std::string::npos);
+    REQUIRE(result.m_summary_text.find("old answer two") != std::string::npos);
+    REQUIRE(result.m_summary_text.size() <= 200);
+}
+
+TEST_CASE("conversation compaction is bounded and never changes source history", "[context]")
+{
+    const std::vector<fcpp::SConversationTurn> history{
+        {2, std::string(300, 'u'), std::string(300, 'a')},
+        {4, "latest question", "latest answer"}
+    };
+
+    const auto result = fcpp::compact_conversation_history(history, 1, 40);
+
+    REQUIRE(result.m_compacted_turn_count == 1);
+    REQUIRE(result.m_summary_text.size() == 40);
+    REQUIRE(result.m_recent_turns.front().m_user_text == "latest question");
+    REQUIRE(history.front().m_user_text.size() == 300);
+    REQUIRE(history.front().m_assistant_text.size() == 300);
+}
+
+TEST_CASE("conversation compaction does not summarize when all turns fit the recent window", "[context]")
+{
+    const std::vector<fcpp::SConversationTurn> history{
+        {2, "question", "answer"}
+    };
+
+    const auto result = fcpp::compact_conversation_history(history, 8, 100);
+
+    REQUIRE(result.m_compacted_turn_count == 0);
+    REQUIRE(result.m_summary_text.empty());
+    REQUIRE(result.m_recent_turns.size() == 1);
+}
+
 TEST_CASE("context manager selects high-priority groups within budget", "[context]")
 {
     const fcpp::CContextManager manager(
