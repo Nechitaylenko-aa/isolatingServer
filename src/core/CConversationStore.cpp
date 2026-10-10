@@ -10,6 +10,8 @@
 #include <system_error>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
 #include <sqlite3.h>
 
 namespace fcpp
@@ -65,6 +67,51 @@ std::string column_text(sqlite3_stmt* statement, int column)
 }
 
 } // namespace
+
+std::vector<SConversationTurn> reconstruct_conversation_turns(
+    const std::vector<SConversationEvent>& events)
+{
+    std::vector<SConversationTurn> turns;
+    std::string pending_user;
+    std::int64_t pending_user_event_id = 0;
+
+    for (const SConversationEvent& event : events)
+    {
+        try
+        {
+            const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
+            if (event.m_kind == "user" && payload.is_object()
+                && payload.contains("text") && payload["text"].is_string())
+            {
+                if (!pending_user.empty())
+                {
+                    turns.push_back(SConversationTurn{pending_user_event_id, pending_user, {}});
+                }
+                pending_user = payload["text"].get<std::string>();
+                pending_user_event_id = event.m_id;
+            }
+            else if (event.m_kind == "assistant" && payload.is_object()
+                     && payload.contains("text") && payload["text"].is_string()
+                     && !pending_user.empty())
+            {
+                turns.push_back(SConversationTurn{
+                    event.m_id, pending_user, payload["text"].get<std::string>()});
+                pending_user.clear();
+                pending_user_event_id = 0;
+            }
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            // Keep the append-only event untouched; skip malformed legacy payloads in replay.
+        }
+    }
+
+    if (!pending_user.empty())
+    {
+        turns.push_back(SConversationTurn{pending_user_event_id, pending_user, {}});
+    }
+    return turns;
+}
 
 CConversationStore::~CConversationStore()
 {
