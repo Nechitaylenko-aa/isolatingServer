@@ -73,3 +73,30 @@ TEST_CASE("context manager rejects an unspecified budget", "[context]")
     REQUIRE_FALSE(result.m_ok);
     REQUIRE(result.m_error == "prompt token budget is zero");
 }
+
+
+TEST_CASE("context manager rejects duplicate group ids", "[context]")
+{
+    const fcpp::CContextManager manager;
+    const auto result = manager.build(
+        {group("same", "first", 0, 1), group("same", "second", 1, 1)}, {100});
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_error == "context group ids must be unique");
+}
+
+TEST_CASE("context manager estimates each message exactly once", "[context]")
+{
+    std::size_t calls = 0;
+    const fcpp::CContextManager manager(
+        [&calls](const fcpp::SModelMessage& message)
+        {
+            ++calls;
+            return message.m_content.size();
+        });
+    const auto result = manager.build(
+        {group("mandatory", "sys", 0, 100, true), group("optional", "hello", 1, 10)}, {100});
+
+    REQUIRE(result.m_ok);
+    REQUIRE(calls == 2);
+}
