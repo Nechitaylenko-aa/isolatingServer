@@ -195,7 +195,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
         return false;
     }
 
-    constexpr std::size_t k_prompt_budget_tokens = 12000;
+    constexpr std::size_t k_prompt_budget_tokens = 10000;
     const CContextManager context_manager;
     std::vector<SContextGroup> groups;
     SModelMessage system;
