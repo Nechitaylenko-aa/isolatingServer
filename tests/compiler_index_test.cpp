@@ -328,6 +328,31 @@ TEST_CASE("чтение индекса: outline/callers/callees/refs/source", "[
     const std::optional<fcpp::SSourceSlice> slice = index.get_source_slice(areas.front().m_usr);
     REQUIRE(slice.has_value());
     REQUIRE_FALSE(slice->m_text.empty());
+    REQUIRE(slice->m_range.m_line > 0);
+    REQUIRE(slice->m_range.m_column > 0);
+    REQUIRE(slice->m_range.m_end_line >= slice->m_range.m_line);
+    REQUIRE(slice->m_range.m_end_column > 0);
+
+    // source() must begin at libclang's exact byte column, not at the line start.
+    std::filesystem::path source_path = areas.front().m_location.m_file;
+    if (source_path.is_relative())
+    {
+        source_path = dogfood / source_path;
+    }
+    std::ifstream source_file(source_path);
+    REQUIRE(source_file.is_open());
+    std::string source_line;
+    for (std::uint32_t line_number = 1; line_number <= slice->m_range.m_line; ++line_number)
+    {
+        REQUIRE(static_cast<bool>(std::getline(source_file, source_line)));
+    }
+    const std::size_t start_offset = static_cast<std::size_t>(slice->m_range.m_column - 1);
+    REQUIRE(start_offset <= source_line.size());
+    const std::size_t first_line_length =
+        (slice->m_range.m_line == slice->m_range.m_end_line)
+            ? static_cast<std::size_t>(slice->m_range.m_end_column - slice->m_range.m_column)
+            : std::string::npos;
+    REQUIRE(slice->m_text.starts_with(source_line.substr(start_offset, first_line_length) + '\n'));
 
     index.close_db();
     std::filesystem::remove_all(home);

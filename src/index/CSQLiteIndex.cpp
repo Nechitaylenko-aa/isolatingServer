@@ -5,6 +5,8 @@
 
 #include "index/CSQLiteIndex.h"
 
+#include <algorithm>
+
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -1185,9 +1187,10 @@ std::optional<SSourceSlice> CSQLiteIndex::get_source_slice(const std::string& us
     }
 
     const std::string sql = std::string(
-        "SELECT sl.line, sl.end_line, COALESCE((SELECT path FROM file WHERE id = sl.file_id), '') "
+        "SELECT sl.line, sl.column, sl.end_line, sl.end_column, "
+        "COALESCE((SELECT path FROM file WHERE id = sl.file_id), '') "
         "FROM symbol_location sl WHERE sl.symbol_id = (SELECT id FROM symbol WHERE usr = ?1 AND generation = ")
-        + k_active_generation + " LIMIT 1) LIMIT 1;";
+        + k_active_generation + " LIMIT 1) ORDER BY sl.line, sl.column LIMIT 1;";
 
     sqlite3_stmt* statement = nullptr;
     if (sqlite3_prepare_v2(m_db, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK)
@@ -1197,13 +1200,17 @@ std::optional<SSourceSlice> CSQLiteIndex::get_source_slice(const std::string& us
     sqlite3_bind_text(statement, 1, usr.c_str(), -1, SQLITE_TRANSIENT);
 
     std::uint32_t start_line = 0;
+    std::uint32_t start_column = 0;
     std::uint32_t end_line = 0;
+    std::uint32_t end_column = 0;
     std::string file;
     if (sqlite3_step(statement) == SQLITE_ROW)
     {
         start_line = static_cast<std::uint32_t>(sqlite3_column_int(statement, 0));
-        end_line = static_cast<std::uint32_t>(sqlite3_column_int(statement, 1));
-        file = read_text(statement, 2);
+        start_column = static_cast<std::uint32_t>(sqlite3_column_int(statement, 1));
+        end_line = static_cast<std::uint32_t>(sqlite3_column_int(statement, 2));
+        end_column = static_cast<std::uint32_t>(sqlite3_column_int(statement, 3));
+        file = read_text(statement, 4);
     }
     sqlite3_finalize(statement);
 
@@ -1218,6 +1225,9 @@ std::optional<SSourceSlice> CSQLiteIndex::get_source_slice(const std::string& us
         return std::nullopt;
     }
 
+    // libclang ranges are half-open: start column is included, end column is excluded.
+    // Older/incomplete index rows may lack columns; preserve the line-based fallback.
+    const bool has_exact_columns = start_column > 0 && end_column > 0;
     std::ostringstream slice;
     std::string line;
     std::uint32_t current = 0;
@@ -1232,16 +1242,32 @@ std::optional<SSourceSlice> CSQLiteIndex::get_source_slice(const std::string& us
         {
             break;
         }
-        slice << line << '\n';
+
+        if (has_exact_columns)
+        {
+            const std::size_t start_offset =
+                (current == start_line) ? std::min<std::size_t>(start_column - 1, line.size()) : 0;
+            const std::size_t end_offset =
+                (current == end_line) ? std::min<std::size_t>(end_column - 1, line.size()) : line.size();
+            if (end_offset >= start_offset)
+            {
+                slice << line.substr(start_offset, end_offset - start_offset);
+            }
+        }
+        else
+        {
+            slice << line;
+        }
+        slice << '\n';
     }
 
     SSourceSlice result;
     result.m_usr = usr;
     result.m_text = slice.str();
     result.m_range.m_line = start_line;
+    result.m_range.m_column = start_column;
     result.m_range.m_end_line = end_line;
-    result.m_range.m_column = 0;
-    result.m_range.m_end_column = 0;
+    result.m_range.m_end_column = end_column;
     return result;
 }
 

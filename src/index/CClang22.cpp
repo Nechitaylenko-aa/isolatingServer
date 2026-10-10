@@ -182,10 +182,11 @@ SClangLocation location_of(CXCursor cursor)
     location.m_end_line = 0;
     location.m_end_column = 0;
 
+    const CXSourceRange range = clang_getCursorExtent(cursor);
     CXFile file = nullptr;
     unsigned line = 0;
     unsigned column = 0;
-    clang_getFileLocation(clang_getCursorLocation(cursor), &file, &line, &column, nullptr);
+    clang_getFileLocation(clang_getRangeStart(range), &file, &line, &column, nullptr);
 
     if (file != nullptr)
     {
@@ -194,7 +195,6 @@ SClangLocation location_of(CXCursor cursor)
     location.m_line = line;
     location.m_column = column;
 
-    CXSourceRange range = clang_getCursorExtent(cursor);
     CXFile end_file = nullptr;
     unsigned end_line = 0;
     unsigned end_column = 0;
