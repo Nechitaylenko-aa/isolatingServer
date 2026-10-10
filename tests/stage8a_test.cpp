@@ -191,6 +191,12 @@ TEST_CASE("config: модели, db_dir, default_build читаются", "[stag
         conf << "model_remote_type=\"claude\"\n";
         conf << "model_remote_name=\"claude-3.5\"\n";
         conf << "model_remote_key=\"sk-secret\"\n";
+        conf << "model_main_context_window_tokens=\"32768\"\n";
+        conf << "model_main_output_reserve_tokens=\"2048\"\n";
+        conf << "model_light_context_window_tokens=\"0\"\n";
+        conf << "model_light_output_reserve_tokens=\"0\"\n";
+        conf << "model_remote_context_window_tokens=\"200000\"\n";
+        conf << "model_remote_output_reserve_tokens=\"8192\"\n";
     }
 
     fcpp::CConfigManager reloaded;
@@ -201,7 +207,31 @@ TEST_CASE("config: модели, db_dir, default_build читаются", "[stag
     REQUIRE(reloaded.config().m_model_light.m_url == "same_as_main");
     REQUIRE(reloaded.config().m_remote_type == fcpp::EModelRemoteType::Claude);
     REQUIRE(reloaded.config().m_model_remote.m_key == "sk-secret");
+    REQUIRE(reloaded.config().m_model_main.m_context_window_tokens == 32768);
+    REQUIRE(reloaded.config().m_model_main.m_output_reserve_tokens == 2048);
+    // light shares the main endpoint and inherits its limits when not configured.
+    REQUIRE(reloaded.config().m_model_light.m_context_window_tokens == 32768);
+    REQUIRE(reloaded.config().m_model_light.m_output_reserve_tokens == 2048);
+    REQUIRE(reloaded.config().m_model_remote.m_context_window_tokens == 200000);
+    REQUIRE(reloaded.config().m_model_remote.m_output_reserve_tokens == 8192);
 
+    std::filesystem::remove_all(home);
+}
+
+TEST_CASE("config: invalid model context limits are rejected", "[stage8a]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-s8-invalid-context");
+    HomeScope scope(home);
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    {
+        std::ofstream conf(config.config_path(), std::ios::app);
+        conf << "model_main_context_window_tokens=\"32k\"\n";
+    }
+
+    fcpp::CConfigManager reloaded;
+    REQUIRE_FALSE(reloaded.load());
     std::filesystem::remove_all(home);
 }
 
