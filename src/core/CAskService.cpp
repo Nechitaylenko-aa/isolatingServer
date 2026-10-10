@@ -187,16 +187,10 @@ bool CAskService::answer_from_evidence(const std::string& question,
                                        bool stream,
                                        std::string& out_answer) const
 {
-    std::unique_ptr<IModelApi> main_model =
-        CModelFactory::create(m_config_manager.config(), EModelRoleKind::Main);
-    if (main_model == nullptr || !main_model->is_available())
-    {
-        std::cerr << "fcpp-agent: LLM_UNAVAILABLE: main model is not configured\n";
-        return false;
-    }
-
     constexpr std::size_t k_prompt_budget_tokens = 10000;
-    const CContextManager context_manager;
+    constexpr std::uint32_t k_max_answer_attempts = 5;
+    const SConfig& config = m_config_manager.config();
+
     std::vector<SContextGroup> groups;
     SModelMessage system;
     system.m_role = EModelRole::System;
@@ -205,7 +199,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
 
     SModelMessage user;
     user.m_role = EModelRole::User;
-    user.m_content = "Question:\n" + question + "\n\nUse only the evidence messages that follow.";
+    user.m_content = "Question:\\n" + question + "\\n\\nUse only the evidence messages that follow.";
     groups.push_back(SContextGroup{"answer-question", {user}, 1, 100, 100, 0, true});
 
     std::size_t section_order = 2;
@@ -217,7 +211,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
         }
         SModelMessage section_message;
         section_message.m_role = EModelRole::User;
-        section_message.m_content = "[" + section.m_title + "]\n" + section.m_text;
+        section_message.m_content = "[" + section.m_title + "]\\n" + section.m_text;
         const std::size_t order = section_order++;
         groups.push_back(SContextGroup{
             "evidence-" + std::to_string(order),
@@ -229,44 +223,134 @@ bool CAskService::answer_from_evidence(const std::string& question,
             false});
     }
 
-    const SContextBuildResult built = context_manager.build(
-        groups, SContextBudget{
-            k_prompt_budget_tokens,
-            m_config_manager.config().m_model_main.m_context_window_tokens,
-            m_config_manager.config().m_model_main.m_output_reserve_tokens});
-    if (!built.m_ok)
-    {
-        std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED: " << built.m_error << '\n';
-        return false;
-    }
-    const std::vector<SModelMessage>& messages = built.m_messages;
-
-    if (stream)
-    {
-        std::string collected;
-        const SModelReply reply = main_model->complete_stream(
-            messages,
-            [&collected](const std::string& chunk) -> bool
-            {
-                collected += chunk;
-                return true;
-            });
-        if (!reply.m_ok && !reply.m_error.empty())
+    const std::vector<EModelLevel> levels{
+        EModelLevel::Lite, EModelLevel::Main, EModelLevel::Remote};
+    const SCascadeResult cascade = CModelCascade::run(
+        levels,
+        [&](EModelLevel level, const std::string& extra_context) -> SCascadeAttempt
         {
-            std::cerr << "fcpp-agent: LLM_PROVIDER_ERROR: " << reply.m_error << '\n';
-            return false;
-        }
-        out_answer = collected;
-        return true;
-    }
+            SCascadeAttempt attempt;
+            EModelRoleKind role = EModelRoleKind::Light;
+            const SModelConfig* model_settings = &config.m_model_light;
+            if (level == EModelLevel::Main)
+            {
+                role = EModelRoleKind::Main;
+                model_settings = &config.m_model_main;
+            }
+            else if (level == EModelLevel::Remote)
+            {
+                role = EModelRoleKind::Remote;
+                model_settings = &config.m_model_remote;
+            }
 
-    const SModelReply reply = main_model->complete(messages);
-    if (!reply.m_ok)
+            SModelConfig effective_settings = *model_settings;
+            if (level == EModelLevel::Lite)
+            {
+                if (effective_settings.m_url.empty() || effective_settings.m_url == "same_as_main")
+                {
+                    effective_settings.m_url = config.m_model_main.m_url;
+                }
+                if (effective_settings.m_name.empty())
+                {
+                    effective_settings.m_name = config.m_model_main.m_name;
+                }
+                if (effective_settings.m_context_window_tokens == 0)
+                {
+                    effective_settings.m_context_window_tokens =
+                        config.m_model_main.m_context_window_tokens;
+                }
+                if (effective_settings.m_output_reserve_tokens == 0)
+                {
+                    effective_settings.m_output_reserve_tokens =
+                        config.m_model_main.m_output_reserve_tokens;
+                }
+            }
+
+            std::unique_ptr<IModelApi> model = CModelFactory::create(config, role);
+            if (model == nullptr || !model->is_available())
+            {
+                attempt.m_glitch = EGlitchKind::Provider;
+                attempt.m_error_context = std::string(model_level_name(level))
+                    + " answer model unavailable";
+                return attempt;
+            }
+
+            std::vector<SContextGroup> attempt_groups = groups;
+            if (!extra_context.empty())
+            {
+                SModelMessage retry_context;
+                retry_context.m_role = EModelRole::System;
+                retry_context.m_content =
+                    "[Previous answer-generation attempt failed; correct this issue]\n" + extra_context;
+                attempt_groups.push_back(SContextGroup{
+                    "answer-retry-context", {retry_context}, 1, 110, 110, 0, true});
+            }
+
+            const CContextManager context_manager;
+            const SContextBuildResult built = context_manager.build(
+                attempt_groups, SContextBudget{
+                    k_prompt_budget_tokens,
+                    effective_settings.m_context_window_tokens,
+                    effective_settings.m_output_reserve_tokens});
+            if (!built.m_ok)
+            {
+                attempt.m_glitch = EGlitchKind::Schema;
+                attempt.m_error_context = std::string(model_level_name(level))
+                    + " context does not fit: " + built.m_error;
+                return attempt;
+            }
+
+            SModelReply reply;
+            std::string collected;
+            if (stream)
+            {
+                reply = model->complete_stream(
+                    built.m_messages,
+                    [&collected](const std::string& chunk) -> bool
+                    {
+                        collected += chunk;
+                        return true;
+                    });
+                if (reply.m_ok)
+                {
+                    reply.m_text = collected;
+                }
+            }
+            else
+            {
+                reply = model->complete(built.m_messages);
+            }
+
+            if (!reply.m_ok)
+            {
+                attempt.m_glitch = EGlitchKind::Provider;
+                attempt.m_error_context = std::string(model_level_name(level))
+                    + " provider error: " + reply.m_error;
+                return attempt;
+            }
+            if (reply.m_text.empty())
+            {
+                attempt.m_glitch = EGlitchKind::EmptyReply;
+                attempt.m_error_context = std::string(model_level_name(level))
+                    + " returned an empty answer";
+                return attempt;
+            }
+
+            attempt.m_valid = true;
+            attempt.m_result_text = reply.m_text;
+            return attempt;
+        },
+        k_max_answer_attempts);
+
+    if (!cascade.m_ok)
     {
-        std::cerr << "fcpp-agent: LLM_PROVIDER_ERROR: " << reply.m_error << '\n';
+        std::cerr << "fcpp-agent: ANSWER_CASCADE_FAILED: "
+                  << model_level_name(cascade.m_level) << ": "
+                  << cascade.m_message << '\\n';
         return false;
     }
-    out_answer = reply.m_text;
+
+    out_answer = cascade.m_text;
     return true;
 }
 
