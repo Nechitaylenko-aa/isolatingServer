@@ -46,6 +46,21 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::Ask;
         return true;
     }
+    if (name == "session.open")
+    {
+        out = EApiMethod::SessionOpen;
+        return true;
+    }
+    if (name == "session.close")
+    {
+        out = EApiMethod::SessionClose;
+        return true;
+    }
+    if (name == "session.update_context")
+    {
+        out = EApiMethod::SessionUpdateContext;
+        return true;
+    }
     if (name == "config.reload")
     {
         out = EApiMethod::ConfigReload;
@@ -178,6 +193,18 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_text = params["text"].get<std::string>();
     }
+    if (params.contains("session_id") && params["session_id"].is_string())
+    {
+        out_request.m_session_id = params["session_id"].get<std::string>();
+    }
+    else if (params.contains("sessionId") && params["sessionId"].is_string())
+    {
+        out_request.m_session_id = params["sessionId"].get<std::string>();
+    }
+    if (params.contains("context"))
+    {
+        out_request.m_context_json = params["context"].dump();
+    }
     if (params.contains("tool") && params["tool"].is_string())
     {
         out_request.m_tool = params["tool"].get<std::string>();
@@ -252,6 +279,10 @@ std::string CProtocolServer::serialize_response(const std::string& id,
         if (!response.m_project_id.empty())
         {
             result["project_id"] = response.m_project_id;
+        }
+        if (!response.m_session_id.empty())
+        {
+            result["session_id"] = response.m_session_id;
         }
         if (!response.m_text.empty())
         {
