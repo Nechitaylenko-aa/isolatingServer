@@ -8,6 +8,7 @@
 #include <chrono>
 #include <filesystem>
 #include <system_error>
+#include <utility>
 
 #include <sqlite3.h>
 
