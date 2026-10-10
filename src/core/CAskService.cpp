@@ -512,8 +512,9 @@ bool CAskService::ask(const std::string& text,
             return true;
         };
         if (agent.run(text, react_context, context_json, history, out_answer,
-                      stream ? std::function<bool(const std::string&)>(tracked_stream)
-                             : std::function<bool(const std::string&)>{}))
+                      stream && on_stream_chunk
+                          ? std::function<bool(const std::string&)>(tracked_stream)
+                          : std::function<bool(const std::string&)>{}))
         {
             return true;
         }
