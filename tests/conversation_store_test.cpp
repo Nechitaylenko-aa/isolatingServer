@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 #include <unistd.h>
 
 #include "core/CConversationStore.h"
