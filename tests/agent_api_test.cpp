@@ -110,6 +110,25 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     status_request.m_method = fcpp::EApiMethod::AgentStatus;
     REQUIRE(api.execute(status_request).m_ok);
 
+    // Conversation sessions have a lifecycle independent of project sessions.
+    fcpp::SApiRequest session_open;
+    session_open.m_method = fcpp::EApiMethod::SessionOpen;
+    const fcpp::SApiResponse session_response = api.execute(session_open);
+    REQUIRE(session_response.m_ok);
+    REQUIRE_FALSE(session_response.m_session_id.empty());
+
+    fcpp::SApiRequest update_context;
+    update_context.m_method = fcpp::EApiMethod::SessionUpdateContext;
+    update_context.m_session_id = session_response.m_session_id;
+    update_context.m_context_json = R"({"goal":"inspect API","open_questions":["history injection"]})";
+    REQUIRE(api.execute(update_context).m_ok);
+
+    fcpp::SApiRequest close_conversation;
+    close_conversation.m_method = fcpp::EApiMethod::SessionClose;
+    close_conversation.m_session_id = session_response.m_session_id;
+    REQUIRE(api.execute(close_conversation).m_ok);
+    REQUIRE_FALSE(api.execute(close_conversation).m_ok);
+
     fcpp::SApiRequest open_request;
     open_request.m_method = fcpp::EApiMethod::ProjectOpen;
     open_request.m_path = project_dir.string();
