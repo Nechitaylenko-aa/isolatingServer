@@ -11,6 +11,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "core/CConfigManager.h"
 #include "core/CProjectManager.h"
