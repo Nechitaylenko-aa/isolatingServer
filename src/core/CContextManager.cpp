@@ -40,9 +40,9 @@ SConversationCompaction compact_conversation_history(
         std::string entry = "Turn " + std::to_string(index + 1) + " user: " + turn.m_user_text;
         if (!turn.m_assistant_text.empty())
         {
-            entry += "\\n  assistant: " + turn.m_assistant_text;
+            entry += "\n  assistant: " + turn.m_assistant_text;
         }
-        entry += "\\n";
+        entry += "\n";
 
         const std::size_t remaining = max_summary_chars - result.m_summary_text.size();
         if (entry.size() > remaining)
