@@ -463,9 +463,20 @@ bool CConfigManager::load() const
         return false;
     }
 
+    // Output reserve must match the provider max_tokens default even when set to zero.
+    if (m_config.m_model_main.m_output_reserve_tokens == 0)
+    {
+        m_config.m_model_main.m_output_reserve_tokens = 4096;
+    }
+    if (m_config.m_model_remote.m_output_reserve_tokens == 0)
+    {
+        m_config.m_model_remote.m_output_reserve_tokens = 4096;
+    }
+
     // A light role sharing the main endpoint inherits its model context settings.
-    if (m_config.m_model_light.m_url.empty()
-        || m_config.m_model_light.m_url == "same_as_main")
+    const bool light_shares_main = m_config.m_model_light.m_url.empty()
+        || m_config.m_model_light.m_url == "same_as_main";
+    if (light_shares_main)
     {
         if (m_config.m_model_light.m_context_window_tokens == 0)
         {
@@ -477,6 +488,10 @@ bool CConfigManager::load() const
             m_config.m_model_light.m_output_reserve_tokens =
                 m_config.m_model_main.m_output_reserve_tokens;
         }
+    }
+    else if (m_config.m_model_light.m_output_reserve_tokens == 0)
+    {
+        m_config.m_model_light.m_output_reserve_tokens = 4096;
     }
 
     return true;
