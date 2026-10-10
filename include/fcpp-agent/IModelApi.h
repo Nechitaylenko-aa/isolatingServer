@@ -143,6 +143,22 @@ public:
      */
     virtual SModelReply complete_stream(const std::vector<SModelMessage>& messages,
                                         const SStreamCallback& on_chunk) = 0;
+
+    // Tool-enabled responses are buffered until tool_calls are known, preventing
+    // internal narration from leaking. Use the no-tools overload for live final output.
+    virtual SModelReply complete_stream(const std::vector<SModelMessage>& messages,
+                                        const std::vector<SModelTool>& tools,
+                                        const SStreamCallback& on_chunk)
+    {
+        SModelReply reply = complete(messages, tools);
+        if (reply.m_ok && reply.m_tool_calls.empty() && !reply.m_text.empty()
+                && on_chunk && !on_chunk(reply.m_text))
+        {
+            reply.m_ok = false;
+            reply.m_error = "stream callback cancelled output";
+        }
+        return reply;
+    }
 };
 
 } // namespace fcpp

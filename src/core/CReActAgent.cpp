@@ -328,7 +328,8 @@ bool CReActAgent::run(const std::string& question,
                       const std::string& cursor_hint,
                       const std::string& context_json,
                       const std::vector<SConversationTurn>& history,
-                      std::string& out_answer) const
+                      std::string& out_answer,
+                      const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     out_answer.clear();
 
@@ -515,7 +516,9 @@ bool CReActAgent::run(const std::string& question,
             std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED: " << prompt.m_error << '\n';
             return false;
         }
-        const SModelReply reply = model->complete(prompt.m_messages, tools);
+        const SModelReply reply = on_stream_chunk
+                                      ? model->complete_stream(prompt.m_messages, tools, {})
+                                      : model->complete(prompt.m_messages, tools);
         if (!reply.m_ok)
         {
             std::cerr << "fcpp-agent: LLM_PROVIDER_ERROR: " << reply.m_error << '\n';
@@ -537,6 +540,26 @@ bool CReActAgent::run(const std::string& question,
         if (reply.m_tool_calls.empty() && !empty_reply && !broken_call
                 && !plan_narration && !give_up)
         {
+            if (on_stream_chunk)
+            {
+                // Tool-enabled turn ended without tool calls. Re-ask for final
+                // output without tools so it can be streamed live and safely.
+                std::vector<SModelMessage> final_messages = prompt.m_messages;
+                SModelMessage final_instruction;
+                final_instruction.m_role = EModelRole::User;
+                final_instruction.m_content =
+                    "Give the final answer to the user's original question now. "
+                    "Use the gathered context above. Do not call tools or describe a plan.";
+                final_messages.push_back(std::move(final_instruction));
+                const SModelReply streamed = model->complete_stream(final_messages, on_stream_chunk);
+                if (!streamed.m_ok || streamed.m_text.empty())
+                {
+                    std::cerr << "fcpp-agent: streamed final answer failed: " << streamed.m_error << '\n';
+                    return false;
+                }
+                out_answer = streamed.m_text;
+                return true;
+            }
             out_answer = reply.m_text;
             return !out_answer.empty();
         }
@@ -707,7 +730,9 @@ bool CReActAgent::run(const std::string& question,
         return false;
     }
 
-    const SModelReply final_reply = model->complete(final_prompt.m_messages);
+    const SModelReply final_reply = on_stream_chunk
+                                        ? model->complete_stream(final_prompt.m_messages, on_stream_chunk)
+                                        : model->complete(final_prompt.m_messages);
     if (final_reply.m_ok && !final_reply.m_text.empty())
     {
         out_answer = final_reply.m_text;

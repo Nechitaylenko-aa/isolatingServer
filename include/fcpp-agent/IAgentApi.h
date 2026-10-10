@@ -10,6 +10,7 @@
 #define FCPP_AGENT_IAGENTAPI_H
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,7 @@ struct SApiRequest
     std::uint32_t m_editor_line = 0;  ///< Строка курсора (0 — нет).
     std::uint32_t m_editor_column = 0;///< Колонка курсора (0 — нет).
     bool m_stream = false;            ///< Режим вывода (транспорт CLI, не семантика запроса).
+    std::function<bool(const std::string&)> m_on_stream_chunk; ///< Потоковый вывод; false прерывает генерацию.
 };
 
 /**

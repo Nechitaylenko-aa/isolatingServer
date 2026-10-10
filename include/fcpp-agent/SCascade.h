@@ -48,6 +48,7 @@ struct SCascadeAttempt
     EGlitchKind m_glitch = EGlitchKind::None;      ///< Обнаруженный глюк.
     std::string m_result_text;                     ///< Полезный результат.
     std::string m_error_context;                   ///< Контекст ошибки для передачи наверх.
+    bool m_stream_started = false;                 ///< Уже выведен фрагмент; повторная попытка испортит ответ.
 };
 
 /**

@@ -429,7 +429,8 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
                                 request.m_editor_column,
                                 answer,
                                 session_context_json,
-                                conversation_history);
+                                conversation_history,
+                                request.m_on_stream_chunk);
     if (!request.m_session_id.empty())
     {
         nlohmann::json assistant_event = {

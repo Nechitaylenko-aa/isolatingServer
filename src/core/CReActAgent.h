@@ -12,6 +12,7 @@
 #define FCPP_AGENT_CREACTAGENT_H
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -52,7 +53,8 @@ public:
              const std::string& cursor_hint,
              const std::string& context_json,
              const std::vector<SConversationTurn>& history,
-             std::string& out_answer) const;
+             std::string& out_answer,
+             const std::function<bool(const std::string&)>& on_stream_chunk = {}) const;
 
 private:
     const CConfigManager& m_config_manager; ///< Конфигурация.

@@ -96,3 +96,23 @@ TEST_CASE("cascade: невалидный ретрай ограничен бюд�
     REQUIRE(calls == 2);
     REQUIRE(result.m_attempts == 2);
 }
+
+TEST_CASE("cascade: stops retry after visible stream output", "[cascade][stream]")
+{
+    std::uint32_t calls = 0;
+    const fcpp::SCascadeResult result = fcpp::CModelCascade::run(
+        {fcpp::EModelLevel::Lite, fcpp::EModelLevel::Main},
+        [&calls](fcpp::EModelLevel, const std::string&) -> fcpp::SCascadeAttempt
+        {
+            ++calls;
+            fcpp::SCascadeAttempt attempt;
+            attempt.m_glitch = fcpp::EGlitchKind::Provider;
+            attempt.m_error_context = "provider failed after first chunk";
+            attempt.m_stream_started = true;
+            return attempt;
+        },
+        5);
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(calls == 1);
+    REQUIRE(result.m_attempts == 1);
+}

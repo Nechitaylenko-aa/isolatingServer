@@ -9,6 +9,7 @@
 #ifndef FCPP_AGENT_CASKSERVICE_H
 #define FCPP_AGENT_CASKSERVICE_H
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -61,7 +62,8 @@ public:
              unsigned cursor_col,
              std::string& out_answer,
              const std::string& context_json = "{}",
-             const std::vector<SConversationTurn>& history = {}) const;
+             const std::vector<SConversationTurn>& history = {},
+             const std::function<bool(const std::string&)>& on_stream_chunk = {}) const;
 
 private:
     /**
@@ -75,7 +77,8 @@ private:
     bool answer_from_evidence(const std::string& question,
                               const SEvidence& evidence,
                               bool stream,
-                              std::string& out_answer) const;
+                              std::string& out_answer,
+                              const std::function<bool(const std::string&)>& on_stream_chunk) const;
 
     /**
      * @brief Разрешить курсор в сущность через IClang (innermost, B2/ADR-20).

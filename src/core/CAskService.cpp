@@ -271,7 +271,8 @@ std::string CAskService::hierarchy_anchor(const std::string& file,
 bool CAskService::answer_from_evidence(const std::string& question,
                                        const SEvidence& evidence,
                                        bool stream,
-                                       std::string& out_answer) const
+                                       std::string& out_answer,
+                                       const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     constexpr std::size_t k_prompt_budget_tokens = 10000;
     constexpr std::uint32_t k_max_answer_attempts = 5;
@@ -393,15 +394,30 @@ bool CAskService::answer_from_evidence(const std::string& question,
 
             SModelReply reply;
             std::string collected;
+            bool callback_cancelled = false;
             if (stream)
             {
                 reply = model->complete_stream(
                     built.m_messages,
-                    [&collected](const std::string& chunk) -> bool
+                    [&](const std::string& chunk) -> bool
                     {
                         collected += chunk;
+                        if (!chunk.empty() && on_stream_chunk)
+                        {
+                            attempt.m_stream_started = true;
+                            if (!on_stream_chunk(chunk))
+                            {
+                                callback_cancelled = true;
+                                return false;
+                            }
+                        }
                         return true;
                     });
+                if (callback_cancelled)
+                {
+                    reply.m_ok = false;
+                    reply.m_error = "stream callback cancelled output";
+                }
                 if (reply.m_ok)
                 {
                     reply.m_text = collected;
@@ -452,7 +468,8 @@ bool CAskService::ask(const std::string& text,
                       unsigned cursor_col,
                       std::string& out_answer,
                       const std::string& context_json,
-                      const std::vector<SConversationTurn>& history) const
+                      const std::vector<SConversationTurn>& history,
+                      const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     out_answer.clear();
 
@@ -484,9 +501,26 @@ bool CAskService::ask(const std::string& text,
     if (config.m_react_loop)
     {
         const CReActAgent agent(m_config_manager, m_project_manager);
-        if (agent.run(text, react_context, context_json, history, out_answer))
+        bool stream_started = false;
+        const auto tracked_stream = [&](const std::string& chunk) -> bool
+        {
+            if (on_stream_chunk && !chunk.empty())
+            {
+                stream_started = true;
+                return on_stream_chunk(chunk);
+            }
+            return true;
+        };
+        if (agent.run(text, react_context, context_json, history, out_answer,
+                      stream ? std::function<bool(const std::string&)>(tracked_stream)
+                             : std::function<bool(const std::string&)>{}))
         {
             return true;
+        }
+        if (stream_started)
+        {
+            // Never append a fallback answer after partial output was already shown.
+            return false;
         }
         std::cerr << "fcpp-agent: ReAct loop не дал ответа, переход к детерминированному пути\n";
     }
@@ -696,7 +730,7 @@ bool CAskService::ask(const std::string& text,
     if (produced)
     {
         // Финал: ответ по накопленному Evidence всей нити.
-        return answer_from_evidence(contextual_text, accumulated, stream, out_answer);
+        return answer_from_evidence(contextual_text, accumulated, stream, out_answer, on_stream_chunk);
     }
 
     if (!clarification.empty())

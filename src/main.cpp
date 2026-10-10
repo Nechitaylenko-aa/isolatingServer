@@ -400,12 +400,31 @@ int main(int argc, char* argv[])
             }
         }
 
+        bool streamed_output = false;
+        if (request.m_stream)
+        {
+            request.m_on_stream_chunk = [&streamed_output](const std::string& chunk) -> bool
+            {
+                std::cout << chunk;
+                std::cout.flush();
+                if (!chunk.empty())
+                {
+                    streamed_output = true;
+                }
+                return std::cout.good();
+            };
+        }
+
         const fcpp::SApiResponse response = api.execute(request);
-        if (!response.m_text.empty())
+        if (streamed_output)
+        {
+            std::cout << '\n';
+        }
+        else if (!response.m_text.empty())
         {
             std::cout << response.m_text << '\n';
         }
-        else if (!response.m_ok && !response.m_message.empty())
+        if (!response.m_ok && !response.m_message.empty())
         {
             std::cerr << "fcpp-agent: " << response.m_message << '\n';
         }

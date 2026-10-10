@@ -58,6 +58,12 @@ SCascadeResult CModelCascade::run(const std::vector<EModelLevel>& levels,
                                    : single.m_error_context;
             carried_context = single.m_error_context;
 
+            // Once visible output started, retries would concatenate two answers.
+            if (single.m_stream_started)
+            {
+                return result;
+            }
+
             if (single.m_glitch == EGlitchKind::Provider)
             {
                 // Провайдер недоступен — ретрай бессмыслен, сразу на следующий уровень.
