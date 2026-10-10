@@ -31,7 +31,12 @@ struct SContextGroup
 /** @brief Limits for a single model invocation. */
 struct SContextBudget
 {
+    // Optional hard cap for prompt tokens. Zero means no separate prompt cap.
     std::size_t m_max_prompt_tokens = 0;
+    // Optional model context window and reserved completion allowance.
+    // When configured, the effective prompt budget is min(prompt cap, window - reserve).
+    std::size_t m_context_window_tokens = 0;
+    std::size_t m_output_reserve_tokens = 0;
 };
 
 /** @brief Context build diagnostics and selected model messages. */
