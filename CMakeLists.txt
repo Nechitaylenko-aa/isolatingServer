@@ -128,6 +128,7 @@ add_library(fcpp_core STATIC
     src/core/CPatchValidator.cpp
     src/core/CPatchApplier.cpp
     src/core/CAgentApi.cpp
+    # Conversation persistence and prompt context budgeting implementations.
     src/core/CConversationStore.cpp
     src/core/CContextManager.cpp
     src/core/SIntent.cpp
