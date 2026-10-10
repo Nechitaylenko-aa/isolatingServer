@@ -32,10 +32,14 @@ jobs:
           max-size: "500M"
           verbose: 1
 
-      - name: Install libclang dev
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libclang-22-dev
+          sudo apt-get install -y \
+            ninja-build \
+            libclang-22-dev \
+            libcurl4-openssl-dev \
+            catch2
       
       # 4. Конфигурируем CMake с указанием компилятора и ccache как launcher
       - name: Configure CMake
