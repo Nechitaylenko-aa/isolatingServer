@@ -59,7 +59,6 @@ jobs:
       # 6. Тесты (если настроен CTest)
       - name: Test
         run: ctest --test-dir build --output-on-failure
-        continue-on-error: true   # уберите, когда тесты будут готовы
 
       # 7. Показываем статистику ccache для отладки
       - name: Show ccache stats
