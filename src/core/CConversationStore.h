@@ -41,6 +41,14 @@ struct SConversationEvent
     std::int64_t m_created_at = 0;
 };
 
+/** @brief Completed conversational turn reconstructed from immutable events. */
+struct SConversationTurn
+{
+    std::int64_t m_last_event_id = 0;
+    std::string m_user_text;
+    std::string m_assistant_text;
+};
+
 /**
  * @brief SQLite store for session metadata and append-only conversation events.
  *
