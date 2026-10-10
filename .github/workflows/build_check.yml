@@ -32,6 +32,11 @@ jobs:
           max-size: "500M"
           verbose: 1
 
+      - name: Install libclang dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-22-dev
+      
       # 4. Конфигурируем CMake с указанием компилятора и ccache как launcher
       - name: Configure CMake
         run: |
