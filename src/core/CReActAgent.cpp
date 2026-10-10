@@ -34,6 +34,20 @@ constexpr int k_max_steps = 20;
 /** @brief Максимум результатов include, для которых автоматически читается source. */
 constexpr std::size_t k_max_include_follow = 3;
 
+/** Return the model settings used for a particular escalation level. */
+const SModelConfig& model_config_for_role(const SConfig& config, EModelRoleKind role)
+{
+    if (role == EModelRoleKind::Light)
+    {
+        return config.m_model_light;
+    }
+    if (role == EModelRoleKind::Remote)
+    {
+        return config.m_model_remote;
+    }
+    return config.m_model_main;
+}
+
 /** @brief Системный промт управления циклом (стабильный префикс). */
 constexpr const char* k_loop_prompt =
     "You are a C++ code navigation agent. You answer questions about a C++ project "
@@ -472,8 +486,12 @@ bool CReActAgent::run(const std::string& question,
 
     for (int step = 1; step <= k_max_steps; ++step)
     {
+        const SModelConfig& active_model_config = model_config_for_role(config, levels[level_index]);
         const SContextBuildResult prompt = context_manager.build(
-            prompt_groups, SContextBudget{k_prompt_budget_tokens});
+            prompt_groups, SContextBudget{
+                k_prompt_budget_tokens,
+                active_model_config.m_context_window_tokens,
+                active_model_config.m_output_reserve_tokens});
         if (!prompt.m_ok)
         {
             std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED: " << prompt.m_error << '\n';
@@ -658,8 +676,12 @@ bool CReActAgent::run(const std::string& question,
         "FINAL answer now, without calling any tool. Be concrete and factual: name the exact "
         "symbol/value that causes the behaviour if it is visible in the code you read.";
     prompt_groups.push_back(SContextGroup{"wrap-up", {wrap_up}, next_order++, 100, 100, 0, true});
+    const SModelConfig& final_model_config = model_config_for_role(config, levels[level_index]);
     const SContextBuildResult final_prompt = context_manager.build(
-        prompt_groups, SContextBudget{k_prompt_budget_tokens});
+        prompt_groups, SContextBudget{
+            k_prompt_budget_tokens,
+            final_model_config.m_context_window_tokens,
+            final_model_config.m_output_reserve_tokens});
     if (!final_prompt.m_ok)
     {
         std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED during final synthesis: "
