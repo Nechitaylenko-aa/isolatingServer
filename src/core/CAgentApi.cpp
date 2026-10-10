@@ -334,7 +334,10 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
                 return make_error(EErrorKind::ProjectNotOpen,
                                   "project not open; call open before setting project profile");
             }
-            m_project_manager.profile().set(request.m_profile_text);
+            if (!m_project_manager.set_profile(request.m_profile_text))
+            {
+                return make_error(EErrorKind::IoError, "cannot persist project profile");
+            }
             response.m_ok = true;
             response.m_state = "COMPLETED";
             response.m_project_id = m_project_manager.current().m_project.m_project_id;
