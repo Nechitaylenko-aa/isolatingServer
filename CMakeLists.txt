@@ -39,12 +39,33 @@ FetchContent_MakeAvailable(nlohmann_json sqlite3)
 
 # --- libclang (target backend clang 22, ADR-06/ADR-11) ---
 # Hard requirement: absence is a configuration FAIL, not a degradation.
+# FreeBSD: /usr/local/llvm22, /usr/local
+# Ubuntu:  /usr/lib/llvm-22, /usr/include, /usr/lib/x86_64-linux-gnu
 find_path(LIBCLANG_INCLUDE_DIR clang-c/Index.h
-    PATHS /usr/local/llvm22/include /usr/local/include
+    HINTS
+        /usr/lib/llvm-22/include
+        /usr/lib/llvm-21/include
+        /usr/lib/llvm-20/include
+        /usr/lib/llvm-19/include
+        /usr/lib/llvm-18/include
+    PATHS
+        /usr/local/llvm22/include
+        /usr/local/include
+        /usr/include
     REQUIRED
 )
-find_library(LIBCLANG_LIBRARY NAMES clang libclang
-    PATHS /usr/local/llvm22/lib /usr/local/lib
+find_library(LIBCLANG_LIBRARY NAMES clang libclang clang-22 libclang-22
+    HINTS
+        /usr/lib/llvm-22/lib
+        /usr/lib/llvm-21/lib
+        /usr/lib/llvm-20/lib
+        /usr/lib/llvm-19/lib
+        /usr/lib/llvm-18/lib
+        /usr/lib/x86_64-linux-gnu
+    PATHS
+        /usr/local/llvm22/lib
+        /usr/local/lib
+        /usr/lib
     REQUIRED
 )
 get_filename_component(LIBCLANG_LIB_DIR "${LIBCLANG_LIBRARY}" DIRECTORY)
@@ -52,12 +73,22 @@ message(STATUS "libclang include: ${LIBCLANG_INCLUDE_DIR}")
 message(STATUS "libclang library: ${LIBCLANG_LIBRARY}")
 
 # --- libcurl (HTTP transport for LLM providers, 6b) ---
+# FreeBSD: /usr/local/include, /usr/local/lib
+# Ubuntu:  /usr/include/x86_64-linux-gnu, /usr/lib/x86_64-linux-gnu
 find_path(LIBCURL_INCLUDE_DIR curl/curl.h
-    PATHS /usr/local/include /usr/include
+    HINTS
+        /usr/include/x86_64-linux-gnu
+    PATHS
+        /usr/local/include
+        /usr/include
     REQUIRED
 )
 find_library(LIBCURL_LIBRARY NAMES curl libcurl
-    PATHS /usr/local/lib /usr/lib
+    HINTS
+        /usr/lib/x86_64-linux-gnu
+    PATHS
+        /usr/local/lib
+        /usr/lib
     REQUIRED
 )
 message(STATUS "libcurl include: ${LIBCURL_INCLUDE_DIR}")
@@ -83,8 +114,6 @@ add_library(fcpp_core STATIC
     src/core/CCompileCommandsParser.cpp
     src/core/CProjectRegistry.cpp
     src/core/CProjectManager.cpp
-    src/core/CConversationStore.cpp
-    src/core/CContextManager.cpp
     src/index/CSchemaMigrator.cpp
     src/index/CSQLiteIndex.cpp
     src/index/CClang22.cpp
@@ -167,8 +196,6 @@ add_executable(fcpp_tests
     tests/evidence_test.cpp
     tests/cascade_test.cpp
     tests/subtask_test.cpp
-    tests/conversation_store_test.cpp
-    tests/context_manager_test.cpp
 )
 target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 
