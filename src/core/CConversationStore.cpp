@@ -5,6 +5,7 @@
 
 #include "core/CConversationStore.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <system_error>
@@ -123,6 +124,73 @@ private:
 };
 
 } // namespace
+
+std::vector<SConversationStateItem> reconstruct_conversation_state(
+    const std::vector<SConversationEvent>& events)
+{
+    static const std::vector<std::string> supported_kinds{
+        "state.goal",
+        "state.constraint",
+        "state.fact",
+        "state.decision",
+        "state.open_question",
+        "state.completed_subtask"
+    };
+
+    std::vector<SConversationStateItem> state;
+    for (const SConversationEvent& event : events)
+    {
+        if (std::find(supported_kinds.begin(), supported_kinds.end(), event.m_kind)
+            == supported_kinds.end())
+        {
+            continue;
+        }
+
+        try
+        {
+            const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
+            if (!payload.is_object()
+                || !payload.contains("id") || !payload["id"].is_string()
+                || !payload.contains("text") || !payload["text"].is_string())
+            {
+                continue;
+            }
+
+            SConversationStateItem item;
+            item.m_id = payload["id"].get<std::string>();
+            item.m_text = payload["text"].get<std::string>();
+            if (item.m_id.empty() || item.m_text.empty())
+            {
+                continue;
+            }
+            item.m_kind = event.m_kind;
+            item.m_status = payload.value("status", std::string("unspecified"));
+            item.m_source_ref = payload.value("source_ref", std::string());
+            item.m_source_event_id = event.m_id;
+            item.m_updated_at = event.m_created_at;
+
+            const auto existing = std::find_if(
+                state.begin(), state.end(),
+                [&item](const SConversationStateItem& current)
+                {
+                    return current.m_id == item.m_id && current.m_kind == item.m_kind;
+                });
+            if (existing == state.end())
+            {
+                state.push_back(std::move(item));
+            }
+            else
+            {
+                *existing = std::move(item);
+            }
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            // Malformed state events are ignored; the append-only log remains intact.
+        }
+    }
+    return state;
+}
 
 std::vector<SConversationTurn> reconstruct_conversation_turns(
     const std::vector<SConversationEvent>& events)
