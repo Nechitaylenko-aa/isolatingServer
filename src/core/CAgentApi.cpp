@@ -5,12 +5,17 @@
 
 #include "core/CAgentApi.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 #include "core/CAskService.h"
+#include "core/CHash.h"
 #include "core/CDoctor.h"
 #include "core/CPatchApplier.h"
 #include "core/CPatchParser.h"
@@ -45,8 +50,25 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "tool",
     "patch",
     "doctor",
-    "ask"
+    "ask",
+    "session.open",
+    "session.close",
+    "session.update_context"
 };
+
+/**
+ * @brief Сформировать ответ-ошибку.
+ * @param kind Категория ошибки.
+ * @param message Сообщение.
+ * @return Ответ.
+ */
+std::string make_session_id()
+{
+    static std::atomic<std::uint64_t> counter{0};
+    const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::string seed = std::to_string(ticks) + ":" + std::to_string(counter.fetch_add(1));
+    return "session-" + CHash::sha256_hex(seed).substr(0, 24);
+}
 
 /**
  * @brief Сформировать ответ-ошибку.
@@ -85,7 +107,9 @@ bool api_is_tool_command(const std::string& text)
 CAgentApi::CAgentApi(const CConfigManager& config_manager)
     : m_config_manager(config_manager)
     , m_project_manager(config_manager)
+    , m_conversation_store()
 {
+    m_conversation_store.open(m_config_manager.agent_dir() / "sessions.sqlite");
 }
 
 SApiResponse CAgentApi::execute(const SApiRequest& request)
@@ -271,6 +295,73 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
         }
         case EApiMethod::Ask:
             return handle_ask(request);
+        case EApiMethod::SessionOpen:
+        {
+            const std::string session_id = make_session_id();
+            const std::string project_id = m_project_manager.has_current()
+                ? m_project_manager.current().m_project.m_project_id : std::string();
+            if (!m_conversation_store.create_session(session_id, project_id))
+            {
+                return make_error(EErrorKind::IoError, "cannot create conversation session");
+            }
+            nlohmann::json payload = {{"project_id", project_id}};
+            if (!m_conversation_store.append_event(session_id, "session.open", payload.dump()))
+            {
+                m_conversation_store.close_session(session_id);
+                return make_error(EErrorKind::IoError, "cannot persist session.open event");
+            }
+            response.m_ok = true;
+            response.m_state = "READY";
+            response.m_session_id = session_id;
+            response.m_project_id = project_id;
+            return response;
+        }
+        case EApiMethod::SessionClose:
+        {
+            if (request.m_session_id.empty())
+            {
+                return make_error(EErrorKind::InvalidRequest, "missing session_id");
+            }
+            if (!m_conversation_store.append_event(request.m_session_id, "session.close", "{}"))
+            {
+                return make_error(EErrorKind::InvalidRequest, "unknown or closed session");
+            }
+            if (!m_conversation_store.close_session(request.m_session_id))
+            {
+                return make_error(EErrorKind::IoError, "cannot close conversation session");
+            }
+            response.m_ok = true;
+            response.m_session_id = request.m_session_id;
+            return response;
+        }
+        case EApiMethod::SessionUpdateContext:
+        {
+            if (request.m_session_id.empty() || request.m_context_json.empty())
+            {
+                return make_error(EErrorKind::InvalidRequest, "session_id and context are required");
+            }
+            try
+            {
+                (void)nlohmann::json::parse(request.m_context_json);
+            }
+            catch (const nlohmann::json::exception&)
+            {
+                return make_error(EErrorKind::InvalidRequest, "context must be valid JSON");
+            }
+            if (!m_conversation_store.update_context(request.m_session_id, request.m_context_json))
+            {
+                return make_error(EErrorKind::InvalidRequest, "unknown or closed session");
+            }
+            if (!m_conversation_store.append_event(request.m_session_id,
+                                                   "session.context_updated",
+                                                   request.m_context_json))
+            {
+                return make_error(EErrorKind::IoError, "cannot persist context update event");
+            }
+            response.m_ok = true;
+            response.m_session_id = request.m_session_id;
+            return response;
+        }
         default:
             return make_error(EErrorKind::InvalidRequest, "unknown method");
     }
@@ -288,7 +379,31 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         m_project_manager.restore_session();
     }
 
-    // Тело запроса ask — только text + editor (§94); всё прочее выводит ядро.
+    if (!request.m_session_id.empty())
+    {
+        const auto session = m_conversation_store.get_session(request.m_session_id);
+        if (!session.has_value() || session->m_closed)
+        {
+            return make_error(EErrorKind::InvalidRequest, "unknown or closed conversation session");
+        }
+        if (!session->m_project_id.empty() && m_project_manager.has_current()
+            && session->m_project_id != m_project_manager.current().m_project.m_project_id)
+        {
+            return make_error(EErrorKind::InvalidRequest, "conversation session belongs to another project");
+        }
+        nlohmann::json user_event = {
+            {"text", request.m_text},
+            {"editor_file", request.m_editor_file},
+            {"editor_line", request.m_editor_line},
+            {"editor_column", request.m_editor_column}
+        };
+        if (!m_conversation_store.append_event(request.m_session_id, "user", user_event.dump()))
+        {
+            return make_error(EErrorKind::IoError, "cannot persist user message");
+        }
+    }
+
+    // Тело запроса ask — text + editor (§94); всё прочее выводит ядро.
     CAskService service(m_config_manager, m_project_manager);
     SApiResponse response;
     std::string answer;
@@ -298,6 +413,18 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
                                 request.m_editor_line,
                                 request.m_editor_column,
                                 answer);
+    if (!request.m_session_id.empty())
+    {
+        nlohmann::json assistant_event = {
+            {"text", answer},
+            {"ok", response.m_ok}
+        };
+        if (!m_conversation_store.append_event(request.m_session_id, "assistant", assistant_event.dump()))
+        {
+            return make_error(EErrorKind::IoError, "answer produced but could not persist conversation event");
+        }
+        response.m_session_id = request.m_session_id;
+    }
     if (response.m_ok)
     {
         response.m_state = "COMPLETED";
