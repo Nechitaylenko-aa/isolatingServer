@@ -25,12 +25,26 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
                                            const SContextBudget& budget) const
 {
     SContextBuildResult result;
-    result.m_budget_tokens = budget.m_max_prompt_tokens;
-    if (budget.m_max_prompt_tokens == 0)
+
+    std::size_t effective_budget = budget.m_max_prompt_tokens;
+    if (budget.m_context_window_tokens > 0)
+    {
+        if (budget.m_output_reserve_tokens >= budget.m_context_window_tokens)
+        {
+            result.m_error = "output reserve must be smaller than model context window";
+            return result;
+        }
+        const std::size_t prompt_capacity =
+            budget.m_context_window_tokens - budget.m_output_reserve_tokens;
+        effective_budget = effective_budget == 0
+            ? prompt_capacity : std::min(effective_budget, prompt_capacity);
+    }
+    if (effective_budget == 0)
     {
         result.m_error = "prompt token budget is zero";
         return result;
     }
+    result.m_budget_tokens = effective_budget;
 
     struct Candidate
     {
@@ -70,7 +84,7 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
     {
         if (candidate.m_group->m_mandatory)
         {
-            if (candidate.m_tokens > budget.m_max_prompt_tokens - result.m_estimated_tokens)
+            if (candidate.m_tokens > result.m_budget_tokens - result.m_estimated_tokens)
             {
                 result.m_error = "mandatory context exceeds prompt token budget";
                 result.m_messages.clear();
@@ -108,7 +122,7 @@ SContextBuildResult CContextManager::build(const std::vector<SContextGroup>& gro
     for (const Candidate* candidate : optional)
     {
         const SContextGroup* group = candidate->m_group;
-        if (candidate->m_tokens <= budget.m_max_prompt_tokens - result.m_estimated_tokens)
+        if (candidate->m_tokens <= result.m_budget_tokens - result.m_estimated_tokens)
         {
             result.m_estimated_tokens += candidate->m_tokens;
             selected.push_back(candidate);
