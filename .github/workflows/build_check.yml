@@ -1,0 +1,57 @@
+name: C++ Build Check
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Устанавливаем Clang 22
+      - name: Set up Clang 22
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: 22
+          platform: x64
+
+      # 2. Убеждаемся, что Ninja доступен
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      # 3. Настраиваем ccache через специализированный action
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ runner.os }}-clang-22
+          max-size: "500M"
+          verbose: 1
+
+      # 4. Конфигурируем CMake с указанием компилятора и ccache как launcher
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-22 \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      # 5. Собираем
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      # 6. Тесты (если настроен CTest)
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+        continue-on-error: true   # уберите, когда тесты будут готовы
+
+      # 7. Показываем статистику ccache для отладки
+      - name: Show ccache stats
+        run: ccache --show-stats
