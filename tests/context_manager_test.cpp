@@ -35,7 +35,7 @@ TEST_CASE("context manager selects high-priority groups within budget", "[contex
     const auto result = manager.build(groups, {10});
     REQUIRE(result.m_ok);
     REQUIRE(result.m_estimated_tokens == 10);
-    REQUIRE(result.m_included_group_ids == std::vector<std::string>{"system", "relevant", "recent"});
+    REQUIRE((result.m_included_group_ids == std::vector<std::string>{"system", "relevant", "recent"}));
     REQUIRE(result.m_excluded_group_ids == std::vector<std::string>{"old"});
     REQUIRE(result.m_messages.size() == 3);
     REQUIRE(result.m_messages.front().m_content == "sys");
