@@ -51,8 +51,8 @@ struct SContextBuildResult
  *
  * This first-stage component does not summarize content or mutate stored history.
  * Callers supply mandatory policy/task context and scored optional history/evidence.
- * Token counting can be injected by a provider adapter; the default is a conservative
- * estimate intended only as a fallback when no tokenizer is available.
+ * Token counting can be injected by a provider adapter; the default is a rough
+ * estimate for fallback use only and is not a substitute for a model tokenizer.
  */
 class CContextManager
 {
