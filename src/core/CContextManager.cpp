@@ -21,10 +21,30 @@ std::size_t CContextManager::estimate_tokens(const SModelMessage& message)
     return (characters + 2U) / 3U + 4U;
 }
 
+namespace
+{
+
+std::string utf8_prefix(const std::string& text, std::size_t max_bytes)
+{
+    if (text.size() <= max_bytes)
+    {
+        return text;
+    }
+    std::size_t end = max_bytes;
+    while (end > 0 && end < text.size()
+           && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U)
+    {
+        --end;
+    }
+    return text.substr(0, end);
+}
+
+} // namespace
+
 SConversationCompaction compact_conversation_history(
     const std::vector<SConversationTurn>& history,
     std::size_t keep_recent_turns,
-    std::size_t max_summary_chars)
+    std::size_t max_summary_bytes)
 {
     SConversationCompaction result;
     const std::size_t recent_count = std::min(keep_recent_turns, history.size());
@@ -49,7 +69,7 @@ SConversationCompaction compact_conversation_history(
         {
             if (remaining > 0)
             {
-                result.m_summary_text += entry.substr(0, remaining);
+                result.m_summary_text += utf8_prefix(entry, remaining);
             }
             break;
         }
