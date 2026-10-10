@@ -97,7 +97,7 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 * [ ] Benchmark B: собрать реальные промахи классификации в regression-кейсы.
 * [x] **Evidence-подача** в main внутри `ask`: `CEvidenceCollector` (выполняет план → Zero-Window-секции), `format_evidence` → промт main. Тест `evidence_test`; CTest 39/39.
 * [x] Post-patch автосборка внутри `patch` (флаг `--build`) + **COMPILATION FAIL → авто-откат** (детерминированный триггер ADR-10).
-* [ ] **Context Budget (§64), первый компонент добавлен**: `CContextManager` и unit tests для priority selection, atomic message groups и mandatory-context hard-stop. Пока не подключён к ReAct/`CAskService`; token counter по умолчанию — fallback-оценка, а не точный tokenizer.
+* [ ] **Context Budget (§64), первый этап интегрирован**: `CContextManager` подключён к каждому вызову ReAct, к Intent/subtask контексту и генерации ответа по Evidence; группы истории и tool rounds отбираются целиком, обязательный контекст при переполнении даёт hard-stop. Бюджеты пока консервативные фиксированные (10k/3k), estimator — fallback-оценка, не tokenizer; нет provider-specific limits, output reserve и compaction/summary.
 * [ ] Подключение `CLogger` во все компоненты (сейчас интерфейс + файл).
 * [x] `allow_subtasks` (§48) — двухфазная декомпозиция (ADR-16/ADR-17): Фаза A (lite → текстовые подвопросы) + Фаза B (`CIntentAnalyzer`) + единый dataflow-цикл в `ask` с накоплением Evidence. CTest 47/47.
 * [x] **Качество декомпозиции B-002 (ADR-18)**: якорь через `ancestors`; классификация `UNDERSTAND`/`OVERRIDES` (+ пост-коррекция); маршруты Overrides/References → Source; фильтр по `Subject.kind`.
@@ -115,9 +115,9 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 Архитектурное решение зафиксировано в [ADR-28](decisions.md#adr-28-conversation-context-и-context-budget-manager).
 
 Порядок реализации:
-1. [x] Базовая инфраструктура Conversation Context: `session_id`, lifecycle API, отдельное хранилище событий и JSON context field (§49/§50; ADR-27/28). [ ] Осталось: prompt injection/replay, state projection с provenance, protocol tests и проверка сборкой.
-2. [ ] `CContextManager`: базовый детерминированный selector и unit tests добавлены; осталось подключение к каждому model call, per-model token limits, compaction/summaries и проверка сборкой (§64; ADR-28).
-3. [ ] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`; убрать независимую логику усечения.
+1. [x] Базовая инфраструктура и replay Conversation Context: `session_id`, lifecycle API, отдельное хранилище, восстановление turns и передача `context_json` в ask (§49/§50; ADR-27/28). [ ] Осталось: state projection с provenance, protocol/integration tests, проверка сборкой.
+2. [ ] `CContextManager`: selector подключён к ReAct, Intent/subtask и Evidence answer; осталось provider-specific token counting/context-window limits, output reserve, compaction/summaries и проверка сборкой (§64; ADR-28).
+3. [x] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`; [ ] добавить точный tokenizer и per-model budgets.
 4. [ ] После пунктов 1–3 — planner(cloud)/worker(local), handoff и blast-radius routing (ADR-24).
 
 `1 GiB` не использовать как порог compaction: это не размер контекстного окна модели. История сохраняется полностью; сокращается только представление, передаваемое конкретному вызову модели.
