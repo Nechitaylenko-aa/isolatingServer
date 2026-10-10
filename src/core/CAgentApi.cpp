@@ -57,10 +57,8 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
 };
 
 /**
- * @brief Сформировать ответ-ошибку.
- * @param kind Категория ошибки.
- * @param message Сообщение.
- * @return Ответ.
+ * @brief Сформировать уникальный идентификатор conversation session.
+ * @return Непрозрачный идентификатор.
  */
 std::string make_session_id()
 {
