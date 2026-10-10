@@ -194,6 +194,8 @@ add_executable(fcpp_tests
     tests/stage8a_test.cpp
     tests/patch_test.cpp
     tests/agent_api_test.cpp
+    tests/protocol_test.cpp
+    src/cli/CProtocolServer.cpp
     tests/conversation_store_test.cpp
     tests/context_manager_test.cpp
     tests/pipeline_test.cpp
