@@ -104,7 +104,7 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 * [x] **Fan-out Subject→N (ADR-19, path A)**: `outline(класс) → dispatch_targets(метод) → source(реализация)` в `CEvidenceCollector`; лимиты 10/20. B-002 → **PASS**: вердикт «Все методы реализованы» + таблица Circle/Rectangle × area/name.
 * [x] **B2 (ADR-20): курсор → символ через IClang в промпт lite**. Одиночный вопрос: `[cursor symbol: NAME (KIND)]` уходит в lite → субъект = `Rectangle::area` (B-003 PASS). Составной: подвопросы + якорь иерархии (B-002 сохраняет PASS).
 * [x] `fcpp serve` (Agent API как процесс, JSON-RPC поверх stdio) — реализован (ADR-26).
-* [x] **Conversation Context (§49/§50), replay подключён**: `ask(session_id)` восстанавливает user/assistant turns и `context_json` из `sessions.sqlite`; события остаются append-only, replay выделен в тестируемую функцию. Добавлены регрессионные тесты на восстановление между открытиями store, незавершённый turn и malformed event. Остались protocol/integration tests. State projection с provenance и атомарность обновления context/close реализованы; CI подтверждён зелёным на коммитах этих изменений. `save_session`/`restore_session` относятся только к проекту.
+* [x] **Conversation Context (§49/§50), replay подключён**: `ask(session_id)` восстанавливает user/assistant turns и `context_json` из `sessions.sqlite`; события остаются append-only, replay выделен в тестируемую функцию. Добавлены регрессионные тесты на восстановление между открытиями store, незавершённый turn и malformed event; protocol regression tests проходят CI, end-to-end integration tests ещё нужны. State projection с provenance и атомарность обновления context/close реализованы; CI подтверждён зелёным на коммитах этих изменений. `save_session`/`restore_session` относятся только к проекту.
 * [ ] **Роутинг planner(cloud)/worker(local) — ADR-24** (недоделка, ADR-27): нет расчёта blast radius из индекса, handoff-пакета, переключения по раундам, sticky-планировщика, тегирования раундов, бюджета cloud. Сейчас есть только эскалация по сбою (ADR-25).
 * [ ] Порядок закрытия (ADR-27): сначала Conversation Context (§49) — базис; затем роутинг + blast radius + handoff (ADR-24/§7).
 * [ ] Context Budget (§64): лимиты/`top-N` упаковки Evidence.
@@ -116,7 +116,7 @@ CTest: **47/47** (сборка `-Wall -Wextra -Werror`).
 
 Порядок реализации:
 1. [x] Базовая инфраструктура и replay Conversation Context: `session_id`, lifecycle API, отдельное хранилище, восстановление turns и передача `context_json` в ask (§49/§50; ADR-27/28). State projection с provenance и транзакционность lifecycle/context событий реализованы; остаются protocol/integration tests.
-2. [ ] `CContextManager`: selector подключён к ReAct, Intent/subtask и Evidence answer; осталось provider-specific token counting/context-window limits, output reserve, compaction/summaries и проверка сборкой (§64; ADR-28).
+2. [ ] `CContextManager`: selector подключён к ReAct, Intent/subtask и Evidence answer; осталось подключить provider-specific token counting/context-window limits из конфига, применить output reserve по ролям моделей, compaction/summaries и проверить сборкой (§64; ADR-28).
 3. [x] Подключить общий budget/context builder к ReAct и генерации ответа обычного `CAskService`; [ ] добавить точный tokenizer и per-model budgets.
 4. [ ] После пунктов 1–3 — planner(cloud)/worker(local), handoff и blast-radius routing (ADR-24).
 
