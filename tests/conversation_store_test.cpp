@@ -36,6 +36,11 @@ TEST_CASE("conversation store persists session state and append-only events", "[
         REQUIRE(events[0].m_kind == "user");
         REQUIRE(events[0].m_payload == R"({"text":"hello"})");
         REQUIRE(events[1].m_kind == "assistant");
+        const auto turns = fcpp::reconstruct_conversation_turns(events);
+        REQUIRE(turns.size() == 1);
+        REQUIRE(turns[0].m_user_text == "hello");
+        REQUIRE(turns[0].m_assistant_text == "hi");
+        REQUIRE(turns[0].m_last_event_id == events[1].m_id);
 
         const auto session = store.get_session("session-1");
         REQUIRE(session.has_value());
@@ -49,6 +54,13 @@ TEST_CASE("conversation store persists session state and append-only events", "[
         REQUIRE(store.open(path));
         const auto events = store.events("session-1");
         REQUIRE(events.size() == 2);
+        const auto turns = fcpp::reconstruct_conversation_turns(events);
+        REQUIRE(turns.size() == 1);
+        REQUIRE(turns[0].m_user_text == "hello");
+        REQUIRE(turns[0].m_assistant_text == "hi");
+        const auto restored_session = store.get_session("session-1");
+        REQUIRE(restored_session.has_value());
+        REQUIRE(restored_session->m_context_json == R"({"goal":"inspect"})");
         REQUIRE(store.close_session("session-1"));
         REQUIRE_FALSE(store.append_event("session-1", "user", "late"));
         REQUIRE(store.get_session("session-1")->m_closed);
@@ -71,4 +83,24 @@ TEST_CASE("conversation store rejects missing and closed sessions", "[conversati
     REQUIRE_FALSE(store.update_context("s", "{}"));
     store.close();
     std::filesystem::remove(path);
+}
+
+
+TEST_CASE("conversation replay preserves unanswered user turns and skips malformed events", "[conversation]")
+{
+    const std::vector<fcpp::SConversationEvent> events{
+        {1, "s", "user", R"({"text":"first"})", 1},
+        {2, "s", "assistant", R"({"text":"answer"})", 2},
+        {3, "s", "user", R"({"text":"pending"})", 3},
+        {4, "s", "assistant", "not-json", 4}
+    };
+
+    const auto turns = fcpp::reconstruct_conversation_turns(events);
+    REQUIRE(turns.size() == 2);
+    REQUIRE(turns[0].m_user_text == "first");
+    REQUIRE(turns[0].m_assistant_text == "answer");
+    REQUIRE(turns[0].m_last_event_id == 2);
+    REQUIRE(turns[1].m_user_text == "pending");
+    REQUIRE(turns[1].m_assistant_text.empty());
+    REQUIRE(turns[1].m_last_event_id == 3);
 }
