@@ -201,6 +201,60 @@ TEST_CASE("open без CMakeLists.txt завершается FAIL", "[project]")
     std::filesystem::remove_all(not_a_project);
 }
 
+TEST_CASE("паспорт проекта переживает переключение и восстановление контекста", "[project][profile]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-home");
+    HomeScope scope(home);
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    const std::filesystem::path project_a = make_temp_dir("fcpp-profile-a");
+    write_cmake_lists(project_a);
+    write_compile_commands(project_a);
+    const std::filesystem::path project_b = make_temp_dir("fcpp-profile-b");
+    write_cmake_lists(project_b);
+    write_compile_commands(project_b);
+    const std::filesystem::path not_a_project = make_temp_dir("fcpp-profile-invalid");
+
+    std::string project_a_id;
+    {
+        fcpp::CProjectManager manager(config);
+        REQUIRE(manager.open(project_a));
+        project_a_id = manager.current().m_project.m_project_id;
+        REQUIRE(manager.set_profile("Rules for project A"));
+        REQUIRE(manager.profile().get() == "Rules for project A");
+
+        REQUIRE(manager.open(project_b));
+        REQUIRE(manager.profile().get().empty());
+        REQUIRE(manager.set_profile("Rules for project B"));
+
+        REQUIRE(manager.open(project_a));
+        REQUIRE(manager.current().m_project.m_project_id == project_a_id);
+        REQUIRE(manager.profile().get() == "Rules for project A");
+
+        // A failed open must not replace the active project or its passport.
+        REQUIRE_FALSE(manager.open(not_a_project));
+        REQUIRE(manager.current().m_project.m_project_id == project_a_id);
+        REQUIRE(manager.profile().get() == "Rules for project A");
+    }
+
+    // A new manager simulates process/context reconstruction from project storage.
+    {
+        fcpp::CProjectManager manager(config);
+        REQUIRE(manager.open(project_a));
+        REQUIRE(manager.profile().get() == "Rules for project A");
+        REQUIRE(manager.open(project_b));
+        REQUIRE(manager.profile().get() == "Rules for project B");
+    }
+
+    std::filesystem::remove_all(home);
+    std::filesystem::remove_all(project_a);
+    std::filesystem::remove_all(project_b);
+    std::filesystem::remove_all(not_a_project);
+}
+
 TEST_CASE("sha256 детерминирован", "[hash]")
 {
     REQUIRE(fcpp::CHash::sha256_hex("abc")

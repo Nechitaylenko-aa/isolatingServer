@@ -13,6 +13,10 @@
 #include <vector>
 
 #include <memory>
+#include <string>
+#include <utility>
+
+#include <sqlite3.h>
 
 #include "core/CHash.h"
 #include "core/CCompileCommandsLocator.h"
@@ -50,6 +54,103 @@ std::int64_t now_unix_seconds()
 {
     const auto now = std::chrono::system_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::seconds>(now).count();
+}
+
+/**
+ * @brief Загрузить паспорт из БД проекта. Отсутствующая таблица означает
+ * пустой паспорт для совместимости с БД до миграции.
+ */
+bool load_project_profile(const std::filesystem::path& db_path, CProjectProfile& profile)
+{
+    sqlite3* db = nullptr;
+    if (sqlite3_open_v2(db_path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK)
+    {
+        if (db != nullptr)
+        {
+            sqlite3_close(db);
+        }
+        return false;
+    }
+
+    sqlite3_stmt* statement = nullptr;
+    const char* sql = "SELECT original_text, compact_text FROM project_profile WHERE id = 1;";
+    if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK)
+    {
+        const std::string error = sqlite3_errmsg(db);
+        sqlite3_close(db);
+        return error.find("no such table: project_profile") != std::string::npos;
+    }
+
+    const int step_result = sqlite3_step(statement);
+    bool ok = false;
+    if (step_result == SQLITE_ROW)
+    {
+        const unsigned char* original = sqlite3_column_text(statement, 0);
+        const unsigned char* compact = sqlite3_column_text(statement, 1);
+        profile.restore(original != nullptr ? reinterpret_cast<const char*>(original) : std::string(),
+                        compact != nullptr ? reinterpret_cast<const char*>(compact) : std::string());
+        ok = true;
+    }
+    else if (step_result == SQLITE_DONE)
+    {
+        profile.restore({}, {});
+        ok = true;
+    }
+
+    sqlite3_finalize(statement);
+    sqlite3_close(db);
+    return ok;
+}
+
+/** @brief Сохранить паспорт как одну атомарную запись в БД проекта. */
+bool save_project_profile(const std::filesystem::path& db_path, const CProjectProfile& profile)
+{
+    sqlite3* db = nullptr;
+    if (sqlite3_open(db_path.string().c_str(), &db) != SQLITE_OK)
+    {
+        if (db != nullptr)
+        {
+            sqlite3_close(db);
+        }
+        return false;
+    }
+
+    sqlite3_busy_timeout(db, 10000);
+    if (sqlite3_exec(db, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) != SQLITE_OK)
+    {
+        sqlite3_close(db);
+        return false;
+    }
+
+    sqlite3_stmt* statement = nullptr;
+    const char* sql =
+        "INSERT INTO project_profile (id, original_text, compact_text) VALUES (1, ?1, ?2) "
+        "ON CONFLICT(id) DO UPDATE SET original_text = excluded.original_text, "
+        "compact_text = excluded.compact_text;";
+    bool ok = sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) == SQLITE_OK;
+    if (ok)
+    {
+        const std::string& original = profile.original();
+        const std::string& compact = profile.get();
+        sqlite3_bind_text(statement, 1, original.c_str(), static_cast<int>(original.size()), SQLITE_TRANSIENT);
+        sqlite3_bind_text(statement, 2, compact.c_str(), static_cast<int>(compact.size()), SQLITE_TRANSIENT);
+        ok = sqlite3_step(statement) == SQLITE_DONE;
+    }
+    if (statement != nullptr)
+    {
+        sqlite3_finalize(statement);
+    }
+
+    if (ok)
+    {
+        ok = sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr) == SQLITE_OK;
+    }
+    if (!ok)
+    {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+    }
+    sqlite3_close(db);
+    return ok;
 }
 
 } // namespace
@@ -122,24 +223,6 @@ bool CProjectManager::open(const std::filesystem::path& path)
     project.m_name = canonical.filename().string();
     project.m_last_opened_at = now_unix_seconds();
 
-    CSchemaMigrator registry_migrator;
-    if (!registry_migrator.migrate(m_config_manager.config().m_registry_path.string()))
-    {
-        return false;
-    }
-
-    if (!m_registry.open_db())
-    {
-        return false;
-    }
-
-    const bool registered = m_registry.upsert(project);
-    m_registry.close_db();
-    if (!registered)
-    {
-        return false;
-    }
-
     CSchemaMigrator migrator;
     if (!migrator.migrate(db_path.string()))
     {
@@ -185,15 +268,35 @@ bool CProjectManager::open(const std::filesystem::path& path)
     }
 
     index.set_compile_commands_fingerprint(compile_commands.string());
-
-    if (m_has_current && m_current.m_project.m_project_id != project.m_project_id)
-    {
-        m_current.m_profile = CProjectProfile{};
-    }
-    m_current.m_project = project;
-    m_current.m_index_status = index.status();
+    const SIndexStatus index_status = index.status();
     index.close_db();
 
+    // Prepare the complete next context before replacing the current one.
+    CProjectProfile project_profile;
+    if (!load_project_profile(db_path, project_profile))
+    {
+        return false;
+    }
+
+    CSchemaMigrator registry_migrator;
+    if (!registry_migrator.migrate(m_config_manager.config().m_registry_path.string()))
+    {
+        return false;
+    }
+    if (!m_registry.open_db())
+    {
+        return false;
+    }
+    const bool registered = m_registry.upsert(project);
+    m_registry.close_db();
+    if (!registered)
+    {
+        return false;
+    }
+
+    m_current.m_project = project;
+    m_current.m_index_status = index_status;
+    m_current.m_profile = std::move(project_profile);
     m_has_current = true;
     return true;
 }
@@ -241,6 +344,24 @@ CProjectProfile& CProjectManager::profile()
 const CProjectProfile& CProjectManager::profile() const
 {
     return m_current.m_profile;
+}
+
+bool CProjectManager::set_profile(std::string original_text)
+{
+    if (!m_has_current)
+    {
+        return false;
+    }
+
+    CProjectProfile next_profile;
+    next_profile.set(std::move(original_text));
+    if (!save_project_profile(m_current.m_project.m_db_path, next_profile))
+    {
+        return false;
+    }
+
+    m_current.m_profile = std::move(next_profile);
+    return true;
 }
 
 bool CProjectManager::refresh_index()
@@ -408,8 +529,9 @@ bool CProjectManager::restore_session_light()
     project.m_db_path = db_path;
     project.m_name = canonical.filename().string();
 
-    // Читаем состояние индекса напрямую из БД (без индексации).
+    // Читаем состояние индекса и паспорт напрямую из БД (без индексации).
     SIndexStatus index_status;
+    CProjectProfile project_profile;
     if (std::filesystem::exists(db_path, error_code) && !error_code)
     {
         CSQLiteIndex index(db_path);
@@ -418,10 +540,15 @@ bool CProjectManager::restore_session_light()
             index_status = index.status();
             index.close_db();
         }
+        if (!load_project_profile(db_path, project_profile))
+        {
+            return false;
+        }
     }
 
     m_current.m_project = project;
     m_current.m_index_status = index_status;
+    m_current.m_profile = std::move(project_profile);
     m_has_current = true;
     return true;
 }

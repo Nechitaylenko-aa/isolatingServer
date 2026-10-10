@@ -22,6 +22,9 @@ class CProjectProfile
 {
 public:
     void set(std::string original_text);
+    /** @brief Restore persisted original and compact text without recompression. */
+    void restore(std::string original_text, std::string compact_text);
+    const std::string& original() const;
     const std::string& get() const;
     void zip(IModelApi& model);
 

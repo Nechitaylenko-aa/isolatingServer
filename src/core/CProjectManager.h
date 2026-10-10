@@ -92,6 +92,12 @@ public:
     const CProjectProfile& profile() const;
 
     /**
+     * @brief Сохранить паспорт текущего проекта в его SQLite-БД.
+     * @return true при успешной записи; false при отсутствии проекта или ошибке БД.
+     */
+    bool set_profile(std::string original_text);
+
+    /**
      * @brief Получить список зарегистрированных проектов.
      * @return Список проектов из реестра.
      */
