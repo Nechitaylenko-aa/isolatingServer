@@ -54,7 +54,7 @@ SConversationCompaction compact_conversation_history(
         history.begin() + static_cast<std::vector<SConversationTurn>::difference_type>(older_count),
         history.end());
 
-    for (std::size_t index = 0; index < older_count && max_summary_chars > result.m_summary_text.size(); ++index)
+    for (std::size_t index = 0; index < older_count && max_summary_bytes > result.m_summary_text.size(); ++index)
     {
         const SConversationTurn& turn = history[index];
         std::string entry = "Turn " + std::to_string(index + 1) + " user: " + turn.m_user_text;
@@ -64,7 +64,7 @@ SConversationCompaction compact_conversation_history(
         }
         entry += "\n";
 
-        const std::size_t remaining = max_summary_chars - result.m_summary_text.size();
+        const std::size_t remaining = max_summary_bytes - result.m_summary_text.size();
         if (entry.size() > remaining)
         {
             if (remaining > 0)
