@@ -166,6 +166,11 @@ bool CProtocolServer::parse_request(const std::string& text,
         out_id = document["id"].get<std::string>();
     }
 
+    if (!document["method"].is_string())
+    {
+        out_error = "field 'method' must be a string";
+        return false;
+    }
     const std::string method_name = document["method"].get<std::string>();
     if (!method_from_name(method_name, out_request.m_method))
     {
