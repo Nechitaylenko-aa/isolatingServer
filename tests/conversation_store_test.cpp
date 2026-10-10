@@ -149,3 +149,37 @@ TEST_CASE("conversation session lifecycle mutations roll back with their events"
     store.close();
     std::filesystem::remove(path);
 }
+
+TEST_CASE("conversation state projection preserves provenance and only trusts typed events", "[conversation]")
+{
+    const std::vector<fcpp::SConversationEvent> events{
+        {1, "s", "assistant", R"({"text":"The API is probably thread-safe"})", 10},
+        {2, "s", "state.goal", R"({"id":"goal","text":"Make session updates atomic","status":"confirmed","source_ref":"event:2"})", 20},
+        {3, "s", "state.fact", R"({"id":"sqlite","text":"SQLite uses a single writer","status":"verified","source_ref":"docs/sqlite"})", 30},
+        {4, "s", "state.fact", R"({"id":"sqlite","text":"SQLite serializes writers","status":"verified","source_ref":"event:4"})", 40},
+        {5, "s", "state.open_question", R"({"id":"q1","text":"Which model tokenizer is configured?"})", 50},
+        {6, "s", "state.decision", "not-json", 60},
+        {7, "s", "state.fact", R"({"id":"missing-text"})", 70}
+    };
+
+    const auto state = fcpp::reconstruct_conversation_state(events);
+    REQUIRE(state.size() == 3);
+
+    REQUIRE(state[0].m_kind == "state.goal");
+    REQUIRE(state[0].m_id == "goal");
+    REQUIRE(state[0].m_text == "Make session updates atomic");
+    REQUIRE(state[0].m_status == "confirmed");
+    REQUIRE(state[0].m_source_ref == "event:2");
+    REQUIRE(state[0].m_source_event_id == 2);
+    REQUIRE(state[0].m_updated_at == 20);
+
+    REQUIRE(state[1].m_kind == "state.fact");
+    REQUIRE(state[1].m_id == "sqlite");
+    REQUIRE(state[1].m_text == "SQLite serializes writers");
+    REQUIRE(state[1].m_source_ref == "event:4");
+    REQUIRE(state[1].m_source_event_id == 4);
+
+    REQUIRE(state[2].m_kind == "state.open_question");
+    REQUIRE(state[2].m_status == "unspecified");
+    REQUIRE(state[2].m_source_event_id == 5);
+}
