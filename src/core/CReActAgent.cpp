@@ -98,6 +98,31 @@ bool parse_tool(const std::string& text, EToolName& out)
  * @param target Сырое значение.
  * @return Имя символа.
  */
+std::string utf8_prefix(const std::string& text, std::size_t max_bytes)
+{
+    if (text.size() <= max_bytes) return text;
+    std::size_t end = max_bytes;
+    while (end > 0 && end < text.size()
+           && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U) --end;
+    return text.substr(0, end);
+}
+
+/** Bound one tool result, preserve both ends, and explicitly mark omitted content. */
+std::string bound_tool_output(const std::string& output)
+{
+    constexpr std::size_t k_max_tool_output_bytes = 6000;
+    constexpr std::size_t k_head_bytes = 4500;
+    constexpr std::size_t k_tail_bytes = k_max_tool_output_bytes - k_head_bytes;
+    if (output.size() <= k_max_tool_output_bytes) return output;
+    const std::string head = utf8_prefix(output, k_head_bytes);
+    std::size_t tail_start = output.size() - k_tail_bytes;
+    while (tail_start < output.size()
+           && (static_cast<unsigned char>(output[tail_start]) & 0xC0U) == 0x80U) ++tail_start;
+    return head + "\n[TOOL OUTPUT TRUNCATED: middle omitted to bound context; "
+                  "use a narrower tool query if the missing details matter]\n"
+                  + output.substr(tail_start);
+}
+
 std::string normalize_symbol_target(const std::string& target)
 {
     std::string name = target;
@@ -626,9 +651,10 @@ bool CReActAgent::run(const std::string& question,
         SContextGroup round;
         round.m_id = "tool-round-" + std::to_string(step);
         round.m_order = next_order++;
-        round.m_priority = 50;
+        round.m_priority = 20;
         round.m_relevance = 50;
         round.m_recency = static_cast<std::size_t>(step);
+        bool round_has_successful_result = false;
         SModelMessage assistant;
         assistant.m_role = EModelRole::Assistant;
         assistant.m_content = reply.m_text;
@@ -663,6 +689,7 @@ bool CReActAgent::run(const std::string& question,
                     request.m_target = target;
                     request.m_limit = 40;
                     const SToolResult result = registry.execute(tool, request, tool_context);
+                    round_has_successful_result = round_has_successful_result || result.m_ok;
                     tool_output = format_tool_result(result);
                     if (repeated)
                     {
@@ -726,9 +753,13 @@ bool CReActAgent::run(const std::string& question,
             SModelMessage tool_message;
             tool_message.m_role = EModelRole::Tool;
             tool_message.m_tool_call_id = call.m_id;
-            tool_message.m_content = tool_output;
+            tool_message.m_content = bound_tool_output(tool_output);
             round.m_messages.push_back(std::move(tool_message));
         }
+        // Successful tool rounds outrank chat history; newer rounds win among peers.
+        // Failed calls remain available as low-priority diagnostics.
+        round.m_priority = round_has_successful_result ? 80 : 20;
+        round.m_relevance = round_has_successful_result ? 80 : 20;
         prompt_groups.push_back(std::move(round));
     }
 

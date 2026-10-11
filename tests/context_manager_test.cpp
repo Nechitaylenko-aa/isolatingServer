@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -194,4 +195,23 @@ TEST_CASE("context manager applies the stricter of prompt cap and model window",
     REQUIRE_FALSE(result.m_ok);
     REQUIRE(result.m_budget_tokens == 16);
     REQUIRE(result.m_error == "mandatory context exceeds prompt token budget");
+}
+
+
+TEST_CASE("successful tool results outrank chat history under a tight prompt budget", "[context][react]")
+{
+    const fcpp::CContextManager manager(
+        [](const fcpp::SModelMessage& message) { return message.m_content.size(); });
+    auto tool_round = group("tool-round-1", "useful code result", 2, 80);
+    auto chat = group("chat-history-1", "old chat history", 1, 10);
+    const auto result = manager.build(
+        {group("system", "s", 0, 0, true), tool_round, chat}, {25});
+
+    REQUIRE(result.m_ok);
+    REQUIRE(std::find(result.m_included_group_ids.begin(), result.m_included_group_ids.end(), "tool-round-1")
+            != result.m_included_group_ids.end());
+    REQUIRE(std::find(result.m_included_group_ids.begin(), result.m_included_group_ids.end(), "chat-history-1")
+            == result.m_included_group_ids.end());
+    REQUIRE(std::find(result.m_excluded_group_ids.begin(), result.m_excluded_group_ids.end(), "chat-history-1")
+            != result.m_excluded_group_ids.end());
 }

@@ -89,3 +89,20 @@ Successful final builds emit `CONTEXT_SELECTION` diagnostics with the estimated
 tokens used, effective budget, included group IDs, and excluded group IDs. This
 makes budget pressure and priority decisions observable without logging message
 contents or secrets.
+
+
+## Dynamic ReAct tool results
+
+Each ReAct tool round remains an atomic group containing the assistant tool-call
+message and its matching tool result message(s). Successful rounds have priority
+80, ahead of chat history (priority 10); failed rounds have priority 20 so error
+text cannot crowd out successful evidence. Within the same priority, newer rounds
+are selected first. The original sequence is restored when selected messages are
+assembled for the model.
+
+A single tool output is bounded to 6000 bytes before it is added to the next prompt.
+For oversized outputs, the beginning and end are retained with an explicit marker
+stating that the middle was omitted. This is a safety bound, not a semantic summary:
+if the omitted middle may contain the needed fact, the model should call a narrower
+tool query. The context manager still enforces the final per-invocation budget and
+logs included/excluded group IDs. The append-only conversation store is not modified.
