@@ -39,7 +39,7 @@ SContextSourceResult CCodeContextSource::collect_context(
         message.m_content = "[" + section.m_title + "]\n" + section.m_text;
         candidates.push_back(SContextGroup{
             "code-evidence-" + std::to_string(++order),
-            {std::move(message)}, order, 90, 90, order, false});
+            {std::move(message)}, order, 110, 90, order, false});
     }
     if (candidates.empty())
     {
