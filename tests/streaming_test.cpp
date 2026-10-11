@@ -533,12 +533,12 @@ TEST_CASE("answer review integration: repeated high risk escalates generation to
           "[review][integration]")
 {
     const std::string source_intent =
-        "<intent>\\n"
-        "<scope>CODEBASE</scope>\\n"
-        "<area>UNDERSTAND</area>\\n"
-        "<relation>SELF</relation>\\n"
-        "<projection>SOURCE</projection>\\n"
-        "<subject kind=\\"FUNCTION\\" name=\\"main\\"/>\\n"
+        "<intent>\n"
+        "<scope>CODEBASE</scope>\n"
+        "<area>UNDERSTAND</area>\n"
+        "<relation>SELF</relation>\n"
+        "<projection>SOURCE</projection>\n"
+        "<subject kind=\"FUNCTION\" name=\"main\"/>\n"
         "</intent>";
     const SApiStreamResult result = run_api_stream({
         {openai_completion("first low-level candidate"), "application/json", 0},
