@@ -296,3 +296,24 @@ TEST_CASE("intent analyzer: unknown subject kind is rejected instead of defaulti
     REQUIRE_FALSE(fcpp::CIntentAnalyzer::parse_intent_xml(xml, intent, error));
     REQUIRE(error == "cannot parse subject kind");
 }
+
+
+TEST_CASE("intent analyzer: rejects prose wrappers and duplicate XML fields", "[model][intent]")
+{
+    const std::string valid =
+        "<intent><scope>CODEBASE</scope><area>UNDERSTAND</area>"
+        "<relation>SELF</relation><projection>EXPLANATION</projection>"
+        "<subject kind=\"CLASS\" name=\"Widget\"/></intent>";
+    fcpp::SIntent intent;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CIntentAnalyzer::parse_intent_xml("Here is the XML:\\n" + valid, intent, error));
+    REQUIRE(error == "invalid intent XML envelope");
+
+    const std::string duplicate =
+        "<intent><area>UNDERSTAND</area><area>CHANGE</area>"
+        "<relation>SELF</relation><projection>EXPLANATION</projection>"
+        "<subject kind=\"CLASS\" name=\"Widget\"/></intent>";
+    REQUIRE_FALSE(fcpp::CIntentAnalyzer::parse_intent_xml(duplicate, intent, error));
+    REQUIRE(error == "missing or duplicate intent field");
+}

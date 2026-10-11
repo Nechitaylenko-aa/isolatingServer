@@ -44,6 +44,18 @@ constexpr const char* k_system_prompt =
     "- If the request is deictic ('этот класс', 'эта функция', 'this', 'here') and no symbol "
     "is named explicitly, set name=\"\" (empty). NEVER guess a name from the file name or path.\n";
 
+std::size_t count_occurrences(const std::string& text, const std::string& needle)
+{
+    std::size_t count = 0;
+    std::size_t position = 0;
+    while ((position = text.find(needle, position)) != std::string::npos)
+    {
+        ++count;
+        position += needle.size();
+    }
+    return count;
+}
+
 /**
  * @brief Извлечь содержимое тега.
  * @param xml Текст.
@@ -229,6 +241,35 @@ void apply_keyword_correction(const std::string& user_text, SIntent& intent)
 bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_intent, std::string& out_error)
 {
     SIntent intent;
+    const std::string document = trim(xml);
+    if (document.rfind("<intent>", 0) != 0
+            || document.size() < std::string("</intent>").size()
+            || document.compare(document.size() - std::string("</intent>").size(),
+                                std::string("</intent>").size(), "</intent>") != 0)
+    {
+        out_error = "invalid intent XML envelope";
+        return false;
+    }
+
+    const auto exactly_one_pair = [&document](const std::string& tag)
+    {
+        return count_occurrences(document, "<" + tag + ">") == 1
+            && count_occurrences(document, "</" + tag + ">") == 1;
+    };
+    if (!exactly_one_pair("area") || !exactly_one_pair("relation")
+            || !exactly_one_pair("projection"))
+    {
+        out_error = "missing or duplicate intent field";
+        return false;
+    }
+    const std::size_t scope_open_count = count_occurrences(document, "<scope>");
+    const std::size_t scope_close_count = count_occurrences(document, "</scope>");
+    if (scope_open_count != scope_close_count || scope_open_count > 1
+            || count_occurrences(document, "<subject") != 1)
+    {
+        out_error = "missing or duplicate intent scope/subject";
+        return false;
+    }
 
     const std::string scope_text = to_lower(trim(extract_tag(xml, "scope")));
     if (scope_text == "general_engineering")
@@ -261,12 +302,18 @@ bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_inte
         return false;
     }
 
-    const std::size_t subject_start = xml.find("<subject");
+    const std::size_t subject_start = document.find("<subject");
     std::string subject_fragment;
     if (subject_start != std::string::npos)
     {
-        const std::size_t subject_end = xml.find('>', subject_start);
-        subject_fragment = xml.substr(subject_start, subject_end - subject_start + 1);
+        const std::size_t subject_end = document.find('>', subject_start);
+        if (subject_end == std::string::npos || subject_end == subject_start
+                || document[subject_end - 1] != '/')
+        {
+            out_error = "invalid subject element";
+            return false;
+        }
+        subject_fragment = document.substr(subject_start, subject_end - subject_start + 1);
     }
 
     const std::string kind_text = trim(extract_attribute(subject_fragment, "kind"));
