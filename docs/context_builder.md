@@ -106,3 +106,14 @@ stating that the middle was omitted. This is a safety bound, not a semantic summ
 if the omitted middle may contain the needed fact, the model should call a narrower
 tool query. The context manager still enforces the final per-invocation budget and
 logs included/excluded group IDs. The append-only conversation store is not modified.
+
+
+## Expected negative-path diagnostics in tests
+
+Streaming integration tests deliberately exercise consumer cancellation and a truncated
+HTTP/SSE response. Those requests must return failure and must never append a fallback
+answer to text already delivered to the caller. The test harness captures and asserts
+their diagnostics instead of printing expected failure messages into ordinary local test
+runs. Cancellation is logged as a caller-controlled outcome; transport truncation remains
+a provider/transport error and is logged as such. GitHub Actions uses
+`ctest --output-on-failure`, so output from passing tests is hidden by design.

@@ -143,6 +143,63 @@ bool contains_any(const std::string& haystack, const std::vector<std::string>& n
  * @param user_text Текст запроса.
  * @param intent Корректируемый Intent.
  */
+/**
+ * @brief Извлечь имя символа из машинного cursor hint.
+ *
+ * Ожидаемый формат: [cursor symbol: qualified::Name (KIND)].
+ */
+std::string cursor_symbol_name(const std::string& cursor_hint, ESubjectKind& kind)
+{
+    constexpr const char* k_prefix = "[cursor symbol: ";
+    const std::size_t start = cursor_hint.find(k_prefix);
+    if (start == std::string::npos)
+    {
+        return {};
+    }
+    const std::size_t name_start = start + std::char_traits<char>::length(k_prefix);
+    const std::size_t end = cursor_hint.find(']', name_start);
+    if (end == std::string::npos)
+    {
+        return {};
+    }
+    const std::string value = cursor_hint.substr(name_start, end - name_start);
+    const std::size_t kind_start = value.rfind(" (");
+    if (kind_start == std::string::npos || value.back() != ')')
+    {
+        return {};
+    }
+
+    const std::string name = trim(value.substr(0, kind_start));
+    const std::string kind_text = value.substr(kind_start + 2, value.size() - kind_start - 3);
+    if (name.empty())
+    {
+        return {};
+    }
+    parse_subject_kind(kind_text, kind);
+    return name;
+}
+
+/** @brief Проверить, ссылается ли запрос на объект под курсором. */
+bool is_deictic_reference(const std::string& user_text)
+{
+    // Intent sees the assembled conversation context. Restrict the check to the
+    // current user message so an old deictic phrase cannot capture today's cursor.
+    constexpr const char* k_current_message = "[Current user message]";
+    const std::size_t current_start = user_text.rfind(k_current_message);
+    const std::string current_text = current_start == std::string::npos
+        ? user_text
+        : user_text.substr(current_start + std::char_traits<char>::length(k_current_message));
+    const std::string text = to_lower(current_text);
+    return contains_any(text, {
+        "этот класс", "эта класс", "этого класса", "в этом классе",
+        "эта функция", "эту функцию", "этой функции",
+        "этот метод", "этого метода", "этим методом",
+        "этот символ", "этой сущности", "здесь", "тут",
+        "this class", "this function", "this method", "this symbol",
+        "here", "at the cursor"
+    });
+}
+
 void apply_keyword_correction(const std::string& user_text, SIntent& intent)
 {
     const std::string text = to_lower(user_text);
@@ -247,6 +304,23 @@ bool CIntentAnalyzer::analyze(IModelApi& model,
     }
 
     apply_keyword_correction(user_text, out_intent);
+
+    // Если пользователь явно указывает на объект под курсором, не полагаемся
+    // исключительно на то, вспомнит ли классификатор заполнить subject.name.
+    // Для глобальных вопросов cursor hint намеренно не применяется.
+    if (out_intent.m_subject.m_name.empty()
+            && out_intent.m_subject.m_selection == ESubjectSelection::Context
+            && is_deictic_reference(user_text))
+    {
+        ESubjectKind cursor_kind = out_intent.m_subject.m_kind;
+        const std::string cursor_name = cursor_symbol_name(cursor_hint, cursor_kind);
+        if (!cursor_name.empty())
+        {
+            out_intent.m_subject.m_name = cursor_name;
+            out_intent.m_subject.m_kind = cursor_kind;
+            out_intent.m_subject.m_selection = ESubjectSelection::Cursor;
+        }
+    }
     return true;
 }
 

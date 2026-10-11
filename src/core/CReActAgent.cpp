@@ -614,7 +614,16 @@ bool CReActAgent::run(const std::string& question,
                     model->complete_stream(streamed_prompt.m_messages, on_stream_chunk);
                 if (!streamed.m_ok || streamed.m_text.empty())
                 {
-                    std::cerr << "fcpp-agent: streamed final answer failed: " << streamed.m_error << '\n';
+                    if (streamed.m_error == "stream callback cancelled output")
+                    {
+                        // Cancellation is a normal control-flow outcome, not a provider failure.
+                        std::cerr << "fcpp-agent: streamed final answer cancelled by caller\n";
+                    }
+                    else
+                    {
+                        std::cerr << "fcpp-agent: streamed final answer failed: "
+                                  << streamed.m_error << '\n';
+                    }
                     return false;
                 }
                 out_answer = streamed.m_text;

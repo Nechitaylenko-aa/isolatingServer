@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
@@ -348,6 +349,31 @@ struct SApiStreamResult
     std::string m_answer;
     std::vector<std::string> m_chunks;
     std::vector<std::string> m_requests;
+    std::string m_diagnostics;
+};
+
+/** Capture expected negative-path diagnostics so integration tests stay quiet. */
+class CStderrCapture
+{
+public:
+    CStderrCapture()
+        : m_previous(std::cerr.rdbuf(m_buffer.rdbuf()))
+    {
+    }
+
+    ~CStderrCapture()
+    {
+        std::cerr.rdbuf(m_previous);
+    }
+
+    std::string str() const { return m_buffer.str(); }
+
+    CStderrCapture(const CStderrCapture&) = delete;
+    CStderrCapture& operator=(const CStderrCapture&) = delete;
+
+private:
+    std::ostringstream m_buffer;
+    std::streambuf* m_previous;
 };
 
 SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
@@ -385,10 +411,12 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
         return !cancel_on_first_chunk;
     };
 
+    CStderrCapture diagnostics;
     const fcpp::SApiResponse response = api.execute(ask);
     result.m_ok = response.m_ok;
     result.m_answer = response.m_text;
     result.m_requests = server.requests();
+    result.m_diagnostics = diagnostics.str();
     return result;
 }
 
@@ -429,6 +457,8 @@ TEST_CASE("streaming integration: cancellation stops the request and does not tr
     REQUIRE(result.m_chunks.size() == 1);
     REQUIRE(result.m_chunks[0] == "stop-here");
     REQUIRE(result.m_requests.size() == 2);
+    REQUIRE(result.m_diagnostics.find("cancelled by caller") != std::string::npos);
+    REQUIRE(result.m_diagnostics.find("streamed final answer failed") == std::string::npos);
 }
 
 TEST_CASE("streaming integration: provider failure after first chunk never mixes a fallback answer",
@@ -446,6 +476,8 @@ TEST_CASE("streaming integration: provider failure after first chunk never mixes
     REQUIRE(result.m_chunks[0] == "partial answer");
     REQUIRE(join_chunks(result.m_chunks).find("draft answer") == std::string::npos);
     REQUIRE(result.m_requests.size() == 2);
+    REQUIRE(result.m_diagnostics.find("Transferred a partial file") != std::string::npos);
+    REQUIRE(result.m_diagnostics.find("streamed final answer failed") != std::string::npos);
 }
 
 TEST_CASE("streaming integration: tool-enabled completion preserves tool_calls and buffers text",

@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/CIntentAnalyzer.h"
 #include "fcpp-agent/IModelApi.h"
@@ -9,6 +11,84 @@
 #include "llm/CEndpointUtil.h"
 #include "llm/CModelFactory.h"
 #include "llm/CModelOpenAICompat.h"
+
+
+namespace
+{
+
+class CFixedReplyModel final : public fcpp::IModelApi
+{
+public:
+    explicit CFixedReplyModel(std::string text)
+        : m_text(std::move(text))
+    {
+    }
+
+    bool is_available() const override { return true; }
+
+    fcpp::SModelReply complete(const std::vector<fcpp::SModelMessage>&) override
+    {
+        return fcpp::SModelReply{true, m_text, {}, "stop", {}};
+    }
+
+    fcpp::SModelReply complete(const std::vector<fcpp::SModelMessage>&,
+                               const std::vector<fcpp::SModelTool>&) override
+    {
+        const std::vector<fcpp::SModelMessage> empty_messages;
+        return complete(empty_messages);
+    }
+
+    fcpp::SModelReply complete_stream(const std::vector<fcpp::SModelMessage>&,
+                                      const fcpp::SStreamCallback&) override
+    {
+        const std::vector<fcpp::SModelMessage> empty_messages;
+        return complete(empty_messages);
+    }
+
+private:
+    std::string m_text;
+};
+
+} // namespace
+
+TEST_CASE("intent analyzer: deictic reference falls back to cursor symbol when model omits name",
+          "[model][intent]")
+{
+    const std::string xml =
+        "<intent><area>UNDERSTAND</area><relation>SELF</relation>"
+        "<projection>EXPLANATION</projection>"
+        "<subject kind=\"CLASS\" name=\"\"/></intent>";
+    CFixedReplyModel model(xml);
+    fcpp::SIntent intent;
+    std::string error;
+
+    REQUIRE(fcpp::CIntentAnalyzer{}.analyze(
+        model, "Объясни этот класс", "[cursor symbol: fcpp::CWidget (CLASS)]",
+        intent, error));
+
+    REQUIRE(intent.m_subject.m_name == "fcpp::CWidget");
+    REQUIRE(intent.m_subject.m_kind == fcpp::ESubjectKind::Class);
+    REQUIRE(intent.m_subject.m_selection == fcpp::ESubjectSelection::Cursor);
+}
+
+TEST_CASE("intent analyzer: global question does not inherit cursor symbol",
+          "[model][intent]")
+{
+    const std::string xml =
+        "<intent><area>UNDERSTAND</area><relation>SELF</relation>"
+        "<projection>EXPLANATION</projection>"
+        "<subject kind=\"SYMBOL\" name=\"\"/></intent>";
+    CFixedReplyModel model(xml);
+    fcpp::SIntent intent;
+    std::string error;
+
+    REQUIRE(fcpp::CIntentAnalyzer{}.analyze(
+        model, "Объясни архитектуру проекта", "[cursor symbol: fcpp::CWidget (CLASS)]",
+        intent, error));
+
+    REQUIRE(intent.m_subject.m_name.empty());
+    REQUIRE(intent.m_subject.m_selection == fcpp::ESubjectSelection::Context);
+}
 
 TEST_CASE("endpoint: base_url до v1 + путь api", "[model]")
 {
