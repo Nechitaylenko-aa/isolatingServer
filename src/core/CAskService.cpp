@@ -570,7 +570,7 @@ bool CAskService::ask(const std::string& text,
         SContextSourceRequest{text, k_chat_context_budget_tokens});
     if (!chat_context.m_complete && !chat_context.m_note.empty())
     {
-        std::cerr << "fcpp-agent: chat context is partial: " << chat_context.m_note << '\\n';
+        std::cerr << "fcpp-agent: chat context is partial: " << chat_context.m_note << '\n';
     }
     for (SContextGroup group : chat_context.m_groups)
     {
