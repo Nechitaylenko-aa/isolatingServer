@@ -76,6 +76,9 @@ struct SConversationStateItem
  * the latest valid event wins while its event id remains explicit provenance.
  * Malformed or unrelated events are ignored without mutating the event log.
  */
+std::vector<SConversationEvent> active_conversation_events(
+    const std::vector<SConversationEvent>& events);
+
 std::vector<SConversationStateItem> reconstruct_conversation_state(
     const std::vector<SConversationEvent>& events);
 
@@ -179,9 +182,10 @@ public:
                                            std::size_t limit = 1000) const;
 
     /**
-     * @brief Обрезать диалог до вопроса включительно.
+     * @brief Логически обрезать активную историю до указанного вопроса включительно.
      *
-     * Заглушка: пока всегда возвращает false и не изменяет хранилище.
+     * Добавляет shrink marker в append-only журнал; raw audit events сохраняются,
+     * а все conversation/state projections игнорируют удалённый хвост.
      */
     bool shrink_question(const std::string& session_id, std::uint16_t question_id);
 

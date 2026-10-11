@@ -125,6 +125,47 @@ private:
 
 } // namespace
 
+std::vector<SConversationEvent> active_conversation_events(
+    const std::vector<SConversationEvent>& events)
+{
+    std::vector<SConversationEvent> active;
+    for (const SConversationEvent& event : events)
+    {
+        if (event.m_kind != "session.question_shrunk")
+        {
+            active.push_back(event);
+            continue;
+        }
+
+        // Shrink markers are audit events, not visible conversation items. They
+        // rewind the active projection while retaining the append-only event log.
+        try
+        {
+            const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
+            if (!payload.is_object() || !payload.contains("cutoff_event_id")
+                    || !payload["cutoff_event_id"].is_number_integer())
+            {
+                continue;
+            }
+            const std::int64_t cutoff = payload["cutoff_event_id"].get<std::int64_t>();
+            const auto target = std::find_if(active.begin(), active.end(),
+                [cutoff](const SConversationEvent& item) { return item.m_id == cutoff; });
+            if (cutoff <= 0 || target == active.end())
+            {
+                continue;
+            }
+            active.erase(std::remove_if(active.begin(), active.end(),
+                [cutoff](const SConversationEvent& item) { return item.m_id > cutoff; }),
+                active.end());
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            // Ignore malformed shrink markers; never destroy historical events.
+        }
+    }
+    return active;
+}
+
 std::vector<SConversationStateItem> reconstruct_conversation_state(
     const std::vector<SConversationEvent>& events)
 {
@@ -138,7 +179,8 @@ std::vector<SConversationStateItem> reconstruct_conversation_state(
     };
 
     std::vector<SConversationStateItem> state;
-    for (const SConversationEvent& event : events)
+    const std::vector<SConversationEvent> active_events = active_conversation_events(events);
+    for (const SConversationEvent& event : active_events)
     {
         if (std::find(supported_kinds.begin(), supported_kinds.end(), event.m_kind)
             == supported_kinds.end())
@@ -195,11 +237,12 @@ std::vector<SConversationStateItem> reconstruct_conversation_state(
 std::vector<SConversationTurn> reconstruct_conversation_turns(
     const std::vector<SConversationEvent>& events)
 {
+    const std::vector<SConversationEvent> active_events = active_conversation_events(events);
     std::vector<SConversationTurn> turns;
     std::string pending_user;
     std::int64_t pending_user_event_id = 0;
 
-    for (const SConversationEvent& event : events)
+    for (const SConversationEvent& event : active_events)
     {
         try
         {
@@ -524,10 +567,86 @@ std::vector<SConversationEvent> CConversationStore::events(
 
 bool CConversationStore::shrink_question(const std::string& session_id, std::uint16_t question_id)
 {
-    // TODO: implement after the chat-item model becomes the authoritative dialogue representation.
-    (void)session_id;
-    (void)question_id;
-    return false;
+    if (m_db == nullptr || session_id.empty() || question_id == 0)
+    {
+        return false;
+    }
+
+    Transaction transaction(m_db);
+    if (!transaction.ok())
+    {
+        return false;
+    }
+
+    std::vector<SConversationEvent> all_events;
+    std::int64_t after_event_id = 0;
+    constexpr std::size_t k_page_size = 1000;
+    while (true)
+    {
+        std::vector<SConversationEvent> page = events(session_id, after_event_id, k_page_size);
+        if (page.empty())
+        {
+            break;
+        }
+        after_event_id = page.back().m_id;
+        all_events.insert(all_events.end(), page.begin(), page.end());
+        if (page.size() < k_page_size)
+        {
+            break;
+        }
+    }
+
+    const std::vector<SConversationEvent> active_events = active_conversation_events(all_events);
+    std::int64_t cutoff_event_id = 0;
+    for (const SConversationEvent& event : active_events)
+    {
+        if (event.m_kind != "assistant")
+        {
+            continue;
+        }
+        try
+        {
+            const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
+            if (!payload.is_object() || !payload.contains("question")
+                    || !payload["question"].is_object())
+            {
+                continue;
+            }
+            const nlohmann::json& question = payload["question"];
+            if (!question.contains("questions") || !question["questions"].is_array())
+            {
+                continue;
+            }
+            for (const nlohmann::json& item : question["questions"])
+            {
+                if (item.is_object() && item.contains("id") && item["id"].is_number_integer()
+                        && item["id"].get<std::int64_t>() == question_id)
+                {
+                    cutoff_event_id = event.m_id;
+                    break;
+                }
+            }
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            // Skip malformed historical assistant payloads.
+        }
+    }
+
+    if (cutoff_event_id == 0)
+    {
+        return false;
+    }
+
+    const nlohmann::json marker = {
+        {"question_id", question_id},
+        {"cutoff_event_id", cutoff_event_id}
+    };
+    if (!append_event(session_id, "session.question_shrunk", marker.dump()))
+    {
+        return false;
+    }
+    return transaction.commit();
 }
 
 } // namespace fcpp

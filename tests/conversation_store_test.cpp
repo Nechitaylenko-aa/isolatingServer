@@ -183,3 +183,74 @@ TEST_CASE("conversation state projection preserves provenance and only trusts ty
     REQUIRE(state[2].m_status == "unspecified");
     REQUIRE(state[2].m_source_event_id == 5);
 }
+
+TEST_CASE("conversation shrink keeps the target question and rewinds the active projection", "[conversation][shrink]")
+{
+    const auto path = make_temp_db();
+    std::filesystem::remove(path);
+
+    fcpp::CConversationStore store;
+    REQUIRE(store.open(path));
+    REQUIRE(store.create_session("shrink-session", "project"));
+
+    REQUIRE(store.append_event("shrink-session", "user", R"({"text":"first question"})"));
+    REQUIRE(store.append_event("shrink-session", "assistant",
+        R"({"text":"Choose a compiler","question":{"wait_for_user":true,"questions":[{"id":42,"text":"Choose a compiler","options":["GCC","Clang"],"and":false}]}})"));
+    REQUIRE(store.append_event("shrink-session", "user",
+        R"({"text":"GCC","answer_question_id":42,"selected_option":"GCC"})"));
+    REQUIRE(store.append_event("shrink-session", "assistant", R"({"text":"GCC selected","ok":true})"));
+    REQUIRE(store.append_event("shrink-session", "state.fact",
+        R"({"id":"later-fact","text":"must be hidden after shrink"})"));
+    REQUIRE(store.append_event("shrink-session", "user", R"({"text":"later question"})"));
+
+    const auto before = store.events("shrink-session");
+    REQUIRE(before.size() == 6);
+    REQUIRE(store.shrink_question("shrink-session", 42));
+
+    const auto raw_after = store.events("shrink-session");
+    REQUIRE(raw_after.size() == 7);
+    REQUIRE(raw_after.back().m_kind == "session.question_shrunk");
+
+    const auto active = fcpp::active_conversation_events(raw_after);
+    REQUIRE(active.size() == 2);
+    REQUIRE(active[0].m_kind == "user");
+    REQUIRE(active[1].m_kind == "assistant");
+    REQUIRE(active[1].m_payload.find("Choose a compiler") != std::string::npos);
+
+    const auto turns = fcpp::reconstruct_conversation_turns(raw_after);
+    REQUIRE(turns.size() == 1);
+    REQUIRE(turns[0].m_user_text == "first question");
+    REQUIRE(turns[0].m_assistant_text == "Choose a compiler");
+
+    const auto state = fcpp::reconstruct_conversation_state(raw_after);
+    REQUIRE(state.empty());
+    REQUIRE_FALSE(store.shrink_question("shrink-session", 42));
+
+    REQUIRE(store.append_event("shrink-session", "user", R"({"text":"new question"})"));
+    REQUIRE(store.append_event("shrink-session", "assistant", R"({"text":"new answer","ok":true})"));
+    const auto active_after_new_turn = fcpp::active_conversation_events(store.events("shrink-session"));
+    REQUIRE(active_after_new_turn.size() == 4);
+    REQUIRE(fcpp::reconstruct_conversation_turns(store.events("shrink-session")).size() == 2);
+
+    store.close();
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("conversation shrink rejects missing, closed, and non-question targets", "[conversation][shrink]")
+{
+    const auto path = make_temp_db();
+    std::filesystem::remove(path);
+
+    fcpp::CConversationStore store;
+    REQUIRE(store.open(path));
+    REQUIRE_FALSE(store.shrink_question("missing", 1));
+    REQUIRE(store.create_session("s", "project"));
+    REQUIRE_FALSE(store.shrink_question("s", 1));
+    REQUIRE(store.append_event("s", "assistant", R"({"text":"not a question"})"));
+    REQUIRE_FALSE(store.shrink_question("s", 1));
+    REQUIRE(store.close_session("s"));
+    REQUIRE_FALSE(store.shrink_question("s", 1));
+
+    store.close();
+    std::filesystem::remove(path);
+}
