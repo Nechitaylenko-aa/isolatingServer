@@ -50,7 +50,7 @@ TEST_CASE("patch parser разбирает unified diff", "[patch]")
     const std::string diff =
         "--- a/src/a.cpp\n"
         "+++ b/src/a.cpp\n"
-        "@@ -1,3 +1,4 @@\n"
+        "@@ -1,4 +1,5 @@\n"
         " int main()\n"
         " {\n"
         "-    return 1;\n"
