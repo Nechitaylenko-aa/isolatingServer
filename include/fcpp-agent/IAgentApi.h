@@ -77,6 +77,32 @@ struct SChatQuestion
     bool m_wait_for_user = true;
 };
 
+/** @brief Тип записи в линейной истории диалога. */
+enum class EChatItemType : std::uint8_t
+{
+    UserRequest,
+    AgentQuestion,
+    UserAnswer,
+    AgentResponse
+};
+
+/**
+ * @brief Одна запись линейной истории диалога.
+ *
+ * m_text содержит пользовательский запрос/ответ либо итоговый ответ агента.
+ * Для AgentQuestion структурированные данные находятся в m_question.
+ * Действия агента намеренно не являются типом записи диалога.
+ */
+struct SChatItem
+{
+    std::uint16_t m_id = 0;
+    EChatItemType m_type = EChatItemType::UserRequest;
+    std::string m_text;
+    SChatQuestion m_question;
+};
+
+using TChat = std::vector<SChatItem>;
+
 /**
  * @brief Типизированный запрос к Agent API.
  */
