@@ -152,6 +152,15 @@ bool CPatchValidator::validate(const SPatchSet& patch, SPatchValidation& out_val
         return false;
     }
 
+    std::error_code path_error;
+    const std::filesystem::path canonical_root =
+        std::filesystem::weakly_canonical(m_project_root, path_error);
+    if (path_error)
+    {
+        out_validation.m_message = "cannot resolve project root: " + path_error.message();
+        return false;
+    }
+
     for (const SFilePatch& file_patch : patch.m_files)
     {
         const std::string relative = file_patch.m_is_create ? file_patch.m_new_path : file_patch.m_old_path;
@@ -161,16 +170,27 @@ bool CPatchValidator::validate(const SPatchSet& patch, SPatchValidation& out_val
             return false;
         }
 
-        std::filesystem::path resolved = std::filesystem::path(relative);
+        std::filesystem::path resolved(relative);
         if (resolved.is_relative())
         {
-            resolved = m_project_root / resolved;
+            resolved = canonical_root / resolved;
         }
-        resolved = resolved.lexically_normal();
 
-        // Закрытая безопасность: не выходить за пределы проекта.
-        const std::string root_text = m_project_root.lexically_normal().string();
-        if (resolved.string().rfind(root_text, 0) != 0)
+        // Resolve existing path components (including symlinks) before checking
+        // containment. A string-prefix check incorrectly accepts sibling paths
+        // such as "/project-evil" when the root is "/project".
+        path_error.clear();
+        resolved = std::filesystem::weakly_canonical(resolved, path_error);
+        if (path_error)
+        {
+            out_validation.m_message = "cannot resolve patch path: " + relative
+                + ": " + path_error.message();
+            return false;
+        }
+
+        const std::filesystem::path relative_to_root = resolved.lexically_relative(canonical_root);
+        if (relative_to_root.empty() || relative_to_root == "."
+                || relative_to_root.is_absolute() || *relative_to_root.begin() == "..")
         {
             out_validation.m_message = "path escapes project root: " + relative;
             return false;

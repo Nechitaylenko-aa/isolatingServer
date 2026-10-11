@@ -129,3 +129,38 @@ TEST_CASE("patch validator отклоняет выход за пределы п�
 
     std::filesystem::remove_all(root);
 }
+
+TEST_CASE("patch validator rejects sibling-prefix and symlink escapes", "[patch][security]")
+{
+    const std::filesystem::path root = make_temp_dir("fcpp-patch-boundary");
+    const std::filesystem::path sibling(root.string() + "-evil");
+    const std::filesystem::path outside = make_temp_dir("fcpp-patch-outside");
+    std::filesystem::create_directories(sibling);
+    std::ofstream(sibling / "pwn.cpp") << "int a;\\n";
+    std::ofstream(outside / "pwn.cpp") << "int a;\\n";
+
+    auto parse_and_validate = [&root](const std::string& old_path, const std::string& new_path)
+    {
+        const std::string diff = "--- a/" + old_path + "\\n"
+            + "+++ b/" + new_path + "\\n"
+            + "@@ -1,1 +1,1 @@\\n-int a;\\n+int b;\\n";
+        fcpp::SPatchSet patch;
+        REQUIRE(fcpp::CPatchParser::parse(diff, patch));
+        fcpp::CPatchValidator validator(root);
+        fcpp::SPatchValidation validation;
+        REQUIRE_FALSE(validator.validate(patch, validation));
+        REQUIRE(validation.m_message.find("path escapes project root") != std::string::npos);
+    };
+
+    parse_and_validate("../" + sibling.filename().string() + "/pwn.cpp",
+                       "../" + sibling.filename().string() + "/pwn.cpp");
+
+    std::error_code symlink_error;
+    std::filesystem::create_directory_symlink(outside, root / "linked", symlink_error);
+    REQUIRE_FALSE(symlink_error);
+    parse_and_validate("linked/pwn.cpp", "linked/pwn.cpp");
+
+    std::filesystem::remove_all(root);
+    std::filesystem::remove_all(sibling);
+    std::filesystem::remove_all(outside);
+}
