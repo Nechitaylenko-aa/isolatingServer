@@ -248,3 +248,21 @@ TEST_CASE("compile command parser honors escaped spaces and rejects unclosed quo
 
     std::filesystem::remove_all(dir);
 }
+
+
+TEST_CASE("compile command parser rejects empty command entries", "[compile_commands]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-cc-empty-command");
+    const std::filesystem::path path = dir / "compile_commands.json";
+    std::vector<fcpp::SCompileCommand> commands;
+
+    std::ofstream(path) << R"([{"directory":"/tmp","file":"main.cpp","command":""}])";
+    REQUIRE_FALSE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.empty());
+
+    std::ofstream(path) << R"([{"directory":"/tmp","file":"main.cpp","command":"   "}])";
+    REQUIRE_FALSE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.empty());
+
+    std::filesystem::remove_all(dir);
+}
