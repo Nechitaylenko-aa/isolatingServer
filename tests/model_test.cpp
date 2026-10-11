@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/CIntentAnalyzer.h"
+#include "core/CAnswerQuality.h"
 #include "fcpp-agent/IModelApi.h"
 #include "fcpp-agent/SConfig.h"
 #include "fcpp-agent/SIntent.h"
@@ -160,4 +161,33 @@ TEST_CASE("model factory: light same_as_main наследует main", "[model]"
     std::unique_ptr<fcpp::IModelApi> remote = fcpp::CModelFactory::create(empty_config, fcpp::EModelRoleKind::Remote);
     REQUIRE(remote != nullptr);
     REQUIRE_FALSE(remote->is_available());
+}
+
+TEST_CASE("answer quality: parses accepted low-risk assessment", "[model][quality]")
+{
+    fcpp::SAnswerQualityAssessment assessment;
+    REQUIRE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":12,"reason":"claims are supported"})",
+        assessment));
+    REQUIRE(assessment.m_valid);
+    REQUIRE(assessment.m_risk_score == 12);
+    REQUIRE_FALSE(assessment.m_escalate);
+}
+
+TEST_CASE("answer quality: high risk escalates even when verdict says accept", "[model][quality]")
+{
+    fcpp::SAnswerQualityAssessment assessment;
+    REQUIRE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":35,"reason":"insufficient evidence"})",
+        assessment));
+    REQUIRE(assessment.m_escalate);
+}
+
+TEST_CASE("answer quality: malformed assessment is rejected", "[model][quality]")
+{
+    fcpp::SAnswerQualityAssessment assessment;
+    REQUIRE_FALSE(fcpp::parse_answer_quality("probably fine", assessment));
+    REQUIRE_FALSE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":101,"reason":"out of range"})",
+        assessment));
 }
