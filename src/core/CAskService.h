@@ -18,7 +18,6 @@
 #include "core/CProjectManager.h"
 #include "core/CConversationStore.h"
 #include "fcpp-agent/IClang.h"
-#include "fcpp-agent/SEvidence.h"
 #include "fcpp-agent/SIntent.h"
 
 namespace fcpp
@@ -66,26 +65,6 @@ public:
              const std::function<bool(const std::string&)>& on_stream_chunk = {}) const;
 
 private:
-    /**
-     * @brief Сформировать ответ main-моделью по Evidence (§55/§56).
-     * @param question Исходный вопрос пользователя.
-     * @param evidence Набор Evidence.
-     * @param stream Дополнительно печатать поток ответа в stdout (CLI).
-     * @param out_answer Выходной текст ответа.
-     * @return true при успехе.
-     */
-    bool answer_general_engineering(const std::string& question,
-                                    const std::vector<SConversationTurn>& history,
-                                    bool stream,
-                                    std::string& out_answer,
-                                    const std::function<bool(const std::string&)>& on_stream_chunk) const;
-
-    bool answer_from_evidence(const std::string& question,
-                              const SEvidence& evidence,
-                              bool stream,
-                              std::string& out_answer,
-                              const std::function<bool(const std::string&)>& on_stream_chunk) const;
-
     /**
      * @brief Разрешить курсор в сущность через IClang (innermost, B2/ADR-20).
      *

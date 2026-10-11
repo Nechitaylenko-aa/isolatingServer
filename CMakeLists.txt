@@ -141,6 +141,7 @@ add_library(fcpp_core STATIC
     src/core/CRequestPipeline.cpp
     src/core/CIntentAnalyzer.cpp
     src/core/CAskService.cpp
+    src/core/CAnswerService.cpp
     src/core/CAnswerQuality.cpp
     src/core/SEvidence.cpp
     src/core/CEvidenceCollector.cpp

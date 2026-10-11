@@ -4,6 +4,7 @@
  */
 
 #include "core/CReActAgent.h"
+#include "core/CContextDiagnostics.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
 #include "core/CProjectProfileContextSource.h"
@@ -322,30 +323,6 @@ const char* role_name(EModelRoleKind role)
  * @return Строковая сигнатура endpoint.
  */
 
-void log_context_selection(const std::string& stage, const SContextBuildResult& result)
-{
-    const auto print_ids = [](const std::vector<std::string>& ids)
-    {
-        std::cerr << '[';
-        for (std::size_t index = 0; index < ids.size(); ++index)
-        {
-            if (index != 0)
-            {
-                std::cerr << ',';
-            }
-            std::cerr << ids[index];
-        }
-        std::cerr << ']';
-    };
-
-    std::cerr << "fcpp-agent: CONTEXT_SELECTION stage=" << stage
-              << " tokens=" << result.m_estimated_tokens << '/' << result.m_budget_tokens
-              << " included=";
-    print_ids(result.m_included_group_ids);
-    std::cerr << " excluded=";
-    print_ids(result.m_excluded_group_ids);
-    std::cerr << '\n';
-}
 
 } // namespace
 
