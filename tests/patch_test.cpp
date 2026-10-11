@@ -164,3 +164,40 @@ TEST_CASE("patch validator rejects sibling-prefix and symlink escapes", "[patch]
     std::filesystem::remove_all(sibling);
     std::filesystem::remove_all(outside);
 }
+
+TEST_CASE("patch validator checks deletion hunks against the original file", "[patch][delete]")
+{
+    const std::filesystem::path root = make_temp_dir("fcpp-patch-delete");
+    std::ofstream(root / "keep.cpp") << "int a;\\n";
+    fcpp::CPatchValidator validator(root);
+    fcpp::SPatchValidation validation;
+
+    const std::string missing_hunk =
+        "--- a/keep.cpp\\n"
+        "+++ /dev/null\\n";
+    fcpp::SPatchSet patch;
+    REQUIRE(fcpp::CPatchParser::parse(missing_hunk, patch));
+    REQUIRE_FALSE(validator.validate(patch, validation));
+    REQUIRE(validation.m_message.find("delete patch has no hunks") != std::string::npos);
+
+    const std::string mismatched_hunk =
+        "--- a/keep.cpp\\n"
+        "+++ /dev/null\\n"
+        "@@ -1,1 +0,0 @@\\n"
+        "-int different;\\n";
+    REQUIRE(fcpp::CPatchParser::parse(mismatched_hunk, patch));
+    REQUIRE_FALSE(validator.validate(patch, validation));
+    REQUIRE(validation.m_message.find("delete patch conflict") != std::string::npos);
+
+    const std::string valid_hunk =
+        "--- a/keep.cpp\\n"
+        "+++ /dev/null\\n"
+        "@@ -1,1 +0,0 @@\\n"
+        "-int a;\\n";
+    REQUIRE(fcpp::CPatchParser::parse(valid_hunk, patch));
+    REQUIRE(validator.validate(patch, validation));
+    REQUIRE(validation.m_changes.size() == 1);
+    REQUIRE(validation.m_changes[0].m_is_delete);
+
+    std::filesystem::remove_all(root);
+}

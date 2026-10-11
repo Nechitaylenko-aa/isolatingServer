@@ -225,6 +225,24 @@ bool CPatchValidator::validate(const SPatchSet& patch, SPatchValidation& out_val
 
         if (change.m_is_delete)
         {
+            if (file_patch.m_hunks.empty() && !original.empty())
+            {
+                out_validation.m_message = "delete patch has no hunks: " + relative;
+                return false;
+            }
+
+            std::string verified_content;
+            std::string delete_message;
+            if (!apply_hunks(original, file_patch, verified_content, delete_message))
+            {
+                out_validation.m_message = "delete patch conflict: " + delete_message;
+                return false;
+            }
+            if (!verified_content.empty())
+            {
+                out_validation.m_message = "delete patch does not remove entire file: " + relative;
+                return false;
+            }
             change.m_updated.clear();
         }
         else if (change.m_is_create)
