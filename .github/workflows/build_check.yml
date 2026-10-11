@@ -58,7 +58,7 @@ jobs:
 
       # 6. Тесты (если настроен CTest)
       - name: Test
-        run: ctest --test-dir build --output-on-failure --no-tests=error
+        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 60 --verbose
 
       # 7. Показываем статистику ccache для отладки
       - name: Show ccache stats
