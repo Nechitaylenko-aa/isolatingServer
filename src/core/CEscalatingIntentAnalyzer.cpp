@@ -4,6 +4,7 @@
  */
 
 #include "core/CEscalatingIntentAnalyzer.h"
+#include "core/CModelLevels.h"
 
 #include <memory>
 #include <string>
@@ -32,27 +33,7 @@ CEscalatingIntentAnalyzer::CEscalatingIntentAnalyzer(const SConfig& config)
 
 std::vector<EModelLevel> CEscalatingIntentAnalyzer::available_levels() const
 {
-    std::vector<EModelLevel> levels;
-
-    std::unique_ptr<IModelApi> lite = CModelFactory::create(m_config, EModelRoleKind::Light);
-    if (lite != nullptr && lite->is_available())
-    {
-        levels.push_back(EModelLevel::Lite);
-    }
-
-    std::unique_ptr<IModelApi> main_model = CModelFactory::create(m_config, EModelRoleKind::Main);
-    if (main_model != nullptr && main_model->is_available())
-    {
-        levels.push_back(EModelLevel::Main);
-    }
-
-    std::unique_ptr<IModelApi> remote = CModelFactory::create(m_config, EModelRoleKind::Remote);
-    if (remote != nullptr && remote->is_available())
-    {
-        levels.push_back(EModelLevel::Remote);
-    }
-
-    return levels;
+    return available_model_levels(m_config);
 }
 
 bool CEscalatingIntentAnalyzer::analyze(const std::string& user_text,
@@ -75,15 +56,7 @@ bool CEscalatingIntentAnalyzer::analyze(const std::string& user_text,
         {
             SCascadeAttempt attempt;
 
-            EModelRoleKind role = EModelRoleKind::Light;
-            if (level == EModelLevel::Main)
-            {
-                role = EModelRoleKind::Main;
-            }
-            else if (level == EModelLevel::Remote)
-            {
-                role = EModelRoleKind::Remote;
-            }
+            const EModelRoleKind role = model_role_for_level(level);
 
             std::unique_ptr<IModelApi> model = CModelFactory::create(m_config, role);
             if (model == nullptr || !model->is_available())

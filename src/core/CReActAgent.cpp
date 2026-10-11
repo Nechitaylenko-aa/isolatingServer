@@ -7,6 +7,7 @@
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
 #include "core/CProjectProfileContextSource.h"
+#include "core/CModelLevels.h"
 #include "fcpp-agent/SCascade.h"
 
 #include <iostream>
@@ -320,29 +321,6 @@ const char* role_name(EModelRoleKind role)
  * @param role Роль.
  * @return Строковая сигнатура endpoint.
  */
-std::string endpoint_signature(const SConfig& config, EModelRoleKind role)
-{
-    if (role == EModelRoleKind::Remote)
-    {
-        return config.m_model_remote.m_url + "|" + config.m_model_remote.m_name
-               + "|" + config.m_model_remote.m_type;
-    }
-    if (role == EModelRoleKind::Light)
-    {
-        std::string url = config.m_model_light.m_url;
-        std::string name = config.m_model_light.m_name;
-        if (url == "same_as_main" || url.empty())
-        {
-            url = config.m_model_main.m_url;
-        }
-        if (name.empty())
-        {
-            name = config.m_model_main.m_name;
-        }
-        return url + "|" + name;
-    }
-    return config.m_model_main.m_url + "|" + config.m_model_main.m_name;
-}
 
 void log_context_selection(const std::string& stage, const SContextBuildResult& result)
 {
@@ -401,40 +379,14 @@ bool CReActAgent::run(const std::string& question,
         start_role = EModelRoleKind::Remote;
     }
 
-    // Порядок эскалации по стоимости (ADR-25): light -> main -> remote.
-    // Уровни строятся только для доступных и РАЗЛИЧНЫХ по endpoint ролей. При
-    // model_light="same_as_main" уровни light и main указывают на один endpoint,
-    // поэтому схлопываются (config-collapse) и эскалация идёт сразу на remote.
-    static const EModelRoleKind k_escalation_order[] =
-    {
-        EModelRoleKind::Light, EModelRoleKind::Main, EModelRoleKind::Remote
-    };
+    // A single utility owns availability checks and effective endpoint identity
+    // for ReAct, intent analysis, answer generation, and quality review.
+    const std::vector<EModelLevel> model_levels = available_model_levels(config);
     std::vector<EModelRoleKind> levels;
-    std::vector<std::string> level_signatures;
-    for (const EModelRoleKind role : k_escalation_order)
+    levels.reserve(model_levels.size());
+    for (const EModelLevel level : model_levels)
     {
-        std::unique_ptr<IModelApi> probe = CModelFactory::create(config, role);
-        if (probe == nullptr || !probe->is_available())
-        {
-            continue;
-        }
-        const std::string signature = endpoint_signature(config, role);
-        bool duplicate = false;
-        for (const std::string& known : level_signatures)
-        {
-            if (known == signature)
-            {
-                duplicate = true;
-                break;
-            }
-        }
-        if (duplicate)
-        {
-            // Та же точка, что и у более дешёвого уровня (напр. light == main).
-            continue;
-        }
-        levels.push_back(role);
-        level_signatures.push_back(signature);
+        levels.push_back(model_role_for_level(level));
     }
     if (levels.empty())
     {
@@ -444,12 +396,12 @@ bool CReActAgent::run(const std::string& question,
 
     // Стартовый уровень = первый доступный, endpoint которого совпадает с ролью
     // loop_model; иначе (роль недоступна) — самый дешёвый доступный уровень.
-    const std::string start_signature = endpoint_signature(config, start_role);
+    const std::string start_signature = model_endpoint_signature(config, model_level_for_role(start_role));
     std::size_t level_index = 0;
     bool start_found = false;
     for (std::size_t index = 0; index < levels.size(); ++index)
     {
-        if (level_signatures[index] == start_signature)
+        if (model_endpoint_signature(config, model_levels[index]) == start_signature)
         {
             level_index = index;
             start_found = true;

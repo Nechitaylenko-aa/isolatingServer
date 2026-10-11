@@ -146,6 +146,7 @@ add_library(fcpp_core STATIC
     src/core/CEvidenceCollector.cpp
     src/core/SCascade.cpp
     src/core/CModelCascade.cpp
+    src/core/CModelLevels.cpp
     src/core/CEscalatingIntentAnalyzer.cpp
     src/core/CSubtaskComposer.cpp
     src/core/CReActAgent.cpp

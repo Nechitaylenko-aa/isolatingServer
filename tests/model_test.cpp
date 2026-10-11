@@ -191,3 +191,48 @@ TEST_CASE("answer quality: malformed assessment is rejected", "[model][quality]"
         R"({"verdict":"ACCEPT","risk_score":101,"reason":"out of range"})",
         assessment));
 }
+
+TEST_CASE("model levels: same_as_main collapses when the light model name is inherited", "[model][levels]")
+{
+    fcpp::SConfig config;
+    config.m_model_main.m_url = "http://127.0.0.1:8080/v1";
+    config.m_model_main.m_name = "main";
+    config.m_model_light.m_url = "same_as_main";
+    config.m_model_light.m_name.clear();
+
+    const std::vector<fcpp::EModelLevel> levels = fcpp::available_model_levels(config);
+    REQUIRE(levels.size() == 1);
+    REQUIRE(levels.front() == fcpp::EModelLevel::Lite);
+}
+
+TEST_CASE("model levels: explicit light model name remains a distinct escalation level", "[model][levels]")
+{
+    fcpp::SConfig config;
+    config.m_model_main.m_url = "http://127.0.0.1:8080/v1";
+    config.m_model_main.m_name = "main";
+    config.m_model_light.m_url = "same_as_main";
+    config.m_model_light.m_name = "lite";
+
+    const std::vector<fcpp::EModelLevel> levels = fcpp::available_model_levels(config);
+    REQUIRE(levels.size() == 2);
+    REQUIRE(levels[0] == fcpp::EModelLevel::Lite);
+    REQUIRE(levels[1] == fcpp::EModelLevel::Main);
+}
+
+TEST_CASE("model levels: remote provider type participates in endpoint identity", "[model][levels]")
+{
+    fcpp::SConfig config;
+    config.m_model_main.m_url = "http://127.0.0.1:8080/v1";
+    config.m_model_main.m_name = "shared";
+    config.m_model_light.m_url = "same_as_main";
+    config.m_model_light.m_name.clear();
+    config.m_model_remote.m_url = config.m_model_main.m_url;
+    config.m_model_remote.m_name = config.m_model_main.m_name;
+    config.m_model_remote.m_key = "test-key";
+    config.m_remote_type = fcpp::EModelRemoteType::Claude;
+
+    const std::vector<fcpp::EModelLevel> levels = fcpp::available_model_levels(config);
+    REQUIRE(levels.size() == 2);
+    REQUIRE(levels[0] == fcpp::EModelLevel::Lite);
+    REQUIRE(levels[1] == fcpp::EModelLevel::Remote);
+}

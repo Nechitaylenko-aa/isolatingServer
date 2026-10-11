@@ -4,6 +4,7 @@
  */
 
 #include "core/CAskService.h"
+#include "core/CModelLevels.h"
 #include "core/CAnswerQuality.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
@@ -55,90 +56,6 @@ constexpr const char* k_answer_prompt =
 constexpr std::size_t k_max_subtasks = 6;
 
 /** Return the effective endpoint identity for an answer-cascade level. */
-std::string answer_endpoint_signature(const SConfig& config, EModelLevel level)
-{
-    const SModelConfig* settings = &config.m_model_main;
-    if (level == EModelLevel::Lite)
-    {
-        settings = &config.m_model_light;
-    }
-    else if (level == EModelLevel::Remote)
-    {
-        settings = &config.m_model_remote;
-    }
-
-    std::string url = settings->m_url;
-    std::string name = settings->m_name;
-    if (level == EModelLevel::Lite)
-    {
-        if (url.empty() || url == "same_as_main")
-        {
-            url = config.m_model_main.m_url;
-        }
-        if (name.empty())
-        {
-            name = config.m_model_main.m_name;
-        }
-    }
-
-    std::string signature = url + "|" + name;
-    if (level == EModelLevel::Remote)
-    {
-        signature += config.m_remote_type == EModelRemoteType::Claude
-                         ? "|claude" : "|openai-compatible";
-    }
-    else
-    {
-        signature += "|openai-compatible";
-    }
-    return signature;
-}
-
-/** Keep only configured, available, distinct endpoints in escalation order. */
-std::vector<EModelLevel> available_answer_levels(const SConfig& config)
-{
-    const EModelLevel candidates[] = {
-        EModelLevel::Lite, EModelLevel::Main, EModelLevel::Remote};
-    std::vector<EModelLevel> levels;
-    std::vector<std::string> signatures;
-
-    for (const EModelLevel level : candidates)
-    {
-        EModelRoleKind role = EModelRoleKind::Light;
-        if (level == EModelLevel::Main)
-        {
-            role = EModelRoleKind::Main;
-        }
-        else if (level == EModelLevel::Remote)
-        {
-            role = EModelRoleKind::Remote;
-        }
-
-        std::unique_ptr<IModelApi> model = CModelFactory::create(config, role);
-        if (model == nullptr || !model->is_available())
-        {
-            continue;
-        }
-
-        const std::string signature = answer_endpoint_signature(config, level);
-        bool duplicate = false;
-        for (const std::string& known : signatures)
-        {
-            if (known == signature)
-            {
-                duplicate = true;
-                break;
-            }
-        }
-        if (!duplicate)
-        {
-            levels.push_back(level);
-            signatures.push_back(signature);
-        }
-    }
-    return levels;
-}
-
 /**
  * @brief Скомпоновать текст хинта символа под курсором для промпта (B2/ADR-20).
  * @param symbol Сущность под курсором.
@@ -175,7 +92,7 @@ void log_context_selection(const std::string& stage, const SContextBuildResult& 
 }
 
 
-EModelRoleKind role_for_level(EModelLevel level)
+EModelRoleKind model_role_for_level(EModelLevel level)
 {
     if (level == EModelLevel::Lite) return EModelRoleKind::Light;
     if (level == EModelLevel::Remote) return EModelRoleKind::Remote;
@@ -206,7 +123,7 @@ SAnswerQualityAssessment assess_answer_quality(
     }
     const bool independent_reviewer = candidate_index + 1 < levels.size();
     const EModelLevel reviewer_level = independent_reviewer ? levels[candidate_index + 1] : candidate_level;
-    std::unique_ptr<IModelApi> reviewer = CModelFactory::create(config, role_for_level(reviewer_level));
+    std::unique_ptr<IModelApi> reviewer = CModelFactory::create(config, model_role_for_level(reviewer_level));
     if (reviewer == nullptr || !reviewer->is_available())
     {
         assessment.m_reason = "reviewer unavailable";
@@ -373,7 +290,7 @@ bool CAskService::answer_general_engineering(
     const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     const SConfig& config = m_config_manager.config();
-    const std::vector<EModelLevel> levels = available_answer_levels(config);
+    const std::vector<EModelLevel> levels = available_model_levels(config);
     if (levels.empty()) return false;
     const char* system_prompt =
         "You are a senior C++ and software architecture assistant. Answer the user's general "
@@ -383,7 +300,7 @@ bool CAskService::answer_general_engineering(
         "depends on an existing codebase, say what concrete context is missing.";
     for (const EModelLevel level : levels)
     {
-        std::unique_ptr<IModelApi> model = CModelFactory::create(config, role_for_level(level));
+        std::unique_ptr<IModelApi> model = CModelFactory::create(config, model_role_for_level(level));
         if (model == nullptr || !model->is_available()) continue;
         std::vector<SModelMessage> messages;
         messages.push_back(SModelMessage{EModelRole::System, system_prompt});
@@ -485,7 +402,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
         groups.push_back(std::move(group));
     }
 
-    const std::vector<EModelLevel> levels = available_answer_levels(config);
+    const std::vector<EModelLevel> levels = available_model_levels(config);
     if (levels.empty())
     {
         std::cerr << "fcpp-agent: ANSWER_CASCADE_FAILED: no answer model available\n";
@@ -705,7 +622,7 @@ bool CAskService::ask(const std::string& text,
         EModelLevel react_candidate_level = EModelLevel::Lite;
         if (agent.run(text, react_context, context_json, history, out_answer, react_candidate_level, {}))
         {
-            const std::vector<EModelLevel> quality_levels = available_answer_levels(config);
+            const std::vector<EModelLevel> quality_levels = available_model_levels(config);
             const SAnswerQualityAssessment quality = assess_answer_quality(
                 config, quality_levels, react_candidate_level, text, out_answer);
             if (quality.m_valid && !quality.m_escalate)
