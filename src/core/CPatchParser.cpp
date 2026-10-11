@@ -53,9 +53,19 @@ bool parse_hunk_header(const std::string& line, SPatchHunk& hunk)
 
     auto parse_range = [](const std::string& part, std::uint32_t& start, std::uint32_t& count)
     {
-        const std::size_t comma = part.find(',');
-        const std::string start_text = (comma == std::string::npos) ? part : part.substr(0, comma);
-        const std::string count_text = (comma == std::string::npos) ? "1" : part.substr(comma + 1);
+        const auto trim = [](const std::string& value)
+        {
+            const std::size_t first = value.find_first_not_of(" \\t\\r\\n");
+            if (first == std::string::npos) return std::string{};
+            const std::size_t last = value.find_last_not_of(" \\t\\r\\n");
+            return value.substr(first, last - first + 1);
+        };
+        const std::string normalized = trim(part);
+        const std::size_t comma = normalized.find(',');
+        const std::string start_text = trim(
+            (comma == std::string::npos) ? normalized : normalized.substr(0, comma));
+        const std::string count_text = trim(
+            (comma == std::string::npos) ? "1" : normalized.substr(comma + 1));
         try
         {
             std::size_t start_consumed = 0;
