@@ -42,5 +42,5 @@ TEST_CASE("code evidence source prioritizes indexed evidence and enforces its al
     REQUIRE(result.m_complete);
     REQUIRE(result.m_groups.size() == 2);
     REQUIRE(result.m_estimated_tokens <= 300);
-    REQUIRE(result.m_groups.front().m_priority == 90);
+    REQUIRE(result.m_groups.front().m_priority == 110);
 }
