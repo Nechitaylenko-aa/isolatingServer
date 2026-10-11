@@ -14,6 +14,8 @@
 namespace fcpp
 {
 
+enum class EModelRoleKind;
+
 /** Map logical escalation level to the configured model role. */
 EModelRoleKind model_role_for_level(EModelLevel level);
 

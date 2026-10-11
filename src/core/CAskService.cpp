@@ -92,12 +92,6 @@ void log_context_selection(const std::string& stage, const SContextBuildResult& 
 }
 
 
-EModelRoleKind model_role_for_level(EModelLevel level)
-{
-    if (level == EModelLevel::Lite) return EModelRoleKind::Light;
-    if (level == EModelLevel::Remote) return EModelRoleKind::Remote;
-    return EModelRoleKind::Main;
-}
 
 SAnswerQualityAssessment assess_answer_quality(
     const SConfig& config, const std::vector<EModelLevel>& levels, EModelLevel candidate_level,
