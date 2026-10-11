@@ -466,7 +466,7 @@ bool CReActAgent::run(const std::string& question,
     if (!chat_context.m_complete && !chat_context.m_note.empty())
     {
         std::cerr << "fcpp-agent: ReAct chat context is partial: "
-                  << chat_context.m_note << '\\n';
+                  << chat_context.m_note << '\n';
     }
     for (SContextGroup group : chat_context.m_groups)
     {
