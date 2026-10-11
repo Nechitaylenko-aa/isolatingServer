@@ -6,6 +6,7 @@
 #include "core/CReActAgent.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
+#include "core/CProjectProfileContextSource.h"
 
 #include <iostream>
 #include <memory>
@@ -438,15 +439,20 @@ bool CReActAgent::run(const std::string& question,
     system.m_content = k_loop_prompt;
     prompt_groups.push_back(SContextGroup{"system", {system}, next_order++, 100, 100, 0, true});
 
+    constexpr std::size_t k_project_passport_budget_tokens = 800;
     const std::string& project_profile = m_project_manager.profile().get();
-    if (!project_profile.empty())
+    const CProjectProfileContextSource passport_source(project_profile);
+    const SContextSourceResult passport_context = passport_source.collect_context(
+        SContextSourceRequest{question, k_project_passport_budget_tokens});
+    if (!passport_context.m_complete && !passport_context.m_note.empty())
     {
-        SModelMessage profile;
-        profile.m_role = EModelRole::System;
-        profile.m_content =
-            "[Project profile: follow these user-provided project rules]\n" + project_profile;
-        prompt_groups.push_back(SContextGroup{
-            "project-profile", {profile}, next_order++, 100, 100, 0, true});
+        std::cerr << "fcpp-agent: project passport context is partial: "
+                  << passport_context.m_note << '\n';
+    }
+    for (SContextGroup group : passport_context.m_groups)
+    {
+        group.m_order = next_order++;
+        prompt_groups.push_back(std::move(group));
     }
 
     if (!context_json.empty() && context_json != "{}")
