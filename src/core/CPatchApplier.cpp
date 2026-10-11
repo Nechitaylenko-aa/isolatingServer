@@ -65,7 +65,12 @@ bool CPatchApplier::revert(const std::vector<SFileChange>& changes, std::string&
         else
         {
             std::error_code error_code;
-            std::filesystem::remove(change.m_path, error_code);
+            const bool removed = std::filesystem::remove(change.m_path, error_code);
+            if (error_code || (!removed && std::filesystem::exists(change.m_path, error_code)) || error_code)
+            {
+                out_message = "revert failed: " + change.m_path;
+                return false;
+            }
         }
     }
     return true;
@@ -113,7 +118,11 @@ bool CPatchApplier::apply(const std::vector<SFileChange>& changes, std::string& 
                 else
                 {
                     std::error_code error_code;
-                    std::filesystem::remove(done.m_path, error_code);
+                    const bool removed = std::filesystem::remove(done.m_path, error_code);
+                    if (error_code || (!removed && std::filesystem::exists(done.m_path, error_code)) || error_code)
+                    {
+                        out_message += "; rollback incomplete: " + done.m_path;
+                    }
                 }
             }
             return false;

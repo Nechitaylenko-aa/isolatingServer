@@ -224,3 +224,25 @@ TEST_CASE("patch parser rejects inconsistent hunk counts and overflowing ranges"
     REQUIRE_FALSE(fcpp::CPatchParser::parse(overflow, patch));
     REQUIRE(patch.m_files.empty());
 }
+
+
+TEST_CASE("patch applier reports failed rollback removal instead of claiming success", "[patch][rollback]")
+{
+    const std::filesystem::path root = make_temp_dir("fcpp-patch-rollback");
+    const std::filesystem::path directory = root / "non-empty";
+    std::filesystem::create_directories(directory);
+    std::ofstream(directory / "child.txt") << "keep\\n";
+
+    fcpp::SFileChange change;
+    change.m_path = directory.string();
+    change.m_existed = false;
+    change.m_is_delete = false;
+
+    fcpp::CPatchApplier applier;
+    std::string message;
+    REQUIRE_FALSE(applier.revert({change}, message));
+    REQUIRE(message.find("revert failed:") != std::string::npos);
+    REQUIRE(std::filesystem::exists(directory / "child.txt"));
+
+    std::filesystem::remove_all(root);
+}
