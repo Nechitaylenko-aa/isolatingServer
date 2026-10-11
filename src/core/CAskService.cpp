@@ -251,50 +251,22 @@ CAskService::EFastPathResult CAskService::try_fast_path(
     return EFastPathResult::Continue;
 }
 
-bool CAskService::ask(const std::string& text,
-                      bool stream,
-                      const std::string& cursor_file,
-                      unsigned cursor_line,
-                      unsigned cursor_col,
-                      std::string& out_answer,
-                      const std::string& context_json,
-                      const std::vector<SConversationTurn>& history,
-                      const std::function<bool(const std::string&)>& on_stream_chunk) const
+bool CAskService::answer_codebase_request(
+    const std::string& text,
+    const std::string& cursor_file,
+    unsigned cursor_line,
+    unsigned cursor_col,
+    const std::string& context_json,
+    const std::vector<SConversationTurn>& history,
+    const std::string& react_context,
+    SIntent preclassified_intent,
+    bool have_preclassified_intent,
+    bool stream,
+    std::string& out_answer,
+    const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
-    out_answer.clear();
-
     const SConfig& config = m_config_manager.config();
     const CAnswerService answer_service(m_config_manager, m_project_manager);
-
-    // Контекст курсора (B2/ADR-20): символ под курсором + якорь иерархии.
-    std::string react_context;
-    if (!cursor_file.empty() && cursor_line > 0)
-    {
-        const std::optional<SClangSymbol> symbol =
-            cursor_symbol(cursor_file, cursor_line, cursor_col);
-        if (symbol.has_value())
-        {
-            react_context = "[cursor symbol: " + format_cursor_hint(*symbol) + "]";
-        }
-        const std::string anchor = hierarchy_anchor(cursor_file, cursor_line, cursor_col);
-        if (!anchor.empty())
-        {
-            if (!react_context.empty())
-            {
-                react_context += "\n";
-            }
-            react_context += "[hierarchy anchor: " + anchor + "]";
-        }
-    }
-
-    SIntent preclassified_intent;
-    bool have_preclassified_intent = false;
-    const EFastPathResult fast_path = try_fast_path(
-        text, react_context, context_json, history, stream, out_answer, on_stream_chunk,
-        answer_service, preclassified_intent, have_preclassified_intent);
-    if (fast_path == EFastPathResult::Answered) return true;
-    if (fast_path == EFastPathResult::Failed) return false;
-
     // Bound the state passed to the Intent/composition models independently from the
     // answer and ReAct budgets. Old turns remain in SQLite and are only omitted here.
     constexpr std::size_t k_intent_context_budget_tokens = 3000;
@@ -530,4 +502,52 @@ bool CAskService::ask(const std::string& text,
     return false;
 }
 
+}
+
+bool CAskService::ask(const std::string& text,
+                      bool stream,
+                      const std::string& cursor_file,
+                      unsigned cursor_line,
+                      unsigned cursor_col,
+                      std::string& out_answer,
+                      const std::string& context_json,
+                      const std::vector<SConversationTurn>& history,
+                      const std::function<bool(const std::string&)>& on_stream_chunk) const
+{
+    out_answer.clear();
+
+    const CAnswerService answer_service(m_config_manager, m_project_manager);
+
+    // Контекст курсора (B2/ADR-20): символ под курсором + якорь иерархии.
+    std::string react_context;
+    if (!cursor_file.empty() && cursor_line > 0)
+    {
+        const std::optional<SClangSymbol> symbol =
+            cursor_symbol(cursor_file, cursor_line, cursor_col);
+        if (symbol.has_value())
+        {
+            react_context = "[cursor symbol: " + format_cursor_hint(*symbol) + "]";
+        }
+        const std::string anchor = hierarchy_anchor(cursor_file, cursor_line, cursor_col);
+        if (!anchor.empty())
+        {
+            if (!react_context.empty())
+            {
+                react_context += "\n";
+            }
+            react_context += "[hierarchy anchor: " + anchor + "]";
+        }
+    }
+
+    SIntent preclassified_intent;
+    bool have_preclassified_intent = false;
+    const EFastPathResult fast_path = try_fast_path(
+        text, react_context, context_json, history, stream, out_answer, on_stream_chunk,
+        answer_service, preclassified_intent, have_preclassified_intent);
+    if (fast_path == EFastPathResult::Answered) return true;
+    if (fast_path == EFastPathResult::Failed) return false;
+
+    return answer_codebase_request(
+        text, cursor_file, cursor_line, cursor_col, context_json, history, react_context,
+        preclassified_intent, have_preclassified_intent, stream, out_answer, on_stream_chunk);
 } // namespace fcpp
