@@ -201,3 +201,26 @@ TEST_CASE("patch validator checks deletion hunks against the original file", "[p
 
     std::filesystem::remove_all(root);
 }
+
+
+TEST_CASE("patch parser rejects inconsistent hunk counts and overflowing ranges", "[patch][parser]")
+{
+    const std::string inconsistent =
+        "--- a/file.cpp\n"
+        "+++ b/file.cpp\n"
+        "@@ -1,3 +1,4 @@\n"
+        "-old\n"
+        "+new\n";
+    fcpp::SPatchSet patch;
+    REQUIRE_FALSE(fcpp::CPatchParser::parse(inconsistent, patch));
+    REQUIRE(patch.m_files.empty());
+
+    const std::string overflow =
+        "--- a/file.cpp\n"
+        "+++ b/file.cpp\n"
+        "@@ -4294967297,1 +1,1 @@\n"
+        "-old\n"
+        "+new\n";
+    REQUIRE_FALSE(fcpp::CPatchParser::parse(overflow, patch));
+    REQUIRE(patch.m_files.empty());
+}

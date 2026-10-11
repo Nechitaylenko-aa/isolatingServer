@@ -5,7 +5,9 @@
 
 #include "core/CPatchParser.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -56,8 +58,18 @@ bool parse_hunk_header(const std::string& line, SPatchHunk& hunk)
         const std::string count_text = (comma == std::string::npos) ? "1" : part.substr(comma + 1);
         try
         {
-            start = static_cast<std::uint32_t>(std::stoul(start_text));
-            count = static_cast<std::uint32_t>(std::stoul(count_text));
+            std::size_t start_consumed = 0;
+            std::size_t count_consumed = 0;
+            const unsigned long parsed_start = std::stoul(start_text, &start_consumed);
+            const unsigned long parsed_count = std::stoul(count_text, &count_consumed);
+            if (start_consumed != start_text.size() || count_consumed != count_text.size()
+                    || parsed_start > std::numeric_limits<std::uint32_t>::max()
+                    || parsed_count > std::numeric_limits<std::uint32_t>::max())
+            {
+                return false;
+            }
+            start = static_cast<std::uint32_t>(parsed_start);
+            count = static_cast<std::uint32_t>(parsed_count);
         }
         catch (const std::exception&)
         {
@@ -222,6 +234,25 @@ bool CPatchParser::parse(const std::string& text, SPatchSet& out_set)
     }
 
     flush_file();
+
+    for (const SFilePatch& file_patch : out_set.m_files)
+    {
+        for (const SPatchHunk& hunk : file_patch.m_hunks)
+        {
+            std::uint64_t old_lines = 0;
+            std::uint64_t new_lines = 0;
+            for (const SPatchLine& patch_line : hunk.m_lines)
+            {
+                if (patch_line.m_type != '+') ++old_lines;
+                if (patch_line.m_type != '-') ++new_lines;
+            }
+            if (old_lines != hunk.m_old_count || new_lines != hunk.m_new_count)
+            {
+                out_set = SPatchSet{};
+                return false;
+            }
+        }
+    }
     return !out_set.m_files.empty();
 }
 
