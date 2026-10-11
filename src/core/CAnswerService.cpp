@@ -56,12 +56,23 @@ SAnswerQualityAssessment assess_answer_quality_with_levels(
                   << " reviewer=none independent=no reason=" << assessment.m_reason << '\n';
         return assessment;
     }
-    const bool independent_reviewer = candidate_index + 1 < levels.size();
-    const EModelLevel reviewer_level = independent_reviewer ? levels[candidate_index + 1] : candidate_level;
+    if (!has_higher_review_level(levels, candidate_level))
+    {
+        assessment.m_reason = "no independent higher-level reviewer available";
+        std::cerr << "fcpp-agent: ANSWER_TEMPERATURE risk=100 verdict=ESCALATE"
+                  << " candidate=" << model_level_name(candidate_level)
+                  << " reviewer=none independent=no reason=" << assessment.m_reason << '\n';
+        return assessment;
+    }
+    const EModelLevel reviewer_level = levels[candidate_index + 1];
     std::unique_ptr<IModelApi> reviewer = CModelFactory::create(config, model_role_for_level(reviewer_level));
     if (reviewer == nullptr || !reviewer->is_available())
     {
         assessment.m_reason = "reviewer unavailable";
+        std::cerr << "fcpp-agent: ANSWER_TEMPERATURE risk=100 verdict=ESCALATE"
+                  << " candidate=" << model_level_name(candidate_level)
+                  << " reviewer=" << model_level_name(reviewer_level)
+                  << " independent=yes reason=" << assessment.m_reason << '\n';
         return assessment;
     }
     const char* reviewer_prompt =

@@ -270,3 +270,16 @@ TEST_CASE("model levels: remote provider type participates in endpoint identity"
     REQUIRE(levels[0] == fcpp::EModelLevel::Lite);
     REQUIRE(levels[1] == fcpp::EModelLevel::Remote);
 }
+
+TEST_CASE("model levels: final candidate cannot pass review without a higher-level reviewer", "[model][levels][quality]")
+{
+    const std::vector<fcpp::EModelLevel> one_level = {fcpp::EModelLevel::Lite};
+    REQUIRE_FALSE(fcpp::has_higher_review_level(one_level, fcpp::EModelLevel::Lite));
+
+    const std::vector<fcpp::EModelLevel> two_levels = {
+        fcpp::EModelLevel::Lite, fcpp::EModelLevel::Main
+    };
+    REQUIRE(fcpp::has_higher_review_level(two_levels, fcpp::EModelLevel::Lite));
+    REQUIRE_FALSE(fcpp::has_higher_review_level(two_levels, fcpp::EModelLevel::Main));
+    REQUIRE_FALSE(fcpp::has_higher_review_level({}, fcpp::EModelLevel::Main));
+}

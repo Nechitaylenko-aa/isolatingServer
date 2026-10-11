@@ -22,6 +22,9 @@ EModelRoleKind model_role_for_level(EModelLevel level);
 /** Return an identity for the effective endpoint after CModelFactory inheritance rules. */
 std::string model_endpoint_signature(const SConfig& config, EModelLevel level);
 
+/** Whether a candidate has a distinct, higher-priority reviewer after it in the cascade. */
+bool has_higher_review_level(const std::vector<EModelLevel>& levels, EModelLevel candidate_level);
+
 /** Return available, distinct endpoints in deterministic Lite -> Main -> Remote order. */
 std::vector<EModelLevel> available_model_levels(const SConfig& config);
 

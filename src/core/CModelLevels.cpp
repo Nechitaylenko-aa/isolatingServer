@@ -60,6 +60,18 @@ std::string model_endpoint_signature(const SConfig& config, EModelLevel level)
     return url + "|" + name + "|" + provider;
 }
 
+bool has_higher_review_level(const std::vector<EModelLevel>& levels, EModelLevel candidate_level)
+{
+    for (std::size_t i = 0; i + 1 < levels.size(); ++i)
+    {
+        if (levels[i] == candidate_level)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<EModelLevel> available_model_levels(const SConfig& config)
 {
     const EModelLevel candidates[] = {
