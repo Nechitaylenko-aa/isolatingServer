@@ -184,6 +184,39 @@ TEST_CASE("answer quality: high risk escalates even when verdict says accept", "
     REQUIRE(assessment.m_escalate);
 }
 
+TEST_CASE("answer quality: accepts only one strict JSON object", "[model][quality]")
+{
+    fcpp::SAnswerQualityAssessment assessment;
+    const std::string valid =
+        R"({"verdict":"ACCEPT","risk_score":12,"reason":"supported"})";
+
+    REQUIRE(fcpp::parse_answer_quality(" \n" + valid + " \t", assessment));
+    REQUIRE_FALSE(fcpp::parse_answer_quality("review: " + valid, assessment));
+    REQUIRE_FALSE(fcpp::parse_answer_quality(valid + " trailing text", assessment));
+    REQUIRE_FALSE(fcpp::parse_answer_quality(valid + " " + valid, assessment));
+    REQUIRE_FALSE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":12,"reason":"supported","extra":true})",
+        assessment));
+    REQUIRE_FALSE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":12,"reason":"   "})", assessment));
+}
+
+TEST_CASE("answer quality: threshold boundary and explicit escalation are deterministic", "[model][quality]")
+{
+    fcpp::SAnswerQualityAssessment assessment;
+    REQUIRE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":34,"reason":"below threshold"})", assessment));
+    REQUIRE_FALSE(assessment.m_escalate);
+
+    REQUIRE(fcpp::parse_answer_quality(
+        R"({"verdict":"ACCEPT","risk_score":35,"reason":"at threshold"})", assessment));
+    REQUIRE(assessment.m_escalate);
+
+    REQUIRE(fcpp::parse_answer_quality(
+        R"({"verdict":"ESCALATE","risk_score":0,"reason":"explicit escalation"})", assessment));
+    REQUIRE(assessment.m_escalate);
+}
+
 TEST_CASE("answer quality: malformed assessment is rejected", "[model][quality]")
 {
     fcpp::SAnswerQualityAssessment assessment;

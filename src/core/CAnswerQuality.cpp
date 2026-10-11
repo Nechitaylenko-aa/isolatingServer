@@ -15,17 +15,13 @@ namespace fcpp
 
 bool parse_answer_quality(const std::string& text, SAnswerQualityAssessment& out)
 {
-    const std::size_t start = text.find('{');
-    const std::size_t end = text.rfind('}');
-    if (start == std::string::npos || end == std::string::npos || end < start)
-    {
-        return false;
-    }
-
+    out = SAnswerQualityAssessment{};
     try
     {
-        const nlohmann::json document = nlohmann::json::parse(text.substr(start, end - start + 1));
-        if (!document.is_object()
+        // The reviewer contract is strict JSON, not a JSON fragment embedded in prose.
+        // Any wrapper text or second object is a failed review and must fail closed.
+        const nlohmann::json document = nlohmann::json::parse(text);
+        if (!document.is_object() || document.size() != 3
                 || !document.contains("risk_score")
                 || !document["risk_score"].is_number_integer()
                 || !document.contains("verdict") || !document["verdict"].is_string()
@@ -44,12 +40,17 @@ bool parse_answer_quality(const std::string& text, SAnswerQualityAssessment& out
         {
             return false;
         }
+        const std::string reason = document["reason"].get<std::string>();
+        if (reason.find_first_not_of(" \t\r\n") == std::string::npos)
+        {
+            return false;
+        }
 
         SAnswerQualityAssessment assessment;
         assessment.m_valid = true;
         assessment.m_risk_score = static_cast<std::uint32_t>(risk);
         assessment.m_escalate = verdict != "ACCEPT" || risk >= 35;
-        assessment.m_reason = document["reason"].get<std::string>();
+        assessment.m_reason = reason;
         out = std::move(assessment);
         return true;
     }
@@ -58,5 +59,4 @@ bool parse_answer_quality(const std::string& text, SAnswerQualityAssessment& out
         return false;
     }
 }
-
 } // namespace fcpp
