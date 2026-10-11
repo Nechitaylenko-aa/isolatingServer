@@ -210,6 +210,12 @@ bool CCompileCommandsParser::parse(const std::filesystem::path& json_path,
         {
             return false;
         }
+        // A syntactically present but empty command/arguments entry cannot describe
+        // a compilation action and must not be accepted as a valid database row.
+        if (command.m_arguments.empty())
+        {
+            return false;
+        }
         if (entry.contains(k_key_language) && entry[k_key_language].is_string())
         {
             command.m_language = entry[k_key_language].get<std::string>();
