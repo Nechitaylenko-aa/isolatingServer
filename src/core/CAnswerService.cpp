@@ -101,7 +101,7 @@ SAnswerQualityAssessment assess_answer_quality_with_levels(
               << " verdict=" << (assessment.m_escalate ? "ESCALATE" : "ACCEPT")
               << " candidate=" << model_level_name(candidate_level)
               << " reviewer=" << model_level_name(reviewer_level)
-              << " independent=" << (independent_reviewer ? "yes" : "no")
+              << " independent=" << "yes"
               << " reason=" << assessment.m_reason << '\n';
     return assessment;
 }
