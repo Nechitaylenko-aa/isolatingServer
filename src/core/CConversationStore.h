@@ -178,6 +178,13 @@ public:
                                            std::int64_t after_event_id = 0,
                                            std::size_t limit = 1000) const;
 
+    /**
+     * @brief Обрезать диалог до вопроса включительно.
+     *
+     * Заглушка: пока всегда возвращает false и не изменяет хранилище.
+     */
+    bool shrink_question(const std::string& session_id, std::uint16_t question_id);
+
 private:
     sqlite3* m_db = nullptr;
 };

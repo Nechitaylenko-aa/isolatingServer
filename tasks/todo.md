@@ -85,6 +85,12 @@ CTest: число тестов отслеживается в последнем 
 
 ---
 
+## Conversation domain model and plugin protocol
+* [x] Add public DTOs for structured questions and options; expose them in JSON protocol.
+* [x] Add `question.shrink` API contract with a no-op implementation (`false`, no mutation).
+* [ ] Complete question/answer lifecycle and wire structured clarification production to all ambiguity paths.
+* [ ] Implement `shrink_question` truncation after the chat vector becomes the authoritative dialogue representation.
+
 ## Осталось (не блокирует текущий функционал)
 * [ ] **7b** — полный цикл изменения: LLM генерирует патч → конвейер 7a (+ каскад ADR-10, hard-stop).
 * [x] **6c (каскад)** — детерминированный `CModelCascade` (триггеры `EGlitchKind`, бюджет 1 ретрай/уровень, передача ошибки наверх, hard-stop); `CEscalatingIntentAnalyzer` (lite→main→remote) подключён в `ask`. Тест `cascade_test`; CTest 43/43.

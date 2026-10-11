@@ -46,6 +46,11 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::Ask;
         return true;
     }
+    if (name == "question.shrink")
+    {
+        out = EApiMethod::QuestionShrink;
+        return true;
+    }
     if (name == "session.open")
     {
         out = EApiMethod::SessionOpen;
@@ -203,6 +208,30 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_text = params["text"].get<std::string>();
     }
+    if (params.contains("answer") && params["answer"].is_object())
+    {
+        const nlohmann::json& answer = params["answer"];
+        if (answer.contains("question_id") && answer["question_id"].is_number_unsigned())
+        {
+            const std::uint32_t question_id = answer["question_id"].get<std::uint32_t>();
+            if (question_id <= UINT16_MAX)
+            {
+                out_request.m_answer_question_id = static_cast<std::uint16_t>(question_id);
+            }
+        }
+        if (answer.contains("option") && answer["option"].is_string())
+        {
+            out_request.m_selected_option = answer["option"].get<std::string>();
+        }
+    }
+    if (params.contains("question_id") && params["question_id"].is_number_unsigned())
+    {
+        const std::uint32_t question_id = params["question_id"].get<std::uint32_t>();
+        if (question_id <= UINT16_MAX)
+        {
+            out_request.m_question_id = static_cast<std::uint16_t>(question_id);
+        }
+    }
     if (params.contains("profile") && params["profile"].is_string())
     {
         out_request.m_profile_text = params["profile"].get<std::string>();
@@ -303,6 +332,26 @@ std::string CProtocolServer::serialize_response(const std::string& id,
             result["text"] = response.m_text;
             // Для ask текст ответа дублируем в answer.text (стабильный контракт UI).
             result["answer"] = { {"text", response.m_text} };
+        }
+        if (response.m_has_question)
+        {
+            nlohmann::json question;
+            question["wait_for_user"] = response.m_question.m_wait_for_user;
+            question["questions"] = nlohmann::json::array();
+            for (const SQuestion& item : response.m_question.m_questions)
+            {
+                question["questions"].push_back({
+                    {"id", item.m_id},
+                    {"text", item.m_text},
+                    {"options", item.m_options},
+                    {"and", item.m_and}
+                });
+            }
+            result["question"] = question;
+        }
+        if (response.m_has_shrink_result)
+        {
+            result["shrunk"] = response.m_shrink_result;
         }
         if (!response.m_names.empty())
         {

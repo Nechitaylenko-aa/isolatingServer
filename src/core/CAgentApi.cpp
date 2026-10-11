@@ -5,6 +5,7 @@
 
 #include "core/CAgentApi.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -55,7 +56,8 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "session.open",
     "session.close",
     "session.update_context",
-    "project.profile.set"
+    "project.profile.set",
+    "question.shrink"
 };
 
 /**
@@ -83,6 +85,155 @@ SApiResponse make_error(EErrorKind kind, const std::string& message)
     response.m_error = kind;
     response.m_message = message;
     return response;
+}
+
+
+/** Parse the current deterministic clarification format into a public question DTO. */
+SChatQuestion make_chat_question(const std::string& text, std::uint16_t question_id)
+{
+    SChatQuestion result;
+    SQuestion question;
+    question.m_id = question_id;
+
+    std::size_t line_start = 0;
+    bool first_line = true;
+    while (line_start <= text.size())
+    {
+        const std::size_t line_end = text.find('\n', line_start);
+        std::string line = text.substr(
+            line_start, line_end == std::string::npos ? std::string::npos : line_end - line_start);
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
+        {
+            line.pop_back();
+        }
+        const std::size_t first = line.find_first_not_of(" \t");
+        if (first != std::string::npos)
+        {
+            line.erase(0, first);
+            if (first_line)
+            {
+                question.m_text = line;
+                first_line = false;
+            }
+            else if (line.rfind("- ", 0) == 0)
+            {
+                question.m_options.push_back(line.substr(2));
+            }
+            else
+            {
+                question.m_text += "\n" + line;
+            }
+        }
+        if (line_end == std::string::npos)
+        {
+            break;
+        }
+        line_start = line_end + 1;
+    }
+
+    if (question.m_text.empty())
+    {
+        question.m_text = text;
+    }
+    result.m_questions.push_back(std::move(question));
+    result.m_wait_for_user = true;
+    return result;
+}
+
+nlohmann::json chat_question_json(const SChatQuestion& question)
+{
+    nlohmann::json result = {
+        {"wait_for_user", question.m_wait_for_user},
+        {"questions", nlohmann::json::array()}
+    };
+    for (const SQuestion& item : question.m_questions)
+    {
+        result["questions"].push_back({
+            {"id", item.m_id},
+            {"text", item.m_text},
+            {"options", item.m_options},
+            {"and", item.m_and}
+        });
+    }
+    return result;
+}
+
+std::uint16_t next_question_id(const std::vector<SConversationEvent>& events)
+{
+    std::uint32_t maximum = 0;
+    for (const SConversationEvent& event : events)
+    {
+        if (event.m_kind != "assistant")
+        {
+            continue;
+        }
+        try
+        {
+            const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
+            if (!payload.contains("question") || !payload["question"].is_object()
+                || !payload["question"].contains("questions")
+                || !payload["question"]["questions"].is_array())
+            {
+                continue;
+            }
+            for (const nlohmann::json& item : payload["question"]["questions"])
+            {
+                if (item.is_object() && item.contains("id") && item["id"].is_number_unsigned())
+                {
+                    maximum = std::max(maximum, item["id"].get<std::uint32_t>());
+                }
+            }
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            continue;
+        }
+    }
+    return maximum >= UINT16_MAX ? 0 : static_cast<std::uint16_t>(maximum + 1);
+}
+
+bool question_has_option(const std::vector<SConversationEvent>& events,
+                         std::uint16_t question_id,
+                         const std::string& option)
+{
+    for (auto event = events.rbegin(); event != events.rend(); ++event)
+    {
+        if (event->m_kind != "assistant")
+        {
+            continue;
+        }
+        try
+        {
+            const nlohmann::json payload = nlohmann::json::parse(event->m_payload);
+            if (!payload.contains("question") || !payload["question"].is_object()
+                || !payload["question"].contains("questions")
+                || !payload["question"]["questions"].is_array())
+            {
+                continue;
+            }
+            for (const nlohmann::json& item : payload["question"]["questions"])
+            {
+                if (!item.is_object() || !item.contains("id") || !item["id"].is_number_unsigned()
+                    || item["id"].get<std::uint32_t>() != question_id
+                    || !item.contains("options") || !item["options"].is_array())
+                {
+                    continue;
+                }
+                for (const nlohmann::json& candidate : item["options"])
+                {
+                    if (candidate.is_string() && candidate.get<std::string>() == option)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            continue;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -327,6 +478,22 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             response.m_session_id = request.m_session_id;
             return response;
         }
+        case EApiMethod::QuestionShrink:
+        {
+            if (request.m_session_id.empty() || request.m_question_id == 0)
+            {
+                return make_error(EErrorKind::InvalidRequest,
+                                  "session_id and non-zero question_id are required");
+            }
+            response.m_ok = true;
+            response.m_state = "COMPLETED";
+            response.m_has_shrink_result = true;
+            response.m_shrink_result = m_conversation_store.shrink_question(
+                request.m_session_id, request.m_question_id);
+            response.m_message = response.m_shrink_result
+                ? "conversation truncated" : "conversation unchanged";
+            return response;
+        }
         case EApiMethod::ProjectProfileSet:
         {
             if (!m_project_manager.has_current())
@@ -378,10 +545,17 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
 
 SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 {
-    if (request.m_text.empty())
+    const bool answering_choice = !request.m_selected_option.empty();
+    if ((!answering_choice && request.m_text.empty())
+        || (answering_choice && (request.m_session_id.empty() || request.m_answer_question_id == 0)))
     {
-        return make_error(EErrorKind::InvalidRequest, "empty ask text");
+        return make_error(EErrorKind::InvalidRequest,
+                          answering_choice
+                              ? "session_id and answer.question_id are required for a choice"
+                              : "empty ask text");
     }
+
+    const std::string effective_text = answering_choice ? request.m_selected_option : request.m_text;
 
     if (!m_project_manager.has_current())
     {
@@ -390,6 +564,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 
     std::string session_context_json = "{}";
     std::vector<SConversationTurn> conversation_history;
+    std::vector<SConversationEvent> stored_events;
     if (!request.m_session_id.empty())
     {
         const auto session = m_conversation_store.get_session(request.m_session_id);
@@ -404,7 +579,6 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
 
         session_context_json = session->m_context_json;
-        std::vector<SConversationEvent> stored_events;
         std::int64_t after_event_id = 0;
         constexpr std::size_t k_event_page_size = 1000;
         while (true)
@@ -422,25 +596,36 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
                 break;
             }
         }
-        conversation_history = reconstruct_conversation_turns(stored_events);
 
+        if (answering_choice
+            && !question_has_option(stored_events, request.m_answer_question_id, request.m_selected_option))
+        {
+            return make_error(EErrorKind::InvalidRequest,
+                              "question_id or selected option does not match conversation history");
+        }
+
+        conversation_history = reconstruct_conversation_turns(stored_events);
         nlohmann::json user_event = {
-            {"text", request.m_text},
+            {"text", effective_text},
             {"editor_file", request.m_editor_file},
             {"editor_line", request.m_editor_line},
             {"editor_column", request.m_editor_column}
         };
+        if (answering_choice)
+        {
+            user_event["answer_question_id"] = request.m_answer_question_id;
+            user_event["selected_option"] = request.m_selected_option;
+        }
         if (!m_conversation_store.append_event(request.m_session_id, "user", user_event.dump()))
         {
             return make_error(EErrorKind::IoError, "cannot persist user message");
         }
     }
 
-    // Session state remains separate from the project index and build context.
     CAskService service(m_config_manager, m_project_manager);
     SApiResponse response;
     std::string answer;
-    response.m_ok = service.ask(request.m_text,
+    response.m_ok = service.ask(effective_text,
                                 request.m_stream,
                                 request.m_editor_file,
                                 request.m_editor_line,
@@ -449,26 +634,46 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
                                 session_context_json,
                                 conversation_history,
                                 request.m_on_stream_chunk);
+
+    const bool clarification = !response.m_ok
+        && answer.rfind("Уточните, что имеется в виду:", 0) == 0;
+    if (clarification)
+    {
+        const std::uint16_t question_id = request.m_session_id.empty()
+            ? 1 : next_question_id(stored_events);
+        if (question_id == 0)
+        {
+            return make_error(EErrorKind::IoError, "question ID space exhausted");
+        }
+        response.m_ok = true;
+        response.m_state = "CLARIFY";
+        response.m_has_question = true;
+        response.m_question = make_chat_question(answer, question_id);
+    }
+
     if (!request.m_session_id.empty())
     {
         nlohmann::json assistant_event = {
             {"text", answer},
             {"ok", response.m_ok}
         };
+        if (response.m_has_question)
+        {
+            assistant_event["question"] = chat_question_json(response.m_question);
+        }
         if (!m_conversation_store.append_event(request.m_session_id, "assistant", assistant_event.dump()))
         {
             return make_error(EErrorKind::IoError, "answer produced but could not persist conversation event");
         }
         response.m_session_id = request.m_session_id;
     }
-    if (response.m_ok)
+    if (response.m_ok && !response.m_has_question)
     {
         response.m_state = "COMPLETED";
         response.m_text = answer;
     }
-    else if (!answer.empty())
+    else if (!response.m_ok && !answer.empty())
     {
-        // Уточняющий вопрос (§22): ответ несёт вопрос со списком вариантов.
         response.m_error = EErrorKind::Ambiguous;
         response.m_message = answer;
     }

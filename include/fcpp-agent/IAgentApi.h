@@ -47,7 +47,34 @@ enum class EApiMethod
     SessionClose,    ///< Закрыть conversation session.
     SessionUpdateContext, ///< Обновить структурированный контекст сессии.
     ProjectProfileSet, ///< Установить паспорт текущего проекта.
+    QuestionShrink,    ///< Обрезать диалог до указанного вопроса (пока заглушка).
     Count            ///< Маркер количества.
+};
+
+/**
+ * @brief Один вопрос, отображаемый пользователю.
+ *
+ * options пуст — свободный текстовый ответ; иначе пользователь выбирает один
+ * из перечисленных вариантов. m_and зарезервирован для будущей группировки.
+ */
+struct SQuestion
+{
+    std::uint16_t m_id = 0;
+    std::string m_text;
+    std::vector<std::string> m_options;
+    bool m_and = false;
+};
+
+/**
+ * @brief Структурированный запрос агента к пользователю.
+ *
+ * Текущая версия выдаёт один вопрос за раз. Вектор оставлен в модели для
+ * расширения до группы вопросов без смены API-формата.
+ */
+struct SChatQuestion
+{
+    std::vector<SQuestion> m_questions;
+    bool m_wait_for_user = true;
 };
 
 /**
@@ -67,6 +94,9 @@ struct SApiRequest
 
     // Тело запроса Ask (§94): только текст и опциональный редакторский контекст.
     std::string m_text;               ///< Текст запроса.
+    std::uint16_t m_answer_question_id = 0; ///< ID вопроса, на который отвечает пользователь.
+    std::string m_selected_option;     ///< Выбранный вариант ответа.
+    std::uint16_t m_question_id = 0;   ///< Вопрос для question.shrink.
     std::string m_session_id;         ///< Идентификатор диалога (опционален для ask).
     std::string m_context_json;       ///< Контекст для session.update_context (JSON).
     std::string m_profile_text;       ///< Текст паспорта для project.profile.set.
@@ -89,6 +119,10 @@ struct SApiResponse
     std::string m_project_id;              ///< Идентификатор проекта.
     std::string m_session_id;              ///< Идентификатор conversation session.
     std::string m_text;                    ///< Текстовый вывод (source/сообщение).
+    bool m_has_question = false;           ///< Есть структурированный вопрос для пользователя.
+    SChatQuestion m_question;              ///< Вопрос и варианты выбора.
+    bool m_has_shrink_result = false;      ///< Ответ содержит результат shrink_question.
+    bool m_shrink_result = false;          ///< false означает, что чат не изменён.
     SIndexStatus m_index_status;           ///< Состояние индекса.
     std::vector<SSymbol> m_symbols;        ///< Сущности (для Tool).
     std::vector<std::string> m_names;      ///< Имена (списки).

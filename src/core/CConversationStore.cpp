@@ -522,4 +522,12 @@ std::vector<SConversationEvent> CConversationStore::events(
     return result;
 }
 
+bool CConversationStore::shrink_question(const std::string& session_id, std::uint16_t question_id)
+{
+    // TODO: implement after the chat-item model becomes the authoritative dialogue representation.
+    (void)session_id;
+    (void)question_id;
+    return false;
+}
+
 } // namespace fcpp

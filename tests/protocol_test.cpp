@@ -34,6 +34,49 @@ TEST_CASE("protocol maps conversation session methods and context payloads", "[p
     REQUIRE(request.m_session_id == "s-1");
 }
 
+TEST_CASE("protocol parses structured answer and question shrink requests", "[protocol][chat]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"answer-1","method":"ask","params":{"session_id":"s-1","answer":{"question_id":42,"option":"GCC"}}})",
+        request, id, error));
+    REQUIRE(request.m_method == fcpp::EApiMethod::Ask);
+    REQUIRE(request.m_session_id == "s-1");
+    REQUIRE(request.m_answer_question_id == 42);
+    REQUIRE(request.m_selected_option == "GCC");
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"shrink-1","method":"question.shrink","params":{"session_id":"s-1","question_id":42}})",
+        request, id, error));
+    REQUIRE(request.m_method == fcpp::EApiMethod::QuestionShrink);
+    REQUIRE(request.m_session_id == "s-1");
+    REQUIRE(request.m_question_id == 42);
+}
+
+TEST_CASE("protocol serializes structured clarification questions", "[protocol][chat]")
+{
+    fcpp::SApiResponse response;
+    response.m_ok = true;
+    response.m_state = "CLARIFY";
+    response.m_session_id = "s-1";
+    response.m_has_question = true;
+    fcpp::SQuestion question;
+    question.m_id = 42;
+    question.m_text = "Choose a compiler";
+    question.m_options = {"GCC", "Clang"};
+    response.m_question.m_questions.push_back(question);
+
+    const nlohmann::json document = nlohmann::json::parse(
+        fcpp::CProtocolServer::serialize_response("q-1", response));
+    REQUIRE(document["result"]["state"] == "CLARIFY");
+    REQUIRE(document["result"]["question"]["wait_for_user"] == true);
+    REQUIRE(document["result"]["question"]["questions"][0]["id"] == 42);
+    REQUIRE(document["result"]["question"]["questions"][0]["options"][1] == "Clang");
+}
+
 TEST_CASE("protocol rejects non-string method instead of throwing", "[protocol]")
 {
     fcpp::SApiRequest request;
