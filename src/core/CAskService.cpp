@@ -112,11 +112,6 @@ std::optional<SClangSymbol> CAskService::cursor_symbol(const std::string& file,
     }
 
     // Fallback: libclang по позиции (файл вне индекса / нет сущности в диапазоне).
-    if (clang == nullptr)
-    {
-        return std::nullopt;
-    }
-
     // Аргументы компиляции — без них clang не строит корректный AST на реальных
     // проектах (нужны -I/-std), и символ под курсором не находится.
     std::vector<std::string> arguments;
