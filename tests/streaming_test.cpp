@@ -417,6 +417,11 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
     std::string config_text = read_file(config.config_path());
     replace_config_value(config_text, "model_main", server.base_url());
     replace_config_value(config_text, "model_main_name", "integration-model");
+    // Disable the example remote endpoint from agent.conf: these tests must
+    // exercise the configured mock endpoint, not attempt a real cloud review.
+    replace_config_value(config_text, "model_remote_url", "");
+    replace_config_value(config_text, "model_remote_name", "");
+    replace_config_value(config_text, "model_remote_key", "");
     replace_config_value(config_text, "react_loop", "YES");
     // Keep the rejected-answer test deterministic: fallback must not consume
     // additional mock replies through the subtask-composition model.
