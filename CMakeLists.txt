@@ -133,6 +133,8 @@ add_library(fcpp_core STATIC
     src/core/CConversationStore.cpp
     src/core/CContextManager.cpp
     src/core/CChatContextSource.cpp
+    src/core/CProjectProfileContextSource.cpp
+    src/core/CCodeContextSource.cpp
     src/core/SIntent.cpp
     src/core/SSubtasks.cpp
     src/core/SRequestOutcome.cpp
@@ -201,6 +203,7 @@ add_executable(fcpp_tests
     tests/conversation_store_test.cpp
     tests/context_manager_test.cpp
     tests/chat_context_source_test.cpp
+    tests/context_sources_test.cpp
     tests/pipeline_test.cpp
     tests/model_test.cpp
     tests/project_profile_test.cpp
