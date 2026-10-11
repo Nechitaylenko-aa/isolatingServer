@@ -485,7 +485,7 @@ TEST_CASE("answer review integration: accepted answer is buffered and emitted as
     const SApiStreamResult result = run_api_stream({
         {openai_completion("Hello world"), "application/json", 0},
         {reviewer_completion("ACCEPT", 10, "answer is concise and relevant"), "application/json", 0}
-    });
+    }, false, true, true);
 
     REQUIRE(result.m_ok);
     REQUIRE(result.m_answer == "Hello world");
@@ -509,7 +509,7 @@ TEST_CASE("answer review integration: caller cancellation occurs only after revi
     const SApiStreamResult result = run_api_stream({
         {openai_completion("stop-here"), "application/json", 0},
         {reviewer_completion("ACCEPT", 5, "candidate is acceptable"), "application/json", 0}
-    }, true);
+    }, true, true, true);
 
     REQUIRE_FALSE(result.m_ok);
     REQUIRE(result.m_chunks.size() == 1);
@@ -524,7 +524,7 @@ TEST_CASE("answer review integration: rejected candidate is never streamed to th
     const SApiStreamResult result = run_api_stream({
         {openai_completion("unverified candidate must not leak"), "application/json", 0},
         {reviewer_completion("ESCALATE", 92, "unsupported claims"), "application/json", 0}
-    });
+    }, false, true, true);
 
     REQUIRE_FALSE(result.m_ok);
     REQUIRE(result.m_chunks.empty());
