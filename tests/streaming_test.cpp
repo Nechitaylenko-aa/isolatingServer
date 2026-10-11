@@ -333,14 +333,33 @@ std::string join_chunks(const std::vector<std::string>& chunks)
     return joined;
 }
 
-const std::string k_initial_json =
-    R"({"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"draft answer not for display"}}]})";
+const std::string k_intent_content =
+    "<intent>\\n"
+    "<scope>CODEBASE</scope>\\n"
+    "<area>UNDERSTAND</area>\\n"
+    "<relation>SELF</relation>\\n"
+    "<projection>EXPLANATION</projection>\\n"
+    "<subject kind=\\"SYMBOL\\" name=\\"\\"/>\\n"
+    "</intent>";
 
-std::string sse_body(const std::string& first, const std::string& second)
+std::string openai_completion(const std::string& content)
 {
-    return "data: {\"choices\":[{\"delta\":{\"content\":\"" + first + "\"}}]}\n\n"
-           "data: {\"choices\":[{\"delta\":{\"content\":\"" + second + "\"}}]}\n\n"
-           "data: [DONE]\n\n";
+    return nlohmann::json{
+        {"choices", nlohmann::json::array({
+            {{"finish_reason", "stop"},
+             {"message", {{"role", "assistant"}, {"content", content}}}}
+        })}
+    }.dump();
+}
+
+std::string reviewer_completion(const std::string& verdict,
+                                int risk_score,
+                                const std::string& reason)
+{
+    const nlohmann::json assessment = {
+        {"verdict", verdict}, {"risk_score", risk_score}, {"reason", reason}
+    };
+    return openai_completion(assessment.dump());
 }
 
 struct SApiStreamResult
@@ -379,7 +398,17 @@ private:
 SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
                                 bool cancel_on_first_chunk = false)
 {
-    CMockOpenAIServer server(responses);
+    const nlohmann::json intent_response = {
+        {"choices", nlohmann::json::array({
+            {{"finish_reason", "stop"},
+             {"message", {{"role", "assistant"}, {"content", k_intent_content}}}}
+        })}
+    };
+    std::vector<SMockHttpResponse> all_responses = {
+        {intent_response.dump(), "application/json", 0}
+    };
+    all_responses.insert(all_responses.end(), responses.begin(), responses.end());
+    CMockOpenAIServer server(std::move(all_responses));
     CTempDir home("fcpp-stream-home");
     CHomeScope home_scope(home.path());
 
@@ -422,62 +451,58 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
 
 } // namespace
 
-TEST_CASE("streaming integration: Agent API forwards live SSE chunks without leaking draft text",
+TEST_CASE("answer review integration: accepted answer is buffered and emitted as one verified chunk",
           "[stream][integration]")
 {
     const SApiStreamResult result = run_api_stream({
-        {k_initial_json, "application/json", 0},
-        {sse_body("Hello ", "world"), "text/event-stream", 0}
+        {openai_completion("Hello world"), "application/json", 0},
+        {reviewer_completion("ACCEPT", 10, "answer is concise and relevant"), "application/json", 0}
     });
 
     REQUIRE(result.m_ok);
     REQUIRE(result.m_answer == "Hello world");
     REQUIRE(join_chunks(result.m_chunks) == result.m_answer);
-    REQUIRE(result.m_chunks.size() == 2);
-    REQUIRE(join_chunks(result.m_chunks).find("draft answer") == std::string::npos);
-    REQUIRE(result.m_requests.size() == 2);
+    REQUIRE(result.m_chunks.size() == 1);
+    REQUIRE(result.m_requests.size() == 3);
 
-    const nlohmann::json first = nlohmann::json::parse(request_body(result.m_requests[0]));
-    const nlohmann::json second = nlohmann::json::parse(request_body(result.m_requests[1]));
-    REQUIRE_FALSE(first["stream"].get<bool>());
-    REQUIRE(first.contains("tools"));
-    REQUIRE(second["stream"].get<bool>());
-    REQUIRE_FALSE(second.contains("tools"));
+    const nlohmann::json intent = nlohmann::json::parse(request_body(result.m_requests[0]));
+    const nlohmann::json candidate = nlohmann::json::parse(request_body(result.m_requests[1]));
+    const nlohmann::json reviewer = nlohmann::json::parse(request_body(result.m_requests[2]));
+    REQUIRE_FALSE(intent["stream"].get<bool>());
+    REQUIRE_FALSE(candidate["stream"].get<bool>());
+    REQUIRE(candidate.contains("tools"));
+    REQUIRE_FALSE(reviewer["stream"].get<bool>());
+    REQUIRE_FALSE(reviewer.contains("tools"));
 }
 
-TEST_CASE("streaming integration: cancellation stops the request and does not trigger fallback",
+TEST_CASE("answer review integration: caller cancellation occurs only after review",
           "[stream][integration]")
 {
     const SApiStreamResult result = run_api_stream({
-        {k_initial_json, "application/json", 0},
-        {sse_body("stop-here", "must-not-be-delivered"), "text/event-stream", 0}
+        {openai_completion("stop-here"), "application/json", 0},
+        {reviewer_completion("ACCEPT", 5, "candidate is acceptable"), "application/json", 0}
     }, true);
 
     REQUIRE_FALSE(result.m_ok);
     REQUIRE(result.m_chunks.size() == 1);
     REQUIRE(result.m_chunks[0] == "stop-here");
-    REQUIRE(result.m_requests.size() == 2);
-    REQUIRE(result.m_diagnostics.find("cancelled by caller") != std::string::npos);
-    REQUIRE(result.m_diagnostics.find("streamed final answer failed") == std::string::npos);
+    REQUIRE(result.m_requests.size() == 3);
+    REQUIRE(result.m_diagnostics.find("ANSWER_TEMPERATURE") != std::string::npos);
 }
 
-TEST_CASE("streaming integration: provider failure after first chunk never mixes a fallback answer",
+TEST_CASE("answer review integration: rejected candidate is never streamed to the caller",
           "[stream][integration]")
 {
-    const std::string partial =
-        "data: {\"choices\":[{\"delta\":{\"content\":\"partial answer\"}}]}\n\n";
     const SApiStreamResult result = run_api_stream({
-        {k_initial_json, "application/json", 0},
-        {partial, "text/event-stream", 64}
+        {openai_completion("unverified candidate must not leak"), "application/json", 0},
+        {reviewer_completion("ESCALATE", 92, "unsupported claims"), "application/json", 0}
     });
 
     REQUIRE_FALSE(result.m_ok);
-    REQUIRE(result.m_chunks.size() == 1);
-    REQUIRE(result.m_chunks[0] == "partial answer");
-    REQUIRE(join_chunks(result.m_chunks).find("draft answer") == std::string::npos);
-    REQUIRE(result.m_requests.size() == 2);
-    REQUIRE(result.m_diagnostics.find("Transferred a partial file") != std::string::npos);
-    REQUIRE(result.m_diagnostics.find("streamed final answer failed") != std::string::npos);
+    REQUIRE(result.m_chunks.empty());
+    REQUIRE(result.m_requests.size() == 3);
+    REQUIRE(result.m_diagnostics.find("ReAct answer rejected by quality gate") != std::string::npos);
+    REQUIRE(result.m_diagnostics.find("unverified candidate must not leak") == std::string::npos);
 }
 
 TEST_CASE("streaming integration: tool-enabled completion preserves tool_calls and buffers text",
