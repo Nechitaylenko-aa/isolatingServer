@@ -211,10 +211,10 @@ bool CProtocolServer::parse_request(const std::string& text,
     if (params.contains("answer") && params["answer"].is_object())
     {
         const nlohmann::json& answer = params["answer"];
-        if (answer.contains("question_id") && answer["question_id"].is_number_unsigned())
+        if (answer.contains("question_id") && answer["question_id"].is_number_integer())
         {
-            const std::uint32_t question_id = answer["question_id"].get<std::uint32_t>();
-            if (question_id <= UINT16_MAX)
+            const std::int64_t question_id = answer["question_id"].get<std::int64_t>();
+            if (question_id > 0 && question_id <= UINT16_MAX)
             {
                 out_request.m_answer_question_id = static_cast<std::uint16_t>(question_id);
             }
@@ -224,10 +224,10 @@ bool CProtocolServer::parse_request(const std::string& text,
             out_request.m_selected_option = answer["option"].get<std::string>();
         }
     }
-    if (params.contains("question_id") && params["question_id"].is_number_unsigned())
+    if (params.contains("question_id") && params["question_id"].is_number_integer())
     {
-        const std::uint32_t question_id = params["question_id"].get<std::uint32_t>();
-        if (question_id <= UINT16_MAX)
+        const std::int64_t question_id = params["question_id"].get<std::int64_t>();
+        if (question_id > 0 && question_id <= UINT16_MAX)
         {
             out_request.m_question_id = static_cast<std::uint16_t>(question_id);
         }

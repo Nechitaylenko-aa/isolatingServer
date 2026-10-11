@@ -178,9 +178,13 @@ std::uint16_t next_question_id(const std::vector<SConversationEvent>& events)
             }
             for (const nlohmann::json& item : payload["question"]["questions"])
             {
-                if (item.is_object() && item.contains("id") && item["id"].is_number_unsigned())
+                if (item.is_object() && item.contains("id") && item["id"].is_number_integer())
                 {
-                    maximum = std::max(maximum, item["id"].get<std::uint32_t>());
+                    const std::int64_t id = item["id"].get<std::int64_t>();
+                    if (id > 0 && id <= UINT16_MAX)
+                    {
+                        maximum = std::max(maximum, static_cast<std::uint32_t>(id));
+                    }
                 }
             }
         }
@@ -213,8 +217,8 @@ bool question_has_option(const std::vector<SConversationEvent>& events,
             }
             for (const nlohmann::json& item : payload["question"]["questions"])
             {
-                if (!item.is_object() || !item.contains("id") || !item["id"].is_number_unsigned()
-                    || item["id"].get<std::uint32_t>() != question_id
+                if (!item.is_object() || !item.contains("id") || !item["id"].is_number_integer()
+                    || item["id"].get<std::int64_t>() != question_id
                     || !item.contains("options") || !item["options"].is_array())
                 {
                     continue;
@@ -484,6 +488,11 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
             {
                 return make_error(EErrorKind::InvalidRequest,
                                   "session_id and non-zero question_id are required");
+            }
+            const auto session = m_conversation_store.get_session(request.m_session_id);
+            if (!session.has_value() || session->m_closed)
+            {
+                return make_error(EErrorKind::InvalidRequest, "unknown or closed conversation session");
             }
             response.m_ok = true;
             response.m_state = "COMPLETED";
