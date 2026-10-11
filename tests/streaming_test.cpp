@@ -421,6 +421,10 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
     std::string config_text = read_file(config.config_path());
     replace_config_value(config_text, "model_main", server.base_url());
     replace_config_value(config_text, "model_main_name", "integration-model");
+    // Give Lite its own explicit model identity. "same_as_main" intentionally
+    // inherits the main model name in CModelFactory and is not an escalation tier.
+    replace_config_value(config_text, "model_light", server.base_url());
+    replace_config_value(config_text, "model_light_name", "lite");
     replace_config_value(config_text, "react_loop", react_loop ? "YES" : "NO");
     // Prevent unrelated model calls in the fallback path; each test controls
     // exactly which mock requests are expected.
