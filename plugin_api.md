@@ -273,11 +273,11 @@
 | `open` | `projectRoot` — непустая строка | — |
 | `ask` | непустой `text` **или** `answer`; для `answer` обязательны `session_id`, `answer.question_id`, `answer.option` | `session_id` для обычного запроса, `editor`, `stream` |
 | `tool` | непустые `tool`, `target` | `limit` |
-| `patch` | непустой `payload` | `path`, `assumeYes`, `buildAfter` |
+| `patch` | непустой `payload` | `assumeYes`, `buildAfter` |
 | `session.close` | непустой `session_id` | — |
 | `session.update_context` | непустой `session_id`, `context` (любой валидный JSON-тип) | — |
 | `project.profile.set` | непустой `profile` | — |
 | `question.shrink` | непустой `session_id`, `question_id` в диапазоне 1..65535 | — |
 | Остальные методы | — | `path`, если применимо |
 
-Для `ask` поля `text` и `answer` взаимоисключающие. `answer.option` используется только для выбора из непустого списка вариантов; свободный ответ передаётся через `text`.
+Для `ask` поля `text` и `answer` взаимоисключающие. `answer.option` используется только для выбора из непустого списка вариантов; свободный ответ передаётся через `text`. У `patch` пути файлов берутся из unified diff внутри `payload`; отдельное поле `path` не задаёт область применения патча.
