@@ -1,6 +1,6 @@
 # Context builder: source-gate contract
 
-Status: architectural scaffold. Source-specific branching and semantic summarization are intentionally not implemented here.
+Status: initial chat gate is integrated into both Intent and ReAct prompt assembly. Passport/code gates and source-specific semantic selection remain future work.
 
 ## Responsibility boundary
 
@@ -55,3 +55,8 @@ Do not implement these branches as part of the initial scaffold:
 - dynamic per-model source-allocation strategies.
 
 The gates establish where those decisions will live. They do not prejudge their future algorithms.
+
+
+## Initial implementation scope
+
+`CChatContextSource` is now used by both `CAskService` (Intent/composition prompt) and `CReActAgent`. It returns whole message groups within its own token allowance; the existing `CContextManager` then performs the final combined-budget check. The source does not access SQLite itself: it receives the active history supplied by the caller and never reads archived topics. Extractive compaction is intentionally lossy and is reported as partial when older turns exist. The original history is not mutated.
