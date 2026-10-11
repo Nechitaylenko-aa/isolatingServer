@@ -200,7 +200,8 @@ bool question_has_option(const std::vector<SConversationEvent>& events,
                          std::uint16_t question_id,
                          const std::string& option)
 {
-    for (auto event = events.rbegin(); event != events.rend(); ++event)
+    const std::vector<SConversationEvent> active_events = active_conversation_events(events);
+    for (auto event = active_events.rbegin(); event != active_events.rend(); ++event)
     {
         if (event->m_kind != "assistant")
         {

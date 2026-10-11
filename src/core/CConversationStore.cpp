@@ -637,6 +637,11 @@ bool CConversationStore::shrink_question(const std::string& session_id, std::uin
     {
         return false;
     }
+    if (!active_events.empty() && active_events.back().m_id == cutoff_event_id)
+    {
+        // Idempotent shrink: the requested question is already the active tail.
+        return false;
+    }
 
     const nlohmann::json marker = {
         {"question_id", question_id},
