@@ -28,6 +28,10 @@ bool write_file(const std::filesystem::path& path, const std::string& content)
 {
     std::error_code error_code;
     std::filesystem::create_directories(path.parent_path(), error_code);
+    if (error_code)
+    {
+        return false;
+    }
 
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     if (!output.is_open())
@@ -37,6 +41,19 @@ bool write_file(const std::filesystem::path& path, const std::string& content)
     output << content;
     output.close();
     return output.good();
+}
+
+bool remove_path_if_present(const std::string& path)
+{
+    std::error_code error_code;
+    const bool removed = std::filesystem::remove(path, error_code);
+    if (error_code || removed)
+    {
+        return !error_code;
+    }
+
+    const bool remains = std::filesystem::exists(path, error_code);
+    return !error_code && !remains;
 }
 
 } // namespace
@@ -64,9 +81,7 @@ bool CPatchApplier::revert(const std::vector<SFileChange>& changes, std::string&
         }
         else
         {
-            std::error_code error_code;
-            const bool removed = std::filesystem::remove(change.m_path, error_code);
-            if (error_code || (!removed && std::filesystem::exists(change.m_path, error_code)) || error_code)
+            if (!remove_path_if_present(change.m_path))
             {
                 out_message = "revert failed: " + change.m_path;
                 return false;
@@ -107,22 +122,18 @@ bool CPatchApplier::apply(const std::vector<SFileChange>& changes, std::string& 
             for (std::size_t rollback = applied.size(); rollback > 0; --rollback)
             {
                 const SFileChange& done = changes[applied[rollback - 1]];
-                if (done.m_is_delete)
+                bool rollback_ok = false;
+                if (done.m_is_delete || done.m_existed)
                 {
-                    write_file(done.m_path, done.m_original);
-                }
-                else if (done.m_existed)
-                {
-                    write_file(done.m_path, done.m_original);
+                    rollback_ok = write_file(done.m_path, done.m_original);
                 }
                 else
                 {
-                    std::error_code error_code;
-                    const bool removed = std::filesystem::remove(done.m_path, error_code);
-                    if (error_code || (!removed && std::filesystem::exists(done.m_path, error_code)) || error_code)
-                    {
-                        out_message += "; rollback incomplete: " + done.m_path;
-                    }
+                    rollback_ok = remove_path_if_present(done.m_path);
+                }
+                if (!rollback_ok)
+                {
+                    out_message += "; rollback incomplete: " + done.m_path;
                 }
             }
             return false;
