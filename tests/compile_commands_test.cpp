@@ -228,3 +228,23 @@ TEST_CASE("open без compile_commands завершается FAIL без сл�
     std::filesystem::remove_all(home);
     std::filesystem::remove_all(project_dir);
 }
+
+
+TEST_CASE("compile command parser honors escaped spaces and rejects unclosed quotes", "[compile_commands]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-cc-escaped");
+    const std::filesystem::path path = dir / "compile_commands.json";
+    std::ofstream(path) << R"([{"directory":"/tmp","file":"main.cpp","command":"clang++ -Iinclude\\ dir -c main.cpp"}])";
+
+    std::vector<fcpp::SCompileCommand> commands;
+    REQUIRE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.size() == 1);
+    REQUIRE(commands[0].m_arguments.size() == 4);
+    REQUIRE(commands[0].m_arguments[1] == "-Iinclude dir");
+
+    std::ofstream(path) << R"([{"directory":"/tmp","file":"main.cpp","command":"clang++ \"unfinished"}])";
+    REQUIRE_FALSE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.empty());
+
+    std::filesystem::remove_all(dir);
+}

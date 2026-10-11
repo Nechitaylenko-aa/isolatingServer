@@ -54,16 +54,43 @@ std::filesystem::path resolve_path(const std::filesystem::path& base, const std:
  * @param text Командная строка.
  * @return Вектор аргументов.
  */
-std::vector<std::string> split_arguments(const std::string& text)
+bool split_arguments(const std::string& text, std::vector<std::string>& tokens)
 {
-    std::vector<std::string> tokens;
+    tokens.clear();
     std::string current;
     bool in_single = false;
     bool in_double = false;
     bool has_token = false;
+    bool escaped = false;
 
-    for (const char character : text)
+    for (std::size_t i = 0; i < text.size(); ++i)
     {
+        const char character = text[i];
+        if (escaped)
+        {
+            current.push_back(character);
+            has_token = true;
+            escaped = false;
+            continue;
+        }
+
+        if (character == '\\' && !in_single)
+        {
+            if (in_double && i + 1 < text.size()
+                    && text[i + 1] != '"' && text[i + 1] != '\\'
+                    && text[i + 1] != '$' && text[i + 1] != static_cast<char>(96))
+            {
+                current.push_back(character);
+                has_token = true;
+            }
+            else
+            {
+                escaped = true;
+                has_token = true;
+            }
+            continue;
+        }
+
         if (character == '\'' && !in_double)
         {
             in_single = !in_single;
@@ -74,7 +101,8 @@ std::vector<std::string> split_arguments(const std::string& text)
             in_double = !in_double;
             has_token = true;
         }
-        else if ((character == ' ' || character == '\t') && !in_single && !in_double)
+        else if ((character == ' ' || character == '\t' || character == '\n')
+                 && !in_single && !in_double)
         {
             if (has_token)
             {
@@ -90,12 +118,16 @@ std::vector<std::string> split_arguments(const std::string& text)
         }
     }
 
+    if (escaped || in_single || in_double)
+    {
+        tokens.clear();
+        return false;
+    }
     if (has_token)
     {
         tokens.push_back(current);
     }
-
-    return tokens;
+    return true;
 }
 
 } // namespace
@@ -173,9 +205,10 @@ bool CCompileCommandsParser::parse(const std::filesystem::path& json_path,
                 command.m_arguments.push_back(argument.get<std::string>());
             }
         }
-        if (command.m_arguments.empty() && !command.m_command.empty())
+        if (command.m_arguments.empty() && !command.m_command.empty()
+                && !split_arguments(command.m_command, command.m_arguments))
         {
-            command.m_arguments = split_arguments(command.m_command);
+            return false;
         }
         if (entry.contains(k_key_language) && entry[k_key_language].is_string())
         {
