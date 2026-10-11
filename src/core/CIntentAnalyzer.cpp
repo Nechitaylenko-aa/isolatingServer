@@ -139,11 +139,6 @@ bool contains_any(const std::string& haystack, const std::vector<std::string>& n
 }
 
 /**
- * @brief Детерминированная пост-коррекция Intent по ключевым словам (Секция 3, ADR-18 №1).
- * @param user_text Текст запроса.
- * @param intent Корректируемый Intent.
- */
-/**
  * @brief Извлечь имя символа из машинного cursor hint.
  *
  * Ожидаемый формат: [cursor symbol: qualified::Name (KIND)].
@@ -196,10 +191,15 @@ bool is_deictic_reference(const std::string& user_text)
         "этот метод", "этого метода", "этим методом",
         "этот символ", "этой сущности", "здесь", "тут",
         "this class", "this function", "this method", "this symbol",
-        "here", "at the cursor"
+        "here is", "here in", "look here", "at the cursor"
     });
 }
 
+/**
+ * @brief Детерминированная пост-коррекция Intent по ключевым словам (Секция 3, ADR-18 №1).
+ * @param user_text Текст запроса.
+ * @param intent Корректируемый Intent.
+ */
 void apply_keyword_correction(const std::string& user_text, SIntent& intent)
 {
     const std::string text = to_lower(user_text);
