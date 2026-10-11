@@ -132,6 +132,7 @@ add_library(fcpp_core STATIC
     # Conversation persistence and prompt context budgeting implementations.
     src/core/CConversationStore.cpp
     src/core/CContextManager.cpp
+    src/core/CChatContextSource.cpp
     src/core/SIntent.cpp
     src/core/SSubtasks.cpp
     src/core/SRequestOutcome.cpp
