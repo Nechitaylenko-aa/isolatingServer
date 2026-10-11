@@ -1,6 +1,6 @@
 # Context builder: source-gate contract
 
-Status: initial chat gate is integrated into both Intent and ReAct prompt assembly. Passport/code gates and source-specific semantic selection remain future work.
+Status: bounded chat and passport gates are integrated into Intent and ReAct prompt assembly; the code-evidence gate is integrated into evidence-based answer generation. Dynamic tool-result context in ReAct remains handled by its existing loop.
 
 ## Responsibility boundary
 
@@ -8,8 +8,8 @@ The context builder prepares input for one model invocation. It coordinates inde
 
 Initial sources:
 
-- **Code** — supplied by the existing request/code-analysis path. Code has the highest content priority; the context builder must not silently replace required code with chat history.
-- **Project passport** — supplies a short, applicable selection of long-lived project rules and decisions.
+- **Code** — indexed evidence gathered by the existing request/code-analysis path. Evidence sections now pass through `CCodeContextSource` with a 7000-token source allowance and high selection priority; dynamic ReAct tool results remain in the existing tool loop. Code has the highest content priority; the context builder must not silently replace required code with chat history.
+- **Project passport** — supplies project rules and decisions through `CProjectProfileContextSource`, with an initial 800-token allowance.
 - **Chat** — supplies a concise view of the current task from the active chat area only. Archived topics are not consulted by default.
 - **Archive** — belongs to the chat source and is an explicit extension point. Archive-selection policy is deliberately deferred.
 
@@ -34,7 +34,7 @@ Sources must not call the LLM directly. If a future gate needs model-assisted se
 
 ## Initial priority rule
 
-Chat has the smallest source allowance by default. Its gate receives an explicit maximum and returns only a concise extract of the **active** task/history. The initial implementation prefers recent turns over older extractive excerpts and reports when its contribution is partial. Current defaults are 600 estimated tokens for Intent context and 1200 for ReAct context; these are initial constants, not model-specific tuning. Semantic reconciliation of corrections/cancellations remains future work.
+Chat has the smallest source allowance by default. Its gate receives an explicit maximum and returns only a concise extract of the **active** task/history. The initial implementation prefers recent turns over older extractive excerpts and reports when its contribution is partial. Current defaults are 600 estimated tokens for chat in Intent, 1200 for chat in ReAct, 800 for the passport, and 7000 for indexed code evidence during answer generation; these are initial constants, not model-specific tuning. Semantic reconciliation of corrections/cancellations remains future work.
 
 The chat gate does not consult the archive unless a later policy explicitly requests it. No archive-retrieval heuristics are part of this scaffold.
 
@@ -60,3 +60,6 @@ The gates establish where those decisions will live. They do not prejudge their 
 ## Initial implementation scope
 
 `CChatContextSource` is now used by both `CAskService` (Intent/composition prompt) and `CReActAgent`. It returns whole message groups within its own token allowance; the existing `CContextManager` then performs the final combined-budget check. The source does not access SQLite itself: it receives the active history supplied by the caller and never reads archived topics. Extractive compaction is intentionally lossy and is reported as partial when older turns exist. The original history is not mutated.
+
+
+The passport gate is used by Intent, ReAct, and evidence-based answer generation. If its full text does not fit its source allowance, it returns no partial passport and reports the condition. The code-evidence gate preserves complete evidence-section groups and reports omitted sections when its allowance is insufficient. These source budgets are enforced independently; the existing final `CContextManager` still checks the combined prompt against the actual invocation budget.
