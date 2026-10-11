@@ -287,15 +287,20 @@ bool CAskService::answer_from_evidence(const std::string& question,
     system.m_content = k_answer_prompt;
     groups.push_back(SContextGroup{"answer-policy", {system}, 0, 100, 100, 0, true});
 
+    constexpr std::size_t k_project_passport_budget_tokens = 800;
     const std::string& project_profile = m_project_manager.profile().get();
-    if (!project_profile.empty())
+    const CProjectProfileContextSource passport_source(project_profile);
+    const SContextSourceResult passport_context = passport_source.collect_context(
+        SContextSourceRequest{question, k_project_passport_budget_tokens});
+    if (!passport_context.m_complete && !passport_context.m_note.empty())
     {
-        SModelMessage profile;
-        profile.m_role = EModelRole::System;
-        profile.m_content =
-            "[Project profile: follow these user-provided project rules]\n" + project_profile;
-        groups.push_back(SContextGroup{
-            "project-profile", {profile}, 1, 100, 100, 0, true});
+        std::cerr << "fcpp-agent: answer passport context is partial: "
+                  << passport_context.m_note << '\n';
+    }
+    for (SContextGroup group : passport_context.m_groups)
+    {
+        group.m_order = groups.size();
+        groups.push_back(std::move(group));
     }
 
     SModelMessage user;
@@ -547,15 +552,20 @@ bool CAskService::ask(const std::string& text,
         intent_context_groups.push_back(SContextGroup{
             "session-context", {state}, context_order++, 100, 100, 0, true});
     }
+    constexpr std::size_t k_project_passport_budget_tokens = 800;
     const std::string& project_profile = m_project_manager.profile().get();
-    if (!project_profile.empty())
+    const CProjectProfileContextSource passport_source(project_profile);
+    const SContextSourceResult passport_context = passport_source.collect_context(
+        SContextSourceRequest{text, k_project_passport_budget_tokens});
+    if (!passport_context.m_complete && !passport_context.m_note.empty())
     {
-        SModelMessage profile;
-        profile.m_role = EModelRole::System;
-        profile.m_content =
-            "[Project profile: follow these user-provided project rules]\n" + project_profile;
-        intent_context_groups.push_back(SContextGroup{
-            "project-profile", {profile}, context_order++, 100, 100, 0, true});
+        std::cerr << "fcpp-agent: project passport context is partial: "
+                  << passport_context.m_note << '\n';
+    }
+    for (SContextGroup group : passport_context.m_groups)
+    {
+        group.m_order = context_order++;
+        intent_context_groups.push_back(std::move(group));
     }
 
     // Chat is an independent source with a strict, deliberately small allowance.
