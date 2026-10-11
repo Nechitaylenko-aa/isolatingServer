@@ -23,6 +23,8 @@
 namespace fcpp
 {
 
+class CAnswerService;
+
 /**
  * @brief Сервис обработки пользовательского запроса (ask).
  */
@@ -65,6 +67,24 @@ public:
              const std::function<bool(const std::string&)>& on_stream_chunk = {}) const;
 
 private:
+    enum class EFastPathResult
+    {
+        Continue,
+        Answered,
+        Failed
+    };
+
+    EFastPathResult try_fast_path(
+        const std::string& text,
+        const std::string& react_context,
+        const std::string& context_json,
+        const std::vector<SConversationTurn>& history,
+        bool stream,
+        std::string& out_answer,
+        const std::function<bool(const std::string&)>& on_stream_chunk,
+        const CAnswerService& answer_service,
+        SIntent& preclassified_intent,
+        bool& have_preclassified_intent) const;
     /**
      * @brief Разрешить курсор в сущность через IClang (innermost, B2/ADR-20).
      *
