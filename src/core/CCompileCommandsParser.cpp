@@ -179,6 +179,14 @@ bool CCompileCommandsParser::parse(const std::filesystem::path& json_path,
         const std::filesystem::path directory(entry[k_key_directory].get<std::string>());
         const std::string file_value = entry[k_key_file].get<std::string>();
 
+        // compile_commands.json requires an absolute working directory and a
+        // non-empty source-file path. Without these, relative paths are resolved
+        // against the agent's process directory and can index the wrong file.
+        if (directory.empty() || !directory.is_absolute() || file_value.empty())
+        {
+            return false;
+        }
+
         const bool has_command = entry.contains(k_key_command) && entry[k_key_command].is_string();
         const bool has_arguments = entry.contains(k_key_arguments) && entry[k_key_arguments].is_array();
         if (!has_command && !has_arguments)

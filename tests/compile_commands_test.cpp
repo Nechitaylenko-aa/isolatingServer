@@ -266,3 +266,26 @@ TEST_CASE("compile command parser rejects empty command entries", "[compile_comm
 
     std::filesystem::remove_all(dir);
 }
+
+
+
+TEST_CASE("compile command parser rejects missing directory and file paths", "[compile_commands]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-cc-invalid-paths");
+    const std::filesystem::path path = dir / "compile_commands.json";
+    std::vector<fcpp::SCompileCommand> commands;
+
+    std::ofstream(path) << R"([{"directory":"","file":"main.cpp","command":"clang++ -c main.cpp"}])";
+    REQUIRE_FALSE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.empty());
+
+    std::ofstream(path) << R"([{"directory":"relative/build","file":"main.cpp","command":"clang++ -c main.cpp"}])";
+    REQUIRE_FALSE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.empty());
+
+    std::ofstream(path) << R"([{"directory":"/tmp","file":"","command":"clang++ -c main.cpp"}])";
+    REQUIRE_FALSE(fcpp::CCompileCommandsParser::parse(path, commands));
+    REQUIRE(commands.empty());
+
+    std::filesystem::remove_all(dir);
+}

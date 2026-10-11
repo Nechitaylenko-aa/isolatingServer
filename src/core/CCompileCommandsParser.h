@@ -32,8 +32,9 @@ public:
     /**
      * @brief Разобрать файл compile_commands.json.
      *
-     * Каждая запись обязана содержать "directory" и "file" и хотя бы одно из
-     * "command"/"arguments". Пути разворачиваются относительно directory.
+     * Каждая запись обязана содержать абсолютную "directory", непустой "file"
+     * и хотя бы одно из "command"/"arguments". Относительный "file" разрешается
+     * относительно directory.
      * @param json_path Путь к файлу compile_commands.json.
      * @param out_commands Выходной список команд.
      * @return true при успехе; false при ошибке чтения/парсинга/валидации.
