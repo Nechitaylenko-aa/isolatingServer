@@ -200,6 +200,7 @@ add_executable(fcpp_tests
     src/cli/CProtocolServer.cpp
     tests/conversation_store_test.cpp
     tests/context_manager_test.cpp
+    tests/chat_context_source_test.cpp
     tests/pipeline_test.cpp
     tests/model_test.cpp
     tests/project_profile_test.cpp
