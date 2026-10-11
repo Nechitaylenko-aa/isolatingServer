@@ -314,6 +314,31 @@ std::string endpoint_signature(const SConfig& config, EModelRoleKind role)
     return config.m_model_main.m_url + "|" + config.m_model_main.m_name;
 }
 
+void log_context_selection(const std::string& stage, const SContextBuildResult& result)
+{
+    const auto print_ids = [](const std::vector<std::string>& ids)
+    {
+        std::cerr << '[';
+        for (std::size_t index = 0; index < ids.size(); ++index)
+        {
+            if (index != 0)
+            {
+                std::cerr << ',';
+            }
+            std::cerr << ids[index];
+        }
+        std::cerr << ']';
+    };
+
+    std::cerr << "fcpp-agent: CONTEXT_SELECTION stage=" << stage
+              << " tokens=" << result.m_estimated_tokens << '/' << result.m_budget_tokens
+              << " included=";
+    print_ids(result.m_included_group_ids);
+    std::cerr << " excluded=";
+    print_ids(result.m_excluded_group_ids);
+    std::cerr << '\n';
+}
+
 } // namespace
 
 CReActAgent::CReActAgent(const CConfigManager& config_manager, CProjectManager& project_manager)
@@ -509,6 +534,8 @@ bool CReActAgent::run(const std::string& question,
             std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED: " << prompt.m_error << '\n';
             return false;
         }
+        log_context_selection("react/" + std::to_string(step)
+                              + "/" + role_name(levels[level_index]), prompt);
         const SModelReply reply = on_stream_chunk
                                       ? model->complete_stream(prompt.m_messages, tools, {})
                                       : model->complete(prompt.m_messages, tools);
@@ -537,14 +564,29 @@ bool CReActAgent::run(const std::string& question,
             {
                 // Tool-enabled turn ended without tool calls. Re-ask for final
                 // output without tools so it can be streamed live and safely.
-                std::vector<SModelMessage> final_messages = prompt.m_messages;
+                std::vector<SContextGroup> final_groups = prompt_groups;
                 SModelMessage final_instruction;
                 final_instruction.m_role = EModelRole::User;
                 final_instruction.m_content =
                     "Give the final answer to the user's original question now. "
                     "Use the gathered context above. Do not call tools or describe a plan.";
-                final_messages.push_back(std::move(final_instruction));
-                const SModelReply streamed = model->complete_stream(final_messages, on_stream_chunk);
+                final_groups.push_back(SContextGroup{
+                    "streamed-final-instruction", {final_instruction},
+                    next_order++, 100, 100, 0, true});
+                const SContextBuildResult streamed_prompt = context_manager.build(
+                    final_groups, SContextBudget{
+                        k_prompt_budget_tokens,
+                        active_model_config.m_context_window_tokens,
+                        active_model_config.m_output_reserve_tokens});
+                if (!streamed_prompt.m_ok)
+                {
+                    std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED for streamed final answer: "
+                              << streamed_prompt.m_error << '\n';
+                    return false;
+                }
+                log_context_selection("react/streamed-final", streamed_prompt);
+                const SModelReply streamed =
+                    model->complete_stream(streamed_prompt.m_messages, on_stream_chunk);
                 if (!streamed.m_ok || streamed.m_text.empty())
                 {
                     std::cerr << "fcpp-agent: streamed final answer failed: " << streamed.m_error << '\n';
@@ -722,6 +764,7 @@ bool CReActAgent::run(const std::string& question,
                   << final_prompt.m_error << '\n';
         return false;
     }
+    log_context_selection("react/final-synthesis", final_prompt);
 
     const SModelReply final_reply = on_stream_chunk
                                         ? model->complete_stream(final_prompt.m_messages, on_stream_chunk)

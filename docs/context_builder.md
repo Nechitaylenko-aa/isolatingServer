@@ -63,3 +63,29 @@ The gates establish where those decisions will live. They do not prejudge their 
 
 
 The passport gate is used by Intent, ReAct, and evidence-based answer generation. If its full text does not fit its source allowance, it returns no partial passport and reports the condition. The code-evidence gate preserves complete evidence-section groups and reports omitted sections when its allowance is insufficient. These source budgets are enforced independently; the existing final `CContextManager` still checks the combined prompt against the actual invocation budget.
+
+## Model budget source of truth and diagnostics
+
+The context-window values are configured in `~/.fcpp-agent/agent.conf` via
+`model_main_context_window_tokens`, `model_light_context_window_tokens`, and
+`model_remote_context_window_tokens`; output reservations are configured by the
+corresponding `*_output_reserve_tokens` keys. `CConfigManager` reads these values
+at startup or explicit configuration reload. The agent does **not** discover the
+model's context window from provider metadata. A context-window value of `0`
+means unknown, so the per-invocation hard prompt cap is used without a model-window
+calculation. A light role sharing the main endpoint inherits the main role's
+configured window and output reservation when its own values are unset.
+
+For each model invocation, `CContextManager` computes the effective prompt budget
+as the stricter of the caller's prompt cap and
+`context_window_tokens - output_reserve_tokens`, when a context window is known.
+The source allowances (chat, passport, code evidence) are independent upstream
+caps, not a replacement for this final combined check. The default token counter is
+a rough character-based estimate; it is not a provider-specific tokenizer, so
+configured budgets and diagnostics should be treated as estimates unless a real
+token counter is injected.
+
+Successful final builds emit `CONTEXT_SELECTION` diagnostics with the estimated
+tokens used, effective budget, included group IDs, and excluded group IDs. This
+makes budget pressure and priority decisions observable without logging message
+contents or secrets.

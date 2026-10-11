@@ -147,6 +147,31 @@ std::string format_cursor_hint(const SClangSymbol& symbol)
     return symbol.m_qualified_name + " (" + symbol_kind_name(symbol.m_kind) + ")";
 }
 
+void log_context_selection(const std::string& stage, const SContextBuildResult& result)
+{
+    const auto print_ids = [](const std::vector<std::string>& ids)
+    {
+        std::cerr << '[';
+        for (std::size_t index = 0; index < ids.size(); ++index)
+        {
+            if (index != 0)
+            {
+                std::cerr << ',';
+            }
+            std::cerr << ids[index];
+        }
+        std::cerr << ']';
+    };
+
+    std::cerr << "fcpp-agent: CONTEXT_SELECTION stage=" << stage
+              << " tokens=" << result.m_estimated_tokens << '/' << result.m_budget_tokens
+              << " included=";
+    print_ids(result.m_included_group_ids);
+    std::cerr << " excluded=";
+    print_ids(result.m_excluded_group_ids);
+    std::cerr << '\n';
+}
+
 } // namespace
 
 CAskService::CAskService(const CConfigManager& config_manager, CProjectManager& project_manager)
@@ -403,6 +428,7 @@ bool CAskService::answer_from_evidence(const std::string& question,
                     + " context does not fit: " + built.m_error;
                 return attempt;
             }
+            log_context_selection("answer/" + std::string(model_level_name(level)), built);
 
             SModelReply reply;
             std::string collected;
@@ -600,6 +626,7 @@ bool CAskService::ask(const std::string& text,
                   << intent_context.m_error << '\n';
         return false;
     }
+    log_context_selection("intent", intent_context);
     for (const SModelMessage& message : intent_context.m_messages)
     {
         if (!contextual_text.empty())
