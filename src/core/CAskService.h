@@ -81,7 +81,6 @@ private:
         unsigned cursor_col,
         const std::string& context_json,
         const std::vector<SConversationTurn>& history,
-        const std::string& react_context,
         SIntent preclassified_intent,
         bool have_preclassified_intent,
         bool stream,

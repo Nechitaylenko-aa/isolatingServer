@@ -258,7 +258,6 @@ bool CAskService::answer_codebase_request(
     unsigned cursor_col,
     const std::string& context_json,
     const std::vector<SConversationTurn>& history,
-    const std::string& react_context,
     SIntent preclassified_intent,
     bool have_preclassified_intent,
     bool stream,
@@ -546,7 +545,7 @@ bool CAskService::ask(const std::string& text,
     if (fast_path == EFastPathResult::Failed) return false;
 
     return answer_codebase_request(
-        text, cursor_file, cursor_line, cursor_col, context_json, history, react_context,
+        text, cursor_file, cursor_line, cursor_col, context_json, history,
         preclassified_intent, have_preclassified_intent, stream, out_answer, on_stream_chunk);
 }
 
