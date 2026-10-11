@@ -6,6 +6,8 @@
 #include "core/CAskService.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
+#include "core/CCodeContextSource.h"
+#include "core/CProjectProfileContextSource.h"
 #include "core/CModelCascade.h"
 
 #include <iostream>
@@ -301,25 +303,18 @@ bool CAskService::answer_from_evidence(const std::string& question,
     user.m_content = "Question:\n" + question + "\n\nUse only the evidence messages that follow.";
     groups.push_back(SContextGroup{"answer-question", {user}, 2, 100, 100, 0, true});
 
-    std::size_t section_order = 3;
-    for (const SEvidenceSection& section : evidence.m_sections)
+    constexpr std::size_t k_code_context_budget_tokens = 7000;
+    const CCodeContextSource code_source(evidence);
+    const SContextSourceResult code_context = code_source.collect_context(
+        SContextSourceRequest{question, k_code_context_budget_tokens});
+    if (!code_context.m_complete && !code_context.m_note.empty())
     {
-        if (section.m_text.empty())
-        {
-            continue;
-        }
-        SModelMessage section_message;
-        section_message.m_role = EModelRole::User;
-        section_message.m_content = "[" + section.m_title + "]\n" + section.m_text;
-        const std::size_t order = section_order++;
-        groups.push_back(SContextGroup{
-            "evidence-" + std::to_string(order),
-            {std::move(section_message)},
-            order,
-            50,
-            50,
-            order,
-            false});
+        std::cerr << "fcpp-agent: code context is partial: " << code_context.m_note << '\n';
+    }
+    for (SContextGroup group : code_context.m_groups)
+    {
+        group.m_order = groups.size();
+        groups.push_back(std::move(group));
     }
 
     const std::vector<EModelLevel> levels = available_answer_levels(config);
