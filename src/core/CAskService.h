@@ -75,6 +75,7 @@ private:
      * @return true при успехе.
      */
     bool answer_general_engineering(const std::string& question,
+                                    const std::vector<SConversationTurn>& history,
                                     bool stream,
                                     std::string& out_answer,
                                     const std::function<bool(const std::string&)>& on_stream_chunk) const;

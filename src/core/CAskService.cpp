@@ -354,7 +354,8 @@ std::string CAskService::hierarchy_anchor(const std::string& file,
 }
 
 bool CAskService::answer_general_engineering(
-    const std::string& question, bool stream, std::string& out_answer,
+    const std::string& question, const std::vector<SConversationTurn>& history,
+    bool stream, std::string& out_answer,
     const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     const SConfig& config = m_config_manager.config();
@@ -372,6 +373,18 @@ bool CAskService::answer_general_engineering(
         if (model == nullptr || !model->is_available()) continue;
         std::vector<SModelMessage> messages;
         messages.push_back(SModelMessage{EModelRole::System, system_prompt});
+        if (!history.empty())
+        {
+            std::string prior_turns = "[Recent conversation for reference resolution only; not a new request]\n";
+            const std::size_t first = history.size() > 4 ? history.size() - 4 : 0;
+            for (std::size_t i = first; i < history.size(); ++i)
+            {
+                prior_turns += "User: " + history[i].m_user_text + "\n";
+                prior_turns += "Assistant: " + history[i].m_assistant_text + "\n";
+                if (prior_turns.size() > 6000) { prior_turns.resize(6000); break; }
+            }
+            messages.push_back(SModelMessage{EModelRole::User, prior_turns});
+        }
         messages.push_back(SModelMessage{EModelRole::User, question});
         const SModelReply reply = model->complete(messages);
         if (!reply.m_ok || reply.m_text.empty())
@@ -660,7 +673,7 @@ bool CAskService::ask(const std::string& text,
             if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
             {
                 std::cerr << "fcpp-agent: request scope=GENERAL_ENGINEERING; bypassing code index pipeline\n";
-                return answer_general_engineering(text, stream, out_answer, on_stream_chunk);
+                return answer_general_engineering(text, history, stream, out_answer, on_stream_chunk);
             }
         }
         else if (!scope_error.empty())
@@ -677,10 +690,11 @@ bool CAskService::ask(const std::string& text,
         const CReActAgent agent(m_config_manager, m_project_manager);
         if (agent.run(text, react_context, context_json, history, out_answer, {}))
         {
-            EModelLevel candidate_level = EModelLevel::Main;
-            if (config.m_loop_model == "light") candidate_level = EModelLevel::Lite;
-            else if (config.m_loop_model == "remote") candidate_level = EModelLevel::Remote;
             const std::vector<EModelLevel> quality_levels = available_answer_levels(config);
+            // ReAct may escalate internally; its final level is not exposed. Review conservatively
+            // at the strongest configured level rather than claim a stronger independent reviewer.
+            const EModelLevel candidate_level = quality_levels.empty()
+                ? EModelLevel::Main : quality_levels.back();
             const SAnswerQualityAssessment quality = assess_answer_quality(
                 config, quality_levels, candidate_level, text, out_answer);
             if (quality.m_valid && !quality.m_escalate)
