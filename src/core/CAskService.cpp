@@ -815,7 +815,7 @@ bool CAskService::ask(const std::string& text,
         {
             have_preclassified_intent = true;
             if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
-                return answer_general_engineering(text, stream, out_answer, on_stream_chunk);
+                return answer_general_engineering(text, history, stream, out_answer, on_stream_chunk);
         }
         else if (!scope_error.empty())
             std::cerr << "fcpp-agent: request-scope preflight unavailable: "
