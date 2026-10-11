@@ -396,12 +396,16 @@ private:
 };
 
 SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
-                                bool cancel_on_first_chunk = false)
+                                bool cancel_on_first_chunk = false,
+                                bool react_loop = true,
+                                bool enable_remote = false,
+                                const std::string& question = "Explain the project",
+                                const std::string& intent_content = k_intent_content)
 {
     const nlohmann::json intent_response = {
         {"choices", nlohmann::json::array({
             {{"finish_reason", "stop"},
-             {"message", {{"role", "assistant"}, {"content", k_intent_content}}}}
+             {"message", {{"role", "assistant"}, {"content", intent_content}}}}
         })}
     };
     std::vector<SMockHttpResponse> all_responses = {
@@ -417,12 +421,23 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
     std::string config_text = read_file(config.config_path());
     replace_config_value(config_text, "model_main", server.base_url());
     replace_config_value(config_text, "model_main_name", "integration-model");
-    // Disable the example remote endpoint from agent.conf: these tests must
-    // exercise the configured mock endpoint, not attempt a real cloud review.
-    replace_config_value(config_text, "model_remote_url", "");
-    replace_config_value(config_text, "model_remote_name", "");
-    replace_config_value(config_text, "model_remote_key", "");
-    replace_config_value(config_text, "react_loop", "YES");
+    replace_config_value(config_text, "react_loop", react_loop ? "YES" : "NO");
+    // Prevent unrelated model calls in the fallback path; each test controls
+    // exactly which mock requests are expected.
+    replace_config_value(config_text, "allow_subtasks", "NO");
+    if (enable_remote)
+    {
+        replace_config_value(config_text, "model_remote_url", server.base_url());
+        replace_config_value(config_text, "model_remote_name", "reviewer-model");
+        replace_config_value(config_text, "model_remote_key", "test-key");
+    }
+    else
+    {
+        // Disable the example remote endpoint from agent.conf.
+        replace_config_value(config_text, "model_remote_url", "");
+        replace_config_value(config_text, "model_remote_name", "");
+        replace_config_value(config_text, "model_remote_key", "");
+    }
     // Keep the rejected-answer test deterministic: fallback must not consume
     // additional mock replies through the subtask-composition model.
     replace_config_value(config_text, "allow_subtasks", "NO");
@@ -441,7 +456,7 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
     SApiStreamResult result;
     fcpp::SApiRequest ask;
     ask.m_method = fcpp::EApiMethod::Ask;
-    ask.m_text = "Explain the project";
+    ask.m_text = question;
     ask.m_stream = true;
     ask.m_on_stream_chunk = [&result, cancel_on_first_chunk](const std::string& chunk)
     {
@@ -512,6 +527,45 @@ TEST_CASE("answer review integration: rejected candidate is never streamed to th
     REQUIRE(result.m_requests.size() == 3);
     REQUIRE(result.m_diagnostics.find("ReAct answer rejected by quality gate") != std::string::npos);
     REQUIRE(result.m_diagnostics.find("unverified candidate must not leak") == std::string::npos);
+}
+
+TEST_CASE("answer review integration: repeated high risk escalates generation to the next model",
+          "[review][integration]")
+{
+    const std::string source_intent =
+        "<intent>\\n"
+        "<scope>CODEBASE</scope>\\n"
+        "<area>UNDERSTAND</area>\\n"
+        "<relation>SELF</relation>\\n"
+        "<projection>SOURCE</projection>\\n"
+        "<subject kind=\\"FUNCTION\\" name=\\"main\\"/>\\n"
+        "</intent>";
+    const SApiStreamResult result = run_api_stream({
+        {openai_completion("first low-level candidate"), "application/json", 0},
+        {reviewer_completion("ESCALATE", 88, "claims are not supported"), "application/json", 0},
+        {openai_completion("second low-level candidate"), "application/json", 0},
+        {reviewer_completion("ESCALATE", 76, "important details remain unsupported"), "application/json", 0},
+        {openai_completion("verified answer from the main model"), "application/json", 0},
+        {reviewer_completion("ACCEPT", 4, "answer matches the evidence"), "application/json", 0}
+    }, false, false, true, "Show the source of main", source_intent);
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_answer == "verified answer from the main model");
+    REQUIRE(result.m_chunks.size() == 1);
+    REQUIRE(result.m_requests.size() == 7);
+
+    const nlohmann::json lite_candidate = nlohmann::json::parse(request_body(result.m_requests[1]));
+    const nlohmann::json main_reviewer = nlohmann::json::parse(request_body(result.m_requests[2]));
+    const nlohmann::json lite_retry = nlohmann::json::parse(request_body(result.m_requests[3]));
+    const nlohmann::json main_candidate = nlohmann::json::parse(request_body(result.m_requests[5]));
+    const nlohmann::json remote_reviewer = nlohmann::json::parse(request_body(result.m_requests[6]));
+    REQUIRE(lite_candidate["model"] == "lite");
+    REQUIRE(main_reviewer["model"] == "integration-model");
+    REQUIRE(lite_retry["model"] == "lite");
+    REQUIRE(main_candidate["model"] == "integration-model");
+    REQUIRE(remote_reviewer["model"] == "reviewer-model");
+    REQUIRE(result.m_diagnostics.find("ANSWER_TEMPERATURE risk=88 verdict=ESCALATE") != std::string::npos);
+    REQUIRE(result.m_diagnostics.find("ANSWER_TEMPERATURE risk=76 verdict=ESCALATE") != std::string::npos);
 }
 
 TEST_CASE("streaming integration: tool-enabled completion preserves tool_calls and buffers text",
