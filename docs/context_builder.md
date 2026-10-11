@@ -34,7 +34,7 @@ Sources must not call the LLM directly. If a future gate needs model-assisted se
 
 ## Initial priority rule
 
-Chat has the smallest source allowance by default. Its gate receives an explicit maximum and returns only a concise extract of the **active** task/history. The first implementation should prefer recent messages and preserve corrections/cancellations; later messages may supersede earlier statements wholly or partially.
+Chat has the smallest source allowance by default. Its gate receives an explicit maximum and returns only a concise extract of the **active** task/history. The initial implementation prefers recent turns over older extractive excerpts and reports when its contribution is partial. Current defaults are 600 estimated tokens for Intent context and 1200 for ReAct context; these are initial constants, not model-specific tuning. Semantic reconciliation of corrections/cancellations remains future work.
 
 The chat gate does not consult the archive unless a later policy explicitly requests it. No archive-retrieval heuristics are part of this scaffold.
 
