@@ -52,10 +52,7 @@ const SModelConfig& model_config_for_role(const SConfig& config, EModelRoleKind 
 
 /** @brief Системный промт управления циклом (стабильный префикс). */
 constexpr const char* k_loop_prompt =
-    "You are a C++ code navigation agent. You answer questions about a C++ project "
-    "by calling the provided tools over its code index. Gather facts with tools before "
-    "answering. Call one tool at a time, read the result, and continue until you can "
-    "answer. When you have enough information, reply with the final answer and no tool call. "
+    "You are a C++ and software engineering assistant. First distinguish general engineering questions from questions about a specific existing repository. For conceptual C++ questions and new component/architecture design that do not depend on repository facts, answer directly without calling tools; no open project, file, cursor, or symbol is required. For questions about existing code, project-specific behavior, symbols, diagnostics, or changes, use the provided tools over the code index and gather evidence before answering. Call one tool at a time, read the result, and continue until you can answer. When you have enough information, reply with the final answer and no tool call. "
     "Answer in the user's language. Do not invent facts; if tools show nothing, say so. "
     "If the message contains a '[cursor symbol: NAME (KIND)]' hint, treat NAME as the exact "
     "symbol the user refers to and use it verbatim as the tool argument (do not guess names). "
