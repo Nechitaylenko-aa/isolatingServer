@@ -7,6 +7,7 @@
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
 #include "core/CProjectProfileContextSource.h"
+#include "fcpp-agent/SCascade.h"
 
 #include <iostream>
 #include <memory>
@@ -48,6 +49,13 @@ const SModelConfig& model_config_for_role(const SConfig& config, EModelRoleKind 
         return config.m_model_remote;
     }
     return config.m_model_main;
+}
+
+EModelLevel model_level_for_role(EModelRoleKind role)
+{
+    if (role == EModelRoleKind::Light) return EModelLevel::Lite;
+    if (role == EModelRoleKind::Remote) return EModelLevel::Remote;
+    return EModelLevel::Main;
 }
 
 /** @brief Системный промт управления циклом (стабильный префикс). */
@@ -374,9 +382,11 @@ bool CReActAgent::run(const std::string& question,
                       const std::string& context_json,
                       const std::vector<SConversationTurn>& history,
                       std::string& out_answer,
+                      EModelLevel& out_level,
                       const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     out_answer.clear();
+    out_level = EModelLevel::Lite;
 
     const SConfig& config = m_config_manager.config();
 
@@ -624,10 +634,13 @@ bool CReActAgent::run(const std::string& question,
                     return false;
                 }
                 out_answer = streamed.m_text;
+                out_level = model_level_for_role(levels[level_index]);
                 return true;
             }
             out_answer = reply.m_text;
-            return !out_answer.empty();
+            if (out_answer.empty()) return false;
+            out_level = model_level_for_role(levels[level_index]);
+            return true;
         }
 
         // Приоритет 2: сбой → эскалация (или честный отказ при исчерпании уровней).
@@ -650,6 +663,7 @@ bool CReActAgent::run(const std::string& question,
                 + role_name(levels[level_index])
                 + "') не справилась с заданием, а более мощная модель (remote) не настроена. "
                   "Уточните вопрос или настройте роль remote в agent.conf.";
+            out_level = model_level_for_role(levels[level_index]);
             return true;
         }
 
@@ -809,6 +823,7 @@ bool CReActAgent::run(const std::string& question,
     if (final_reply.m_ok && !final_reply.m_text.empty())
     {
         out_answer = final_reply.m_text;
+        out_level = model_level_for_role(levels[level_index]);
         return true;
     }
 
@@ -849,6 +864,7 @@ bool CReActAgent::run(const std::string& question,
 
     out_answer = "Не удалось сформировать итоговый ответ, но по запросу собраны следующие "
                  "факты из кода:\n\n" + facts;
+    out_level = model_level_for_role(levels[level_index]);
     return true;
 }
 

@@ -20,6 +20,7 @@
 #include "core/CProjectManager.h"
 #include "core/CConversationStore.h"
 #include "fcpp-agent/IModelApi.h"
+#include "fcpp-agent/SCascade.h"
 
 namespace fcpp
 {
@@ -54,6 +55,7 @@ public:
              const std::string& context_json,
              const std::vector<SConversationTurn>& history,
              std::string& out_answer,
+             EModelLevel& out_level,
              const std::function<bool(const std::string&)>& on_stream_chunk = {}) const;
 
 private:

@@ -187,9 +187,23 @@ SAnswerQualityAssessment assess_answer_quality(
     const std::string& question, const std::string& answer, const std::string& evidence_context = {})
 {
     SAnswerQualityAssessment assessment;
-    std::size_t candidate_index = 0;
+    std::size_t candidate_index = levels.size();
     for (std::size_t i = 0; i < levels.size(); ++i)
-        if (levels[i] == candidate_level) { candidate_index = i; break; }
+    {
+        if (levels[i] == candidate_level)
+        {
+            candidate_index = i;
+            break;
+        }
+    }
+    if (candidate_index == levels.size())
+    {
+        assessment.m_reason = "candidate level is not in the available level list";
+        std::cerr << "fcpp-agent: ANSWER_TEMPERATURE risk=100 verdict=ESCALATE"
+                  << " candidate=" << model_level_name(candidate_level)
+                  << " reviewer=none independent=no reason=" << assessment.m_reason << '\n';
+        return assessment;
+    }
     const bool independent_reviewer = candidate_index + 1 < levels.size();
     const EModelLevel reviewer_level = independent_reviewer ? levels[candidate_index + 1] : candidate_level;
     std::unique_ptr<IModelApi> reviewer = CModelFactory::create(config, role_for_level(reviewer_level));
@@ -688,15 +702,12 @@ bool CAskService::ask(const std::string& text,
     if (config.m_react_loop)
     {
         const CReActAgent agent(m_config_manager, m_project_manager);
-        if (agent.run(text, react_context, context_json, history, out_answer, {}))
+        EModelLevel react_candidate_level = EModelLevel::Lite;
+        if (agent.run(text, react_context, context_json, history, out_answer, react_candidate_level, {}))
         {
             const std::vector<EModelLevel> quality_levels = available_answer_levels(config);
-            // ReAct may escalate internally; its final level is not exposed. Review conservatively
-            // at the strongest configured level rather than claim a stronger independent reviewer.
-            const EModelLevel candidate_level = quality_levels.empty()
-                ? EModelLevel::Main : quality_levels.back();
             const SAnswerQualityAssessment quality = assess_answer_quality(
-                config, quality_levels, candidate_level, text, out_answer);
+                config, quality_levels, react_candidate_level, text, out_answer);
             if (quality.m_valid && !quality.m_escalate)
             {
                 if (stream && on_stream_chunk && !on_stream_chunk(out_answer))
