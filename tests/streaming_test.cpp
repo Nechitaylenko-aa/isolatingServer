@@ -334,12 +334,12 @@ std::string join_chunks(const std::vector<std::string>& chunks)
 }
 
 const std::string k_intent_content =
-    "<intent>\\n"
-    "<scope>CODEBASE</scope>\\n"
-    "<area>UNDERSTAND</area>\\n"
-    "<relation>SELF</relation>\\n"
-    "<projection>EXPLANATION</projection>\\n"
-    "<subject kind=\\"SYMBOL\\" name=\\"\\"/>\\n"
+    "<intent>\n"
+    "<scope>CODEBASE</scope>\n"
+    "<area>UNDERSTAND</area>\n"
+    "<relation>SELF</relation>\n"
+    "<projection>EXPLANATION</projection>\n"
+    "<subject kind=\"SYMBOL\" name=\"\"/>\n"
     "</intent>";
 
 std::string openai_completion(const std::string& content)
