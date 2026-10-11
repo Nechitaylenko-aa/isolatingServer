@@ -8,6 +8,7 @@
 #include "core/CContextDiagnostics.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
+#include "core/CProjectProfileContextSource.h"
 
 #include <iostream>
 #include <memory>

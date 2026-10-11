@@ -343,7 +343,7 @@ bool CAnswerService::answer_from_evidence(const std::string& question,
                 evidence_context += '\n';
             }
             if (evidence_context.size() > 10000) evidence_context.resize(10000);
-            const SAnswerQualityAssessment quality = assess_answer_quality(
+            const SAnswerQualityAssessment quality = assess_answer_quality_with_levels(
                 config, levels, level, question, reply.m_text, evidence_context);
             if (!quality.m_valid || quality.m_escalate)
             {
