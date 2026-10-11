@@ -25,12 +25,14 @@
 #include "fcpp-agent/IModelApi.h"
 #include "fcpp-agent/SIntent.h"
 #include "fcpp-agent/SCascade.h"
+#include "fcpp-agent/SEvidence.h"
 #include "fcpp-agent/SRequestOutcome.h"
 #include "fcpp-agent/SSubtasks.h"
 #include "index/CClangFactory.h"
 #include "index/CSQLiteIndex.h"
 #include "index/CSqlCompilerIndex.h"
 #include "tools/CToolContext.h"
+#include "llm/CModelFactory.h"
 
 namespace fcpp
 {
@@ -41,7 +43,6 @@ namespace
 /** @brief Жёсткий лимит числа подзадач (guardrail ADR-16). */
 constexpr std::size_t k_max_subtasks = 6;
 
-/** Return the effective endpoint identity for an answer-cascade level. */
 /**
  * @brief Скомпоновать текст хинта символа под курсором для промпта (B2/ADR-20).
  * @param symbol Сущность под курсором.
