@@ -271,9 +271,10 @@ bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_inte
 
     const std::string kind_text = trim(extract_attribute(subject_fragment, "kind"));
     ESubjectKind kind = ESubjectKind::Symbol;
-    if (!kind_text.empty())
+    if (!kind_text.empty() && !parse_subject_kind(kind_text, kind))
     {
-        parse_subject_kind(kind_text, kind);
+        out_error = "cannot parse subject kind";
+        return false;
     }
     intent.m_subject.m_kind = kind;
     intent.m_subject.m_name = extract_attribute(subject_fragment, "name");

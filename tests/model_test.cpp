@@ -283,3 +283,16 @@ TEST_CASE("model levels: final candidate cannot pass review without a higher-lev
     REQUIRE_FALSE(fcpp::has_higher_review_level(two_levels, fcpp::EModelLevel::Main));
     REQUIRE_FALSE(fcpp::has_higher_review_level({}, fcpp::EModelLevel::Main));
 }
+
+TEST_CASE("intent analyzer: unknown subject kind is rejected instead of defaulting to Symbol", "[model][intent]")
+{
+    const std::string xml =
+        "<intent><scope>CODEBASE</scope><area>UNDERSTAND</area>"
+        "<relation>SELF</relation><projection>EXPLANATION</projection>"
+        "<subject kind=\"NOT_A_KIND\" name=\"Widget::run\"/></intent>";
+    fcpp::SIntent intent;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CIntentAnalyzer::parse_intent_xml(xml, intent, error));
+    REQUIRE(error == "cannot parse subject kind");
+}
