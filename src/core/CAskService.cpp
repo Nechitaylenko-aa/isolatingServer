@@ -720,22 +720,26 @@ bool CAskService::ask(const std::string& text,
         }
     }
 
-    // General engineering dialogue does not require a file, cursor, or indexed symbol.
-    // Select this mode semantically; never infer it merely from absent editor context.
+    // Classify semantically. Missing editor context alone never selects a mode.
+    SIntent preclassified_intent;
+    bool have_preclassified_intent = false;
     {
         const CEscalatingIntentAnalyzer scope_analyzer(config);
-        SIntent initial_intent;
         std::string scope_error;
-        if (scope_analyzer.analyze(contextual_text, cursor_hint, initial_intent, scope_error)
-                && initial_intent.m_scope == ERequestScope::GeneralEngineering)
+        if (scope_analyzer.analyze(contextual_text, cursor_hint, preclassified_intent, scope_error))
         {
-            std::cerr << "fcpp-agent: request scope=GENERAL_ENGINEERING; bypassing code index pipeline\n";
-            return answer_general_engineering(contextual_text, stream, out_answer, on_stream_chunk);
+            have_preclassified_intent = true;
+            if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
+            {
+                std::cerr << "fcpp-agent: request scope=GENERAL_ENGINEERING; bypassing code index pipeline\\n";
+                // Use the actual utterance, not the concatenated project/session context dump.
+                return answer_general_engineering(text, stream, out_answer, on_stream_chunk);
+            }
         }
-        if (!scope_error.empty())
+        else if (!scope_error.empty())
         {
             std::cerr << "fcpp-agent: request-scope preflight unavailable: "
-                      << scope_error << "; continuing with codebase pipeline\n";
+                      << scope_error << "; continuing with codebase pipeline\\n";
         }
     }
 
@@ -791,7 +795,13 @@ bool CAskService::ask(const std::string& text,
         const std::string question_hint = compound ? std::string() : cursor_hint;
         SIntent intent;
         std::string error;
-        if (!analyzer.analyze(question, question_hint, intent, error))
+        const bool reuse_preclassification =
+            questions.size() == 1 && index == 1 && have_preclassified_intent;
+        if (reuse_preclassification)
+        {
+            intent = preclassified_intent;
+        }
+        else if (!analyzer.analyze(question, question_hint, intent, error))
         {
             std::cerr << "шаг " << index << ": NOT_UNDERSTOOD: " << error << '\n';
             continue;
