@@ -21,6 +21,13 @@ namespace fcpp
 /**
  * @brief Область задачи (§19).
  */
+/** @brief Классификация зависимости запроса от текущей кодовой базы. */
+enum class ERequestScope
+{
+    Codebase,
+    GeneralEngineering
+};
+
 enum class EArea
 {
     Understand, ///< Понимание кода.
@@ -134,6 +141,7 @@ struct SSubject
  */
 struct SIntent
 {
+    ERequestScope m_scope = ERequestScope::Codebase; ///< Область применения запроса.
     EArea m_area = EArea::Understand;                 ///< Область.
     SSubject m_subject;                               ///< Субъект.
     ERelation m_relation = ERelation::Self;           ///< Отношение.

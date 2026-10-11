@@ -19,11 +19,16 @@ namespace
 constexpr const char* k_system_prompt =
     "You are a C++/CMake request classifier. Return ONLY this XML, no prose:\n"
     "<intent>\n"
+    "  <scope>CODEBASE|GENERAL_ENGINEERING</scope>\n"
     "  <area>UNDERSTAND|DIAGNOSE|DESIGN|CHANGE|VERIFY|REVIEW|ENV</area>\n"
     "  <relation>SELF|CALLERS|CALLEES|OVERRIDES|REFERENCES|INCLUDES</relation>\n"
     "  <projection>SIGNATURE|SOURCE|EXPLANATION|LOCATIONS|GRAPH</projection>\n"
     "  <subject kind=\"CLASS|METHOD|FUNCTION|FILE|SYMBOL|...\" name=\"qualified_name\"/>\n"
     "</intent>\n"
+    "Rules for <scope>:\n"
+    "- GENERAL_ENGINEERING: conceptual C++/software engineering questions and new component design not asking for facts from the current repository. No project, file, cursor, or symbol is required.\n"
+    "- CODEBASE: questions about existing code, project-specific architecture, diagnostics, changes, builds, and tests.\n"
+    "- If repository-specific constraints matter, choose CODEBASE. Missing cursor/file context alone never means GENERAL_ENGINEERING.\n"
     "Rules for <area>:\n"
     "- Questions about the STATE of existing code are UNDERSTAND (not VERIFY). "
     "VERIFY is ONLY for building/running tests; DESIGN is ONLY for proposing new design.\n"
@@ -224,6 +229,21 @@ void apply_keyword_correction(const std::string& user_text, SIntent& intent)
 bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_intent, std::string& out_error)
 {
     SIntent intent;
+
+    const std::string scope_text = to_lower(trim(extract_tag(xml, "scope")));
+    if (scope_text == "general_engineering")
+    {
+        intent.m_scope = ERequestScope::GeneralEngineering;
+    }
+    else if (scope_text.empty() || scope_text == "codebase")
+    {
+        intent.m_scope = ERequestScope::Codebase;
+    }
+    else
+    {
+        out_error = "cannot parse scope";
+        return false;
+    }
 
     if (!parse_area(trim(extract_tag(xml, "area")), intent.m_area))
     {

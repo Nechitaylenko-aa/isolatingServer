@@ -296,6 +296,68 @@ std::string CAskService::hierarchy_anchor(const std::string& file,
     return ancestors.back().m_qname;
 }
 
+bool CAskService::answer_general_engineering(
+    const std::string& question,
+    bool stream,
+    std::string& out_answer,
+    const std::function<bool(const std::string&)>& on_stream_chunk) const
+{
+    const SConfig& config = m_config_manager.config();
+    const EModelRoleKind roles[] = {
+        EModelRoleKind::Main, EModelRoleKind::Remote, EModelRoleKind::Light};
+    const char* system_prompt =
+        "You are a senior C++ and software architecture assistant. Answer the user's "
+        "general engineering question directly and concretely. You may use general "
+        "programming knowledge, but do not claim to have inspected the user's repository "
+        "or invent project-specific facts. State important assumptions and trade-offs. "
+        "Answer in the user's language. If the request depends on an existing codebase, "
+        "say what concrete context is missing instead of pretending to know it.";
+
+    for (const EModelRoleKind role : roles)
+    {
+        std::unique_ptr<IModelApi> model = CModelFactory::create(config, role);
+        if (model == nullptr || !model->is_available()) continue;
+        std::vector<SModelMessage> messages;
+        messages.push_back(SModelMessage{EModelRole::System, system_prompt});
+        messages.push_back(SModelMessage{EModelRole::User, question});
+
+        SModelReply reply;
+        bool stream_started = false;
+        bool stream_cancelled = false;
+        if (stream && on_stream_chunk)
+        {
+            std::string collected;
+            reply = model->complete_stream(messages, [&](const std::string& chunk)
+            {
+                collected += chunk;
+                if (!chunk.empty()) stream_started = true;
+                if (!on_stream_chunk(chunk))
+                {
+                    stream_cancelled = true;
+                    return false;
+                }
+                return true;
+            });
+            if (stream_cancelled) return false;
+            if (stream_started && !reply.m_ok) return false;
+            if (reply.m_ok) reply.m_text = collected;
+        }
+        else
+        {
+            reply = model->complete(messages);
+        }
+        if (reply.m_ok && !reply.m_text.empty())
+        {
+            out_answer = reply.m_text;
+            return true;
+        }
+        if (stream_started) return false;
+        std::cerr << "fcpp-agent: general engineering answer failed: "
+                  << (reply.m_error.empty() ? "empty response" : reply.m_error) << '\n';
+    }
+    return false;
+}
+
 bool CAskService::answer_from_evidence(const std::string& question,
                                        const SEvidence& evidence,
                                        bool stream,
@@ -655,6 +717,25 @@ bool CAskService::ask(const std::string& text,
         if (!anchor_name.empty())
         {
             anchor_hint = "[hierarchy anchor: " + anchor_name + "]";
+        }
+    }
+
+    // General engineering dialogue does not require a file, cursor, or indexed symbol.
+    // Select this mode semantically; never infer it merely from absent editor context.
+    {
+        const CEscalatingIntentAnalyzer scope_analyzer(config);
+        SIntent initial_intent;
+        std::string scope_error;
+        if (scope_analyzer.analyze(contextual_text, cursor_hint, initial_intent, scope_error)
+                && initial_intent.m_scope == ERequestScope::GeneralEngineering)
+        {
+            std::cerr << "fcpp-agent: request scope=GENERAL_ENGINEERING; bypassing code index pipeline\n";
+            return answer_general_engineering(contextual_text, stream, out_answer, on_stream_chunk);
+        }
+        if (!scope_error.empty())
+        {
+            std::cerr << "fcpp-agent: request-scope preflight unavailable: "
+                      << scope_error << "; continuing with codebase pipeline\n";
         }
     }
 

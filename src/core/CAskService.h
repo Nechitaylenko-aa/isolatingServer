@@ -74,6 +74,11 @@ private:
      * @param out_answer Выходной текст ответа.
      * @return true при успехе.
      */
+    bool answer_general_engineering(const std::string& question,
+                                    bool stream,
+                                    std::string& out_answer,
+                                    const std::function<bool(const std::string&)>& on_stream_chunk) const;
+
     bool answer_from_evidence(const std::string& question,
                               const SEvidence& evidence,
                               bool stream,

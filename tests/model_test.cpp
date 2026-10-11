@@ -51,6 +51,21 @@ private:
 
 } // namespace
 
+TEST_CASE("intent analyzer: general engineering scope does not require a subject",
+          "[model][intent]")
+{
+    const std::string xml =
+        "<intent><scope>GENERAL_ENGINEERING</scope><area>DESIGN</area>"
+        "<relation>SELF</relation><projection>EXPLANATION</projection>"
+        "<subject kind=\"SYMBOL\" name=\"\"/></intent>";
+    fcpp::SIntent intent;
+    std::string error;
+
+    REQUIRE(fcpp::CIntentAnalyzer::parse_intent_xml(xml, intent, error));
+    REQUIRE(intent.m_scope == fcpp::ERequestScope::GeneralEngineering);
+    REQUIRE(intent.m_subject.m_name.empty());
+}
+
 TEST_CASE("intent analyzer: deictic reference falls back to cursor symbol when model omits name",
           "[model][intent]")
 {
