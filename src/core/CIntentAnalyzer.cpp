@@ -245,7 +245,9 @@ bool CIntentAnalyzer::parse_intent_xml(const std::string& xml, SIntent& out_inte
     if (document.rfind("<intent>", 0) != 0
             || document.size() < std::string("</intent>").size()
             || document.compare(document.size() - std::string("</intent>").size(),
-                                std::string("</intent>").size(), "</intent>") != 0)
+                                std::string("</intent>").size(), "</intent>") != 0
+            || count_occurrences(document, "<intent>") != 1
+            || count_occurrences(document, "</intent>") != 1)
     {
         out_error = "invalid intent XML envelope";
         return false;

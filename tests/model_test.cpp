@@ -309,6 +309,8 @@ TEST_CASE("intent analyzer: rejects prose wrappers and duplicate XML fields", "[
 
     REQUIRE_FALSE(fcpp::CIntentAnalyzer::parse_intent_xml("Here is the XML:\\n" + valid, intent, error));
     REQUIRE(error == "invalid intent XML envelope");
+    REQUIRE_FALSE(fcpp::CIntentAnalyzer::parse_intent_xml(valid + "<intent></intent>", intent, error));
+    REQUIRE(error == "invalid intent XML envelope");
 
     const std::string duplicate =
         "<intent><area>UNDERSTAND</area><area>CHANGE</area>"
