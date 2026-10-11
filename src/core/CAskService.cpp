@@ -502,8 +502,6 @@ bool CAskService::answer_codebase_request(
     return false;
 }
 
-}
-
 bool CAskService::ask(const std::string& text,
                       bool stream,
                       const std::string& cursor_file,
@@ -550,4 +548,6 @@ bool CAskService::ask(const std::string& text,
     return answer_codebase_request(
         text, cursor_file, cursor_line, cursor_col, context_json, history, react_context,
         preclassified_intent, have_preclassified_intent, stream, out_answer, on_stream_chunk);
+}
+
 } // namespace fcpp
