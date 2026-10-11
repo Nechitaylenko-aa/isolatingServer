@@ -6,6 +6,8 @@
 #include "cli/CProtocolServer.h"
 
 #include <iostream>
+#include <cstdint>
+#include <limits>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -134,6 +136,124 @@ bool method_from_name(const std::string& name, EApiMethod& out)
     return false;
 }
 
+enum class EExpectedJsonType
+{
+    String,
+    Object,
+    Boolean,
+    Integer,
+    UnsignedInteger
+};
+
+bool validate_optional_type(const nlohmann::json& object,
+                            const std::string& key,
+                            const std::string& prefix,
+                            EExpectedJsonType expected,
+                            std::string& out_error)
+{
+    if (!object.contains(key))
+    {
+        return true;
+    }
+
+    const nlohmann::json& value = object[key];
+    bool valid = false;
+    const char* expected_name = "valid value";
+    switch (expected)
+    {
+        case EExpectedJsonType::String:
+            valid = value.is_string();
+            expected_name = "a string";
+            break;
+        case EExpectedJsonType::Object:
+            valid = value.is_object();
+            expected_name = "an object";
+            break;
+        case EExpectedJsonType::Boolean:
+            valid = value.is_boolean();
+            expected_name = "a boolean";
+            break;
+        case EExpectedJsonType::Integer:
+            valid = value.is_number_integer();
+            expected_name = "an integer";
+            break;
+        case EExpectedJsonType::UnsignedInteger:
+            valid = value.is_number_unsigned();
+            expected_name = "a non-negative 32-bit integer";
+            break;
+    }
+
+    if (!valid)
+    {
+        out_error = "field '" + prefix + "." + key + "' must be " + expected_name;
+        return false;
+    }
+    return true;
+}
+
+bool validate_uint16_field(const nlohmann::json& object,
+                           const std::string& key,
+                           const std::string& prefix,
+                           std::string& out_error)
+{
+    if (!object.contains(key))
+    {
+        return true;
+    }
+    const nlohmann::json& value = object[key];
+    if (!value.is_number_integer())
+    {
+        out_error = "field '" + prefix + "." + key + "' must be a non-zero 16-bit integer";
+        return false;
+    }
+
+    std::uint64_t number = 0;
+    if (value.is_number_unsigned())
+    {
+        number = value.get<std::uint64_t>();
+    }
+    else
+    {
+        const std::int64_t signed_number = value.get<std::int64_t>();
+        if (signed_number <= 0)
+        {
+            out_error = "field '" + prefix + "." + key + "' must be a non-zero 16-bit integer";
+            return false;
+        }
+        number = static_cast<std::uint64_t>(signed_number);
+    }
+
+    if (number == 0 || number > std::numeric_limits<std::uint16_t>::max())
+    {
+        out_error = "field '" + prefix + "." + key + "' is outside the valid 16-bit range";
+        return false;
+    }
+    return true;
+}
+
+bool validate_uint32_field(const nlohmann::json& object,
+                           const std::string& key,
+                           const std::string& prefix,
+                           std::string& out_error)
+{
+    if (!object.contains(key))
+    {
+        return true;
+    }
+    const nlohmann::json& value = object[key];
+    if (!value.is_number_unsigned())
+    {
+        out_error = "field '" + prefix + "." + key + "' must be a non-negative 32-bit integer";
+        return false;
+    }
+    if (value.get<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max())
+    {
+        out_error = "field '" + prefix + "." + key + "' is outside the valid 32-bit range";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 CProtocolServer::CProtocolServer(const CConfigManager& config_manager,
@@ -171,10 +291,13 @@ bool CProtocolServer::parse_request(const std::string& text,
         return false;
     }
 
-    if (document.contains("id") && document["id"].is_string())
+    if (!document.contains("id") || !document["id"].is_string()
+            || document["id"].get<std::string>().empty())
     {
-        out_id = document["id"].get<std::string>();
+        out_error = "field 'id' must be a non-empty string";
+        return false;
     }
+    out_id = document["id"].get<std::string>();
 
     if (!document["method"].is_string())
     {
@@ -188,13 +311,89 @@ bool CProtocolServer::parse_request(const std::string& text,
         return false;
     }
 
-    if (!document.contains("params") || !document["params"].is_object())
+    if (document.contains("params") && !document["params"].is_object())
     {
-        // Методы без параметров допустимы (например, status).
-        return true;
+        out_error = "field 'params' must be an object";
+        return false;
+    }
+    const nlohmann::json empty_params = nlohmann::json::object();
+    const nlohmann::json& params = document.contains("params") ? document["params"] : empty_params;
+
+    const struct SFieldTypeCheck
+    {
+        const char* m_key;
+        EExpectedJsonType m_type;
+    } field_checks[] = {
+        {"projectRoot", EExpectedJsonType::String}, {"path", EExpectedJsonType::String},
+        {"text", EExpectedJsonType::String}, {"answer", EExpectedJsonType::Object},
+        {"question_id", EExpectedJsonType::Integer}, {"profile", EExpectedJsonType::String},
+        {"session_id", EExpectedJsonType::String}, {"sessionId", EExpectedJsonType::String},
+        {"tool", EExpectedJsonType::String}, {"target", EExpectedJsonType::String},
+        {"payload", EExpectedJsonType::String}, {"limit", EExpectedJsonType::UnsignedInteger},
+        {"assumeYes", EExpectedJsonType::Boolean}, {"buildAfter", EExpectedJsonType::Boolean},
+        {"stream", EExpectedJsonType::Boolean}, {"editor", EExpectedJsonType::Object}
+    };
+    for (const SFieldTypeCheck& field : field_checks)
+    {
+        if (!validate_optional_type(params, field.m_key, "params", field.m_type, out_error))
+        {
+            return false;
+        }
+    }
+    if (!validate_uint16_field(params, "question_id", "params", out_error)
+            || !validate_uint32_field(params, "limit", "params", out_error))
+    {
+        return false;
+    }
+    if (params.contains("session_id") && params.contains("sessionId")
+            && params["session_id"] != params["sessionId"])
+    {
+        out_error = "fields 'params.session_id' and 'params.sessionId' must match when both are provided";
+        return false;
     }
 
-    const nlohmann::json& params = document["params"];
+    if (params.contains("answer"))
+    {
+        const nlohmann::json& answer = params["answer"];
+        if (!validate_optional_type(answer, "question_id", "params.answer",
+                                    EExpectedJsonType::Integer, out_error)
+                || !validate_optional_type(answer, "option", "params.answer",
+                                           EExpectedJsonType::String, out_error)
+                || !validate_uint16_field(answer, "question_id", "params.answer", out_error))
+        {
+            return false;
+        }
+    }
+    if (params.contains("editor"))
+    {
+        const nlohmann::json& editor = params["editor"];
+        if (!validate_optional_type(editor, "file", "params.editor",
+                                    EExpectedJsonType::Object, out_error)
+                || !validate_optional_type(editor, "cursor", "params.editor",
+                                           EExpectedJsonType::Object, out_error))
+        {
+            return false;
+        }
+        if (editor.contains("file")
+                && !validate_optional_type(editor["file"], "path", "params.editor.file",
+                                           EExpectedJsonType::String, out_error))
+        {
+            return false;
+        }
+        if (editor.contains("cursor"))
+        {
+            const nlohmann::json& cursor = editor["cursor"];
+            if (!validate_optional_type(cursor, "line", "params.editor.cursor",
+                                        EExpectedJsonType::UnsignedInteger, out_error)
+                    || !validate_optional_type(cursor, "column", "params.editor.cursor",
+                                               EExpectedJsonType::UnsignedInteger, out_error)
+                    || !validate_uint32_field(cursor, "line", "params.editor.cursor", out_error)
+                    || !validate_uint32_field(cursor, "column", "params.editor.cursor", out_error))
+            {
+                return false;
+            }
+        }
+    }
 
     if (params.contains("projectRoot") && params["projectRoot"].is_string())
     {
@@ -211,26 +410,26 @@ bool CProtocolServer::parse_request(const std::string& text,
     if (params.contains("answer") && params["answer"].is_object())
     {
         const nlohmann::json& answer = params["answer"];
-        if (answer.contains("question_id") && answer["question_id"].is_number_integer())
+        if (answer.contains("question_id"))
         {
-            const std::int64_t question_id = answer["question_id"].get<std::int64_t>();
-            if (question_id > 0 && question_id <= UINT16_MAX)
-            {
-                out_request.m_answer_question_id = static_cast<std::uint16_t>(question_id);
-            }
+            const nlohmann::json& value = answer["question_id"];
+            const std::uint64_t question_id = value.is_number_unsigned()
+                ? value.get<std::uint64_t>()
+                : static_cast<std::uint64_t>(value.get<std::int64_t>());
+            out_request.m_answer_question_id = static_cast<std::uint16_t>(question_id);
         }
         if (answer.contains("option") && answer["option"].is_string())
         {
             out_request.m_selected_option = answer["option"].get<std::string>();
         }
     }
-    if (params.contains("question_id") && params["question_id"].is_number_integer())
+    if (params.contains("question_id"))
     {
-        const std::int64_t question_id = params["question_id"].get<std::int64_t>();
-        if (question_id > 0 && question_id <= UINT16_MAX)
-        {
-            out_request.m_question_id = static_cast<std::uint16_t>(question_id);
-        }
+        const nlohmann::json& value = params["question_id"];
+        const std::uint64_t question_id = value.is_number_unsigned()
+            ? value.get<std::uint64_t>()
+            : static_cast<std::uint64_t>(value.get<std::int64_t>());
+        out_request.m_question_id = static_cast<std::uint16_t>(question_id);
     }
     if (params.contains("profile") && params["profile"].is_string())
     {
@@ -260,7 +459,7 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_payload = params["payload"].get<std::string>();
     }
-    if (params.contains("limit") && params["limit"].is_number_unsigned())
+    if (params.contains("limit"))
     {
         out_request.m_limit = params["limit"].get<std::uint32_t>();
     }
@@ -288,15 +487,80 @@ bool CProtocolServer::parse_request(const std::string& text,
         if (editor.contains("cursor") && editor["cursor"].is_object())
         {
             const nlohmann::json& cursor = editor["cursor"];
-            if (cursor.contains("line") && cursor["line"].is_number_unsigned())
+            if (cursor.contains("line"))
             {
                 out_request.m_editor_line = cursor["line"].get<std::uint32_t>();
             }
-            if (cursor.contains("column") && cursor["column"].is_number_unsigned())
+            if (cursor.contains("column"))
             {
                 out_request.m_editor_column = cursor["column"].get<std::uint32_t>();
             }
         }
+    }
+
+    const auto require_non_empty = [&](const std::string& value, const char* field) -> bool
+    {
+        if (!value.empty()) return true;
+        out_error = std::string("missing or empty required field: ") + field;
+        return false;
+    };
+    switch (out_request.m_method)
+    {
+        case EApiMethod::ProjectOpen:
+            if (!require_non_empty(out_request.m_project_root, "params.projectRoot")) return false;
+            break;
+        case EApiMethod::Tool:
+            if (!require_non_empty(out_request.m_tool, "params.tool")
+                    || !require_non_empty(out_request.m_target, "params.target")) return false;
+            break;
+        case EApiMethod::Patch:
+            if (!require_non_empty(out_request.m_payload, "params.payload")) return false;
+            break;
+        case EApiMethod::Ask:
+            if (params.contains("answer"))
+            {
+                if (!out_request.m_text.empty())
+                {
+                    out_error = "params.text and params.answer are mutually exclusive";
+                    return false;
+                }
+                if (!require_non_empty(out_request.m_session_id, "params.session_id")
+                        || out_request.m_answer_question_id == 0
+                        || !require_non_empty(out_request.m_selected_option, "params.answer.option"))
+                {
+                    if (out_error.empty()) out_error = "params.answer requires a non-zero question_id";
+                    return false;
+                }
+            }
+            else if (!require_non_empty(out_request.m_text, "params.text"))
+            {
+                return false;
+            }
+            break;
+        case EApiMethod::SessionClose:
+            if (!require_non_empty(out_request.m_session_id, "params.session_id")) return false;
+            break;
+        case EApiMethod::SessionUpdateContext:
+            if (!require_non_empty(out_request.m_session_id, "params.session_id")
+                    || !params.contains("context"))
+            {
+                if (out_error.empty()) out_error = "params.session_id and params.context are required";
+                return false;
+            }
+            break;
+        case EApiMethod::ProjectProfileSet:
+            if (!require_non_empty(out_request.m_profile_text, "params.profile")) return false;
+            break;
+        case EApiMethod::QuestionShrink:
+            if (!require_non_empty(out_request.m_session_id, "params.session_id")
+                    || out_request.m_question_id == 0)
+            {
+                if (out_error.empty()) out_error = "params.session_id and non-zero params.question_id are required";
+                return false;
+            }
+            break;
+        default:
+            break;
     }
 
     return true;

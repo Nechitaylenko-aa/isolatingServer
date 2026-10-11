@@ -115,3 +115,59 @@ TEST_CASE("protocol maps project profile setter", "[protocol][profile]")
     REQUIRE(request.m_method == fcpp::EApiMethod::ProjectProfileSet);
     REQUIRE(request.m_profile_text == "C++20; keep the public API stable");
 }
+
+TEST_CASE("protocol rejects malformed parameter types and non-object params", "[protocol][validation]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"bad-params","method":"status","params":[]})", request, id, error));
+    REQUIRE(error == "field 'params' must be an object");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"bad-text","method":"ask","params":{"text":42}})", request, id, error));
+    REQUIRE(error == "field 'params.text' must be a string");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"bad-stream","method":"ask","params":{"text":"hello","stream":"yes"}})",
+        request, id, error));
+    REQUIRE(error == "field 'params.stream' must be a boolean");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"bad-cursor","method":"ask","params":{"text":"hello","editor":{"cursor":{"line":-1}}}})",
+        request, id, error));
+    REQUIRE(error == "field 'params.editor.cursor.line' must be a non-negative 32-bit integer");
+}
+
+TEST_CASE("protocol rejects missing required fields and invalid identifiers", "[protocol][validation]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"missing-root","method":"open","params":{}})", request, id, error));
+    REQUIRE(error == "missing or empty required field: params.projectRoot");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"missing-target","method":"tool","params":{"tool":"refs"}})", request, id, error));
+    REQUIRE(error == "missing or empty required field: params.target");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"missing-session","method":"session.close","params":{}})", request, id, error));
+    REQUIRE(error == "missing or empty required field: params.session_id");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"too-large","method":"question.shrink","params":{"session_id":"s","question_id":70000}})",
+        request, id, error));
+    REQUIRE(error == "field 'params.question_id' is outside the valid 16-bit range");
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":7,"method":"status"})", request, id, error));
+    REQUIRE(error == "field 'id' must be a non-empty string");
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"status-no-params","method":"status"})", request, id, error));
+}
