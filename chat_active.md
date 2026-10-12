@@ -45,7 +45,8 @@
 - `a72dca6`, `35599ba` — intent XML parser проверяет envelope, уникальность обязательных полей, ровно один root и форму self-closing `subject`; malformed output должен идти в retry/escalation.
 - `f364286` — `compile_commands.json` command tokenizer учитывает escaped spaces/quotes, whitespace/newlines и отклоняет незакрытые кавычки/висящий escape; CI `38136207888` зелёный.
 - `38b43ee`, `daca688` — parser отклоняет пустую/пробельную строку `command`; regression-тесты прошли в CI `38137143640` и `38137149583`.
-- Текущий пакет R18: parser дополнительно отклоняет пустую/относительную `directory` и пустой `file`; добавлены regression-тесты и уточнён контракт в заголовке. CI ожидается.
+- R18: parser отклоняет пустую/относительную `directory` и пустой `file`; regression-тесты прошли CI `38137372514`.
+- Новый пакет D1: JSONL-журнал `~/.fcpp-agent/logs/agent.jsonl`, события `request.start`/`request.finish`, корреляция по внешнему protocol ID, без логирования содержимого пользовательских запросов. Реализовано, ожидает CI.
 
 Оценка ответа:
 - `CAnswerQuality` разбирает JSON с `verdict`, `risk_score` 0..100 и `reason`.
@@ -83,3 +84,9 @@
 3. Исправлять пункты строго по одному и после каждого проверять сборку/тесты.
 4. При переходе в новый чат сначала прочитать этот файл и `ref_todo.md`, затем проверить актуальный HEAD и CI — этот файл является снимком, а не истиной о более позднем состоянии.
 5. R17 завершён; R18 реализован в текущем пакете и ожидает CI. Локальный каталог репозитория в текущем runtime отсутствует, а прямой `git clone` недоступен из-за DNS; файлы и CI проверялись через GitHub connector именно в ветке `dev`.
+
+
+## Следующий практический этап: диагностика LLM
+- D1 в текущем пакете: базовая JSONL-телеметрия жизненного цикла API.
+- После зелёного CI: подключить trace-контекст к CAskService, CReActAgent, intent analyzer, model clients, Evidence и quality review.
+- Затем прогнать набор реальных LLM-сценариев и собирать regression-кейсы.

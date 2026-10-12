@@ -30,7 +30,7 @@ static const char* const m_level_names[static_cast<std::size_t>(ELogLevel::Count
 };
 
 /** @brief Имя файла лога. */
-constexpr const char* k_log_file_name = "agent.log";
+constexpr const char* k_log_file_name = "agent.jsonl";
 
 /**
  * @brief Текущее время в формате ISO-8601 (UTC).
@@ -66,18 +66,27 @@ CLogger::CLogger(std::filesystem::path log_dir, ELogLevel min_level)
 
 void CLogger::log(ELogLevel level, const std::string& message)
 {
-    if (static_cast<int>(level) > static_cast<int>(m_min_level))
+    log_event(level, "log", nlohmann::json{{"message", message}});
+}
+
+void CLogger::log_event(ELogLevel level, const std::string& event,
+                        const nlohmann::json& fields)
+{
+    if (static_cast<int>(level) > static_cast<int>(m_min_level) || !fields.is_object())
     {
         return;
     }
+    nlohmann::json record = fields;
+    record["timestamp"] = timestamp();
+    record["level"] = level_name(level);
+    record["event"] = event;
 
+    std::lock_guard<std::mutex> lock(m_mutex);
     std::ofstream output(m_log_path, std::ios::app);
-    if (!output.is_open())
+    if (output.is_open())
     {
-        return;
+        output << record.dump() << '\n';
     }
-
-    output << timestamp() << " [" << level_name(level) << "] " << message << '\n';
 }
 
 const std::filesystem::path& CLogger::path() const

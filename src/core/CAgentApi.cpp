@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/CAskService.h"
+#include "core/CLogger.h"
 #include "core/CHash.h"
 #include "core/CDoctor.h"
 #include "core/CPatchApplier.h"
@@ -264,11 +265,42 @@ CAgentApi::CAgentApi(const CConfigManager& config_manager)
     : m_config_manager(config_manager)
     , m_project_manager(config_manager)
     , m_conversation_store()
+    , m_logger(config_manager.agent_dir() / "logs", ELogLevel::Info)
 {
     m_conversation_store.open(m_config_manager.agent_dir() / "sessions.sqlite");
 }
 
 SApiResponse CAgentApi::execute(const SApiRequest& request)
+{
+    static std::atomic<std::uint64_t> request_counter{0};
+    const auto started = std::chrono::steady_clock::now();
+    std::string request_id = request.m_request_id;
+    if (request_id.empty())
+    {
+        const std::string seed = std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count())
+            + ":" + std::to_string(request_counter.fetch_add(1));
+        request_id = "agent-" + CHash::sha256_hex(seed).substr(0, 16);
+    }
+    m_logger.log_event(ELogLevel::Info, "request.start", {
+        {"request_id", request_id}, {"method", api_method_name(request.m_method)},
+        {"session_id", request.m_session_id}, {"text_bytes", request.m_text.size()},
+        {"has_editor", !request.m_editor_file.empty()}, {"stream", request.m_stream}
+    });
+
+    SApiResponse response = execute_impl(request);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started).count();
+    m_logger.log_event(response.m_ok ? ELogLevel::Info : ELogLevel::Warn, "request.finish", {
+        {"request_id", request_id}, {"method", api_method_name(request.m_method)},
+        {"ok", response.m_ok}, {"error_kind", static_cast<int>(response.m_error)},
+        {"state", response.m_state}, {"duration_ms", elapsed},
+        {"session_id", response.m_session_id.empty() ? request.m_session_id : response.m_session_id}
+    });
+    return response;
+}
+
+SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
 {
     SApiResponse response;
 

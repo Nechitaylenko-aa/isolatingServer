@@ -305,6 +305,8 @@ bool CProtocolServer::parse_request(const std::string& text,
         return false;
     }
     const std::string method_name = document["method"].get<std::string>();
+    out_request.m_request_id = out_id;
+
     if (!method_from_name(method_name, out_request.m_method))
     {
         out_error = "unknown method: " + method_name;

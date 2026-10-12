@@ -9,6 +9,9 @@
 #define FCPP_AGENT_CLOGGER_H
 
 #include <filesystem>
+#include <mutex>
+
+#include <nlohmann/json.hpp>
 #include <string>
 
 #include "fcpp-agent/ILogger.h"
@@ -47,9 +50,14 @@ public:
      */
     const std::filesystem::path& path() const;
 
+    /** @brief Write one structured JSONL event. */
+    void log_event(ELogLevel level, const std::string& event,
+                   const nlohmann::json& fields = nlohmann::json::object());
+
 private:
     std::filesystem::path m_log_path; ///< Путь к файлу лога.
     ELogLevel m_min_level;            ///< Минимальный уровень.
+    std::mutex m_mutex;                ///< Prevent interleaved records.
 };
 
 } // namespace fcpp

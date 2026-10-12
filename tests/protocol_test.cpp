@@ -15,6 +15,7 @@ TEST_CASE("protocol maps conversation session methods and context payloads", "[p
     REQUIRE(fcpp::CProtocolServer::parse_request(
         R"({"id":"open-1","method":"session.open","params":{}})", request, id, error));
     REQUIRE(id == "open-1");
+    REQUIRE(request.m_request_id == "open-1");
     REQUIRE(request.m_method == fcpp::EApiMethod::SessionOpen);
 
     REQUIRE(fcpp::CProtocolServer::parse_request(

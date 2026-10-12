@@ -108,6 +108,7 @@ using TChat = std::vector<SChatItem>;
  */
 struct SApiRequest
 {
+    std::string m_request_id; ///< Client request ID for diagnostic correlation.
     EApiMethod m_method = EApiMethod::AgentStatus; ///< Метод.
     std::string m_path;   ///< Путь (проект, патч, файл).
     std::string m_project_root; ///< Корень проекта для шага open (protocol-имя projectRoot).

@@ -6,6 +6,8 @@
 #include <string>
 #include <unistd.h>
 
+#include <nlohmann/json.hpp>
+
 #include "core/CAgentApi.h"
 #include "core/CConfigManager.h"
 #include "fcpp-agent/IAgentApi.h"
@@ -190,4 +192,42 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
 
     std::filesystem::remove_all(home);
     std::filesystem::remove_all(project_dir);
+}
+
+
+TEST_CASE("agent API: lifecycle diagnostics are JSONL and correlate request IDs", "[api][logging]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-api-log-home");
+    HomeScope scope(home);
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    fcpp::CAgentApi api(config);
+    fcpp::SApiRequest request;
+    request.m_request_id = "test-request-42";
+    request.m_method = fcpp::EApiMethod::AgentStatus;
+    REQUIRE(api.execute(request).m_ok);
+
+    const std::filesystem::path log_path = config.agent_dir() / "logs" / "agent.jsonl";
+    REQUIRE(std::filesystem::exists(log_path));
+    std::ifstream input(log_path);
+    REQUIRE(input.is_open());
+    std::string line;
+    std::vector<nlohmann::json> records;
+    while (std::getline(input, line))
+    {
+        REQUIRE_NOTHROW(nlohmann::json::parse(line));
+        records.push_back(nlohmann::json::parse(line));
+    }
+    REQUIRE(records.size() == 2);
+    REQUIRE(records[0]["event"] == "request.start");
+    REQUIRE(records[0]["request_id"] == "test-request-42");
+    REQUIRE(records[0]["method"] == "agent.status");
+    REQUIRE(records[1]["event"] == "request.finish");
+    REQUIRE(records[1]["request_id"] == "test-request-42");
+    REQUIRE(records[1]["ok"] == true);
+    REQUIRE(records[1]["duration_ms"].is_number_integer());
+    REQUIRE_FALSE(records[0].contains("text"));
+    std::filesystem::remove_all(home);
 }
