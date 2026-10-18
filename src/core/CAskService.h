@@ -23,6 +23,7 @@
 namespace fcpp
 {
 
+class CLogger;
 class CAnswerService;
 
 /**
@@ -36,7 +37,8 @@ public:
      * @param config_manager Конфигурация.
      * @param project_manager Менеджер проектов.
      */
-    CAskService(const CConfigManager& config_manager, CProjectManager& project_manager);
+    CAskService(const CConfigManager& config_manager, CProjectManager& project_manager,
+                CLogger* logger = nullptr, std::string request_id = {});
 
     /**
      * @brief Деструктор.
@@ -126,6 +128,8 @@ private:
 
     const CConfigManager& m_config_manager; ///< Конфигурация.
     CProjectManager& m_project_manager;     ///< Менеджер проектов.
+    CLogger* m_logger = nullptr;             ///< Optional structured diagnostic sink.
+    std::string m_request_id;                ///< Correlation ID for internal events.
 };
 
 } // namespace fcpp

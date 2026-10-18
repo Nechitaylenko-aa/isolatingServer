@@ -4,6 +4,11 @@
  */
 
 #include "core/CAskService.h"
+#include "core/CLogger.h"
+
+#include <chrono>
+#include <filesystem>
+#include <utility>
 #include "core/CAnswerService.h"
 #include "core/CContextDiagnostics.h"
 #include "core/CContextManager.h"
@@ -57,9 +62,12 @@ std::string format_cursor_hint(const SClangSymbol& symbol)
 
 } // namespace
 
-CAskService::CAskService(const CConfigManager& config_manager, CProjectManager& project_manager)
+CAskService::CAskService(const CConfigManager& config_manager, CProjectManager& project_manager,
+                         CLogger* logger, std::string request_id)
     : m_config_manager(config_manager)
     , m_project_manager(project_manager)
+    , m_logger(logger)
+    , m_request_id(std::move(request_id))
 {
 }
 
@@ -206,17 +214,48 @@ CAskService::EFastPathResult CAskService::try_fast_path(
         if (scope_analyzer.analyze(classification_text, react_context, preclassified_intent, scope_error))
         {
             have_preclassified_intent = true;
+            if (m_logger != nullptr)
+            {
+                m_logger->log_event(ELogLevel::Info, "ask.intent.scope", {
+                    {"request_id", m_request_id}, {"stage", "preflight"},
+                    {"ok", true},
+                    {"scope", preclassified_intent.m_scope == ERequestScope::GeneralEngineering
+                        ? "GENERAL_ENGINEERING" : "CODEBASE"}
+                });
+            }
             if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
             {
                 std::cerr << "fcpp-agent: request scope=GENERAL_ENGINEERING; bypassing code index pipeline\n";
-                return answer_service.answer_general_engineering(text, history, stream, out_answer, on_stream_chunk)
-                    ? EFastPathResult::Answered : EFastPathResult::Failed;
+                const auto answer_started = std::chrono::steady_clock::now();
+                const bool answer_ok = answer_service.answer_general_engineering(
+                    text, history, stream, out_answer, on_stream_chunk);
+                if (m_logger != nullptr)
+                {
+                    m_logger->log_event(answer_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.answer", {
+                        {"request_id", m_request_id}, {"stage", "general_engineering"},
+                        {"ok", answer_ok}, {"answer_bytes", out_answer.size()},
+                        {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - answer_started).count()}
+                    });
+                }
+                return answer_ok ? EFastPathResult::Answered : EFastPathResult::Failed;
             }
         }
-        else if (!scope_error.empty())
+        else
         {
-            std::cerr << "fcpp-agent: request-scope preflight unavailable: " << scope_error
-                      << "; continuing conservatively with codebase path\n";
+            if (m_logger != nullptr)
+            {
+                m_logger->log_event(ELogLevel::Warn, "ask.intent.scope", {
+                    {"request_id", m_request_id}, {"stage", "preflight"},
+                    {"ok", false}, {"error_present", !scope_error.empty()},
+                    {"fallback", "codebase"}
+                });
+            }
+            if (!scope_error.empty())
+            {
+                std::cerr << "fcpp-agent: request-scope preflight unavailable: " << scope_error
+                          << "; continuing conservatively with codebase path\n";
+            }
         }
     }
 
@@ -224,7 +263,20 @@ CAskService::EFastPathResult CAskService::try_fast_path(
     {
         const CReActAgent agent(m_config_manager, m_project_manager);
         EModelLevel react_candidate_level = EModelLevel::Lite;
-        if (agent.run(text, react_context, context_json, history, out_answer, react_candidate_level, {}))
+        const auto react_started = std::chrono::steady_clock::now();
+        const bool react_ok = agent.run(text, react_context, context_json, history,
+                                        out_answer, react_candidate_level, {});
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(react_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.react", {
+                {"request_id", m_request_id}, {"ok", react_ok},
+                {"candidate_level", static_cast<int>(react_candidate_level)},
+                {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - react_started).count()},
+                {"answer_bytes", react_ok ? out_answer.size() : 0}
+            });
+        }
+        if (react_ok)
         {
             const SAnswerQualityAssessment quality =
                 answer_service.assess_answer_quality(react_candidate_level, text, out_answer);
@@ -261,6 +313,28 @@ bool CAskService::answer_codebase_request(
 {
     const SConfig& config = m_config_manager.config();
     const CAnswerService answer_service(m_config_manager, m_project_manager);
+    if (m_logger != nullptr)
+    {
+        const bool has_project = m_project_manager.has_current();
+        nlohmann::json fields = {
+            {"request_id", m_request_id}, {"project_open", has_project}
+        };
+        if (has_project)
+        {
+            const SProjectContext& project = m_project_manager.current();
+            fields["project_id"] = project.m_project.m_project_id;
+            fields["index_state"] = static_cast<int>(project.m_index_status.m_state);
+            fields["index_generation"] = project.m_index_status.m_generation;
+            fields["index_files"] = project.m_index_status.m_file_count;
+            fields["index_symbols"] = project.m_index_status.m_symbol_count;
+            fields["index_stale_files"] = project.m_index_status.m_stale_files;
+            std::error_code db_error;
+            fields["index_db_exists"] = std::filesystem::exists(project.m_project.m_db_path, db_error);
+            fields["index_db_check_error"] = static_cast<bool>(db_error);
+        }
+        m_logger->log_event(has_project ? ELogLevel::Info : ELogLevel::Warn,
+                            "ask.project_index", fields);
+    }
     // Bound the state passed to the Intent/composition models independently from the
     // answer and ReAct budgets. Old turns remain in SQLite and are only omitted here.
     constexpr std::size_t k_intent_context_budget_tokens = 3000;
@@ -319,9 +393,30 @@ bool CAskService::answer_codebase_request(
             config.m_model_light.m_output_reserve_tokens});
     if (!intent_context.m_ok)
     {
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(ELogLevel::Warn, "ask.context", {
+                {"request_id", m_request_id}, {"stage", "intent"},
+                {"ok", false}, {"error", "context_budget_exceeded"},
+                {"groups", intent_context_groups.size()}
+            });
+        }
         std::cerr << "fcpp-agent: CONTEXT_BUDGET_EXCEEDED for Intent: "
                   << intent_context.m_error << '\n';
         return false;
+    }
+    if (m_logger != nullptr)
+    {
+        std::size_t context_bytes = 0;
+        for (const SModelMessage& message : intent_context.m_messages)
+            context_bytes += message.m_content.size();
+        m_logger->log_event(ELogLevel::Info, "ask.context", {
+            {"request_id", m_request_id}, {"stage", "intent"},
+            {"ok", true}, {"groups", intent_context_groups.size()},
+            {"messages", intent_context.m_messages.size()},
+            {"context_bytes", context_bytes},
+            {"budget_tokens", k_intent_context_budget_tokens}
+        });
     }
     log_context_selection("intent", intent_context);
     for (const SModelMessage& message : intent_context.m_messages)
@@ -363,12 +458,46 @@ bool CAskService::answer_codebase_request(
         if (scope_analyzer.analyze(contextual_text, cursor_hint, preclassified_intent, scope_error))
         {
             have_preclassified_intent = true;
+            if (m_logger != nullptr)
+            {
+                m_logger->log_event(ELogLevel::Info, "ask.intent.scope", {
+                    {"request_id", m_request_id}, {"stage", "contextual_retry"},
+                    {"ok", true},
+                    {"scope", preclassified_intent.m_scope == ERequestScope::GeneralEngineering
+                        ? "GENERAL_ENGINEERING" : "CODEBASE"}
+                });
+            }
             if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
-                return answer_service.answer_general_engineering(text, history, stream, out_answer, on_stream_chunk);
+            {
+                const auto answer_started = std::chrono::steady_clock::now();
+                const bool answer_ok = answer_service.answer_general_engineering(
+                    text, history, stream, out_answer, on_stream_chunk);
+                if (m_logger != nullptr)
+                {
+                    m_logger->log_event(answer_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.answer", {
+                        {"request_id", m_request_id}, {"stage", "general_engineering"},
+                        {"ok", answer_ok}, {"answer_bytes", out_answer.size()},
+                        {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - answer_started).count()}
+                    });
+                }
+                return answer_ok;
+            }
         }
-        else if (!scope_error.empty())
-            std::cerr << "fcpp-agent: request-scope preflight unavailable: "
-                      << scope_error << "; continuing with codebase pipeline\n";
+        else
+        {
+            if (m_logger != nullptr)
+            {
+                m_logger->log_event(ELogLevel::Warn, "ask.intent.scope", {
+                    {"request_id", m_request_id}, {"stage", "contextual_retry"},
+                    {"ok", false}, {"error_present", !scope_error.empty()},
+                    {"fallback", "codebase"}
+                });
+            }
+            if (!scope_error.empty())
+                std::cerr << "fcpp-agent: request-scope preflight unavailable: "
+                          << scope_error << "; continuing with codebase pipeline\n";
+        }
     }
 
     // Фаза A (ADR-17): декомпозиция в вектор ТЕКСТОВЫХ подвопросов (нить).
@@ -431,6 +560,14 @@ bool CAskService::answer_codebase_request(
         }
         else if (!analyzer.analyze(question, question_hint, intent, error))
         {
+            if (m_logger != nullptr)
+            {
+                m_logger->log_event(ELogLevel::Warn, "ask.intent", {
+                    {"request_id", m_request_id}, {"step", index},
+                    {"ok", false}, {"error_present", !error.empty()},
+                    {"reused_preclassification", false}
+                });
+            }
             std::cerr << "шаг " << index << ": NOT_UNDERSTOOD: " << error << '\n';
             continue;
         }
@@ -444,8 +581,35 @@ bool CAskService::answer_codebase_request(
                   << (intent.m_subject.m_name.empty() ? "(context)" : intent.m_subject.m_name)
                   << " / " << relation_name(intent.m_relation)
                   << " / " << projection_name(intent.m_projection) << "\n";
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(ELogLevel::Info, "ask.intent", {
+                {"request_id", m_request_id}, {"step", index}, {"ok", true},
+                {"reused_preclassification", reuse_preclassification},
+                {"area", area_name(intent.m_area)},
+                {"subject_kind", subject_kind_name(intent.m_subject.m_kind)},
+                {"subject_named", !intent.m_subject.m_name.empty()},
+                {"relation", relation_name(intent.m_relation)},
+                {"projection", projection_name(intent.m_projection)},
+                {"confidence", intent.m_confidence}
+            });
+        }
 
+        const auto pipeline_started = std::chrono::steady_clock::now();
         const SRequestOutcome outcome = pipeline.run_from_intent(intent);
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(outcome.m_kind == EOutcomeKind::Ok ? ELogLevel::Info : ELogLevel::Warn,
+                                "ask.pipeline", {
+                {"request_id", m_request_id}, {"step", index},
+                {"outcome", outcome_kind_name(outcome.m_kind)},
+                {"stage", stage_name(outcome.m_stage)},
+                {"planned_tools", outcome.m_plan.m_tools.size()},
+                {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - pipeline_started).count()},
+                {"options", outcome.m_options.size()}
+            });
+        }
         if (outcome.m_kind == EOutcomeKind::Clarify)
         {
             clarification += "Уточните, что имеется в виду:";
@@ -464,7 +628,21 @@ bool CAskService::answer_codebase_request(
         }
 
         SEvidence step_evidence;
-        if (!collector.collect(intent, outcome.m_plan, step_evidence))
+        const auto evidence_started = std::chrono::steady_clock::now();
+        const bool evidence_ok = collector.collect(intent, outcome.m_plan, step_evidence);
+        std::size_t evidence_bytes = 0;
+        for (const SEvidenceSection& section : step_evidence.m_sections)
+            evidence_bytes += section.m_text.size();
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(evidence_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.evidence", {
+                {"request_id", m_request_id}, {"step", index}, {"ok", evidence_ok},
+                {"sections", step_evidence.m_sections.size()}, {"evidence_bytes", evidence_bytes},
+                {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - evidence_started).count()}
+            });
+        }
+        if (!evidence_ok)
         {
             std::cerr << "шаг " << index << ": нет данных\n";
             continue;
@@ -482,7 +660,29 @@ bool CAskService::answer_codebase_request(
     if (produced)
     {
         // Финал: ответ по накопленному Evidence всей нити.
-        return answer_service.answer_from_evidence(contextual_text, accumulated, stream, out_answer, on_stream_chunk);
+        std::size_t evidence_bytes = 0;
+        for (const SEvidenceSection& section : accumulated.m_sections)
+            evidence_bytes += section.m_text.size();
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(ELogLevel::Info, "ask.evidence.total", {
+                {"request_id", m_request_id}, {"sections", accumulated.m_sections.size()},
+                {"evidence_bytes", evidence_bytes}
+            });
+        }
+        const auto answer_started = std::chrono::steady_clock::now();
+        const bool answer_ok = answer_service.answer_from_evidence(
+            contextual_text, accumulated, stream, out_answer, on_stream_chunk);
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(answer_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.answer", {
+                {"request_id", m_request_id}, {"stage", "evidence"},
+                {"ok", answer_ok}, {"answer_bytes", out_answer.size()},
+                {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - answer_started).count()}
+            });
+        }
+        return answer_ok;
     }
 
     if (!clarification.empty())
@@ -492,6 +692,14 @@ bool CAskService::answer_codebase_request(
         return false;
     }
 
+    if (m_logger != nullptr)
+    {
+        m_logger->log_event(ELogLevel::Warn, "ask.finish", {
+            {"request_id", m_request_id}, {"ok", false},
+            {"reason", "no_evidence_or_clarification"},
+            {"questions", questions.size()}, {"evidence_sections", accumulated.m_sections.size()}
+        });
+    }
     std::cerr << "fcpp-agent: в индексе недостаточно информации, чтобы уверенно ответить\n";
     return false;
 }
@@ -507,6 +715,24 @@ bool CAskService::ask(const std::string& text,
                       const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     out_answer.clear();
+
+    if (m_logger != nullptr)
+    {
+        nlohmann::json fields = {
+            {"request_id", m_request_id}, {"text_bytes", text.size()},
+            {"history_turns", history.size()}, {"has_editor", !cursor_file.empty()},
+            {"context_bytes", context_json.size()}
+        };
+        if (m_project_manager.has_current())
+        {
+            const SProjectContext& project = m_project_manager.current();
+            fields["project_id"] = project.m_project.m_project_id;
+            fields["index_state"] = static_cast<int>(project.m_index_status.m_state);
+            fields["index_files"] = project.m_index_status.m_file_count;
+            fields["index_symbols"] = project.m_index_status.m_symbol_count;
+        }
+        m_logger->log_event(ELogLevel::Info, "ask.start", fields);
+    }
 
     const CAnswerService answer_service(m_config_manager, m_project_manager);
 
@@ -536,12 +762,34 @@ bool CAskService::ask(const std::string& text,
     const EFastPathResult fast_path = try_fast_path(
         text, react_context, context_json, history, stream, out_answer, on_stream_chunk,
         answer_service, preclassified_intent, have_preclassified_intent);
-    if (fast_path == EFastPathResult::Answered) return true;
-    if (fast_path == EFastPathResult::Failed) return false;
+    if (fast_path == EFastPathResult::Answered || fast_path == EFastPathResult::Failed)
+    {
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(fast_path == EFastPathResult::Answered ? ELogLevel::Info : ELogLevel::Warn,
+                                "ask.finish", {
+                {"request_id", m_request_id},
+                {"ok", fast_path == EFastPathResult::Answered},
+                {"route", "fast_path"}, {"answer_bytes", out_answer.size()}
+            });
+        }
+        return fast_path == EFastPathResult::Answered;
+    }
 
-    return answer_codebase_request(
+    const auto codebase_started = std::chrono::steady_clock::now();
+    const bool answer_ok = answer_codebase_request(
         text, cursor_file, cursor_line, cursor_col, context_json, history,
         preclassified_intent, have_preclassified_intent, stream, out_answer, on_stream_chunk);
+    if (m_logger != nullptr)
+    {
+        m_logger->log_event(answer_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.finish", {
+            {"request_id", m_request_id}, {"ok", answer_ok}, {"route", "codebase"},
+            {"answer_bytes", out_answer.size()},
+            {"duration_ms", std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - codebase_started).count()}
+        });
+    }
+    return answer_ok;
 }
 
 } // namespace fcpp

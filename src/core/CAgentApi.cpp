@@ -288,7 +288,9 @@ SApiResponse CAgentApi::execute(const SApiRequest& request)
         {"has_editor", !request.m_editor_file.empty()}, {"stream", request.m_stream}
     });
 
-    SApiResponse response = execute_impl(request);
+    SApiRequest traced_request = request;
+    traced_request.m_request_id = request_id;
+    SApiResponse response = execute_impl(traced_request);
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - started).count();
     m_logger.log_event(response.m_ok ? ELogLevel::Info : ELogLevel::Warn, "request.finish", {
@@ -664,7 +666,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
     }
 
-    CAskService service(m_config_manager, m_project_manager);
+    CAskService service(m_config_manager, m_project_manager, &m_logger, request.m_request_id);
     SApiResponse response;
     std::string answer;
     response.m_ok = service.ask(effective_text,
