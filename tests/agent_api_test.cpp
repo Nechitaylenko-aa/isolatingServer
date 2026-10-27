@@ -127,13 +127,12 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     REQUIRE(session_response.m_ok);
     REQUIRE_FALSE(session_response.m_session_id.empty());
 
-    // После перезапуска клиент восстанавливает адрес диалога у агента,
-    // хранящего id в БД, а не у себя.
-    fcpp::SApiRequest session_resume;
-    session_resume.m_method = fcpp::EApiMethod::SessionResume;
-    const fcpp::SApiResponse resumed = api.execute(session_resume);
-    REQUIRE(resumed.m_ok);
-    REQUIRE(resumed.m_session_id == session_response.m_session_id);
+    // resume требует открытого проекта: иначе адрес диалога не определён.
+    fcpp::SApiRequest resume_without_project;
+    resume_without_project.m_method = fcpp::EApiMethod::SessionResume;
+    const fcpp::SApiResponse resume_rejected = api.execute(resume_without_project);
+    REQUIRE_FALSE(resume_rejected.m_ok);
+    REQUIRE(resume_rejected.m_error == fcpp::EErrorKind::ProjectNotOpen);
 
     fcpp::SApiRequest update_context;
     update_context.m_method = fcpp::EApiMethod::SessionUpdateContext;
@@ -153,6 +152,25 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     const fcpp::SApiResponse open_response = api.execute(open_request);
     REQUIRE(open_response.m_ok);
     REQUIRE_FALSE(open_response.m_project_id.empty());
+    // «Проект открыт» = «проект адресуем»: клиенту не нужно угадывать
+    // необходимость session.open для нового проекта.
+    REQUIRE_FALSE(open_response.m_session_id.empty());
+
+    fcpp::SApiRequest open_again;
+    open_again.m_method = fcpp::EApiMethod::ProjectOpen;
+    open_again.m_path = project_dir.string();
+    const fcpp::SApiResponse reopened = api.execute(open_again);
+    REQUIRE(reopened.m_ok);
+    REQUIRE(reopened.m_session_id == open_response.m_session_id);
+
+    // После перезапуска клиент восстанавливает адрес диалога у агента,
+    // хранящего id в БД, а не у себя.
+    fcpp::SApiRequest session_resume;
+    session_resume.m_method = fcpp::EApiMethod::SessionResume;
+    const fcpp::SApiResponse resumed = api.execute(session_resume);
+    REQUIRE(resumed.m_ok);
+    REQUIRE(resumed.m_session_id == open_response.m_session_id);
+    REQUIRE(resumed.m_project_id == open_response.m_project_id);
 
     fcpp::SApiRequest profile_request;
     profile_request.m_method = fcpp::EApiMethod::ProjectProfileSet;

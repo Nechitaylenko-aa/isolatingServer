@@ -449,7 +449,7 @@ bool CConversationStore::bind_project(const std::string& session_id,
         "UPDATE conversation_session SET project_id=?1, updated_at=?2 "
         "WHERE session_id=?3 AND closed_at IS NULL AND project_id=''");
     if (!statement.ok()
-        || statement.bind_text(1, project_id)
+        || !statement.bind_text(1, project_id)
         || !statement.bind_int64(2, now_unix_seconds())
         || !statement.bind_text(3, session_id))
     {
