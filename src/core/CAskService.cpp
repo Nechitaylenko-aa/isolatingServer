@@ -792,7 +792,7 @@ bool CAskService::ask(const std::string& text,
             cursor_symbol(turn.m_editor_file, turn.m_editor_line, turn.m_editor_column);
         if (previous_symbol.has_value())
         {
-            turn.m_user_text += "\\n[Previous turn cursor symbol: "
+            turn.m_user_text += "\n[Previous turn cursor symbol: "
                 + format_cursor_hint(*previous_symbol) + "]";
             ++history_cursor_resolved;
         }

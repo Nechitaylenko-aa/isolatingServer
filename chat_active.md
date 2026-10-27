@@ -115,3 +115,9 @@
 - Перед маршрутизацией `ask` агент пытается восстановить символ по курсору в четырёх последних ходах и добавляет только имя/вид сущности как `[Previous turn cursor symbol: ...]` в временную проекцию контекста. Исторические события не переписываются.
 - Добавлено событие `ask.history_cursor` с количеством проверенных ходов и разрешённых символов; пути и имена не попадают в журнал.
 - Тесты проверяют replay координат. Регрессионный тест streaming обновлён: после отказа ReAct от неподтверждённого ответа корректным результатом может быть `CLARIFY`, а не только ошибка; запрещено выдавать/стримить отвергнутый текст.
+
+
+### Follow-up cursor-context CI correction
+
+- CI for `b6a2d67` found `-Wmissing-field-initializers` after adding editor metadata to `SConversationTurn`. The type now has a constructor with defaults so existing three-field turn creation remains source-compatible and warning-clean.
+- The historical cursor marker now uses an actual newline and the Intent prompt explicitly distinguishes a previous-turn cursor from the current editor cursor.

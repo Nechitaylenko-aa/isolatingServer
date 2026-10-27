@@ -46,8 +46,11 @@ constexpr const char* k_system_prompt =
     "- For a follow-up such as 'А что он делает?', 'А где это используется?', 'What does it do?' or 'Where is that called?', reuse the one clearly discussed repository symbol from recent turns.\n"
     "- If recent conversation contains multiple plausible symbols, or no clear symbol, set name=\"\" and let the agent ask a clarification. Do not choose the most recent symbol merely because it is recent.\n"
     "- If a '[cursor symbol: NAME (KIND)]' hint is present, treat NAME as the subject the "
-    "user points at: if the question is about it, set name=NAME and selection=CURSOR. "
+    "user points at now: if the question is about it, set name=NAME and selection=CURSOR. "
     "If the question is not about it (global/project question), ignore the hint.\n"
+    "- A '[Previous turn cursor symbol: NAME (KIND)]' marker belongs to an earlier user turn, not the current editor cursor. "
+    "Use it only when the current message clearly follows up on that earlier turn and the antecedent is unambiguous; "
+    "do not let it override a newer explicit symbol or a different current topic.\n"
     "- If the request is deictic ('этот класс', 'эта функция', 'this', 'here') and neither the current cursor nor recent conversation identifies one unambiguous symbol, set name=\"\" (empty). NEVER guess a name from the file name or path.\n";
 
 std::size_t count_occurrences(const std::string& text, const std::string& needle)

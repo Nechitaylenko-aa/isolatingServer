@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 struct sqlite3;
@@ -44,6 +45,23 @@ struct SConversationEvent
 /** @brief Completed conversational turn reconstructed from immutable events. */
 struct SConversationTurn
 {
+    SConversationTurn() = default;
+
+    SConversationTurn(std::int64_t last_event_id,
+                      std::string user_text,
+                      std::string assistant_text,
+                      std::string editor_file = {},
+                      unsigned editor_line = 0,
+                      unsigned editor_column = 0)
+        : m_last_event_id(last_event_id)
+        , m_user_text(std::move(user_text))
+        , m_assistant_text(std::move(assistant_text))
+        , m_editor_file(std::move(editor_file))
+        , m_editor_line(editor_line)
+        , m_editor_column(editor_column)
+    {
+    }
+
     std::int64_t m_last_event_id = 0;
     std::string m_user_text;
     std::string m_assistant_text;

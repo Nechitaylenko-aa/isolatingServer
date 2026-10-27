@@ -221,3 +221,9 @@
 - **Исправление:** расширить временную модель `SConversationTurn` координатами редактора; восстанавливать их при replay; на последующих запросах best-effort разрешать символ в четырёх последних ходах и добавлять структурированный маркер в контекст модели. События журнала остаются append-only.
 - **Тесты:** replay сохраняет координаты; streaming regression фиксирует CLARIFY как корректный fallback после отклонённого кандидата.
 - **Статус:** IMPLEMENTED — ждёт CI и ручного теста «вопрос с курсором → follow-up без курсора».
+
+
+### R20 CI follow-up
+- CI for `b6a2d67` stopped at compile due `-Wmissing-field-initializers` in legacy three-field `SConversationTurn` initializers; this is fixed with a constructor that supplies defaults for new editor metadata.
+- Also clarified the prompt contract for `[Previous turn cursor symbol: ...]` so it cannot be mistaken for the current cursor.
+- **Статус:** awaiting CI after the compatibility fix.
