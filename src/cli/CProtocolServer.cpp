@@ -697,6 +697,9 @@ void CProtocolServer::handle_line(const std::string& request_line)
         error_response.m_ok = false;
         error_response.m_error = EErrorKind::InvalidRequest;
         error_response.m_message = parse_error;
+        // parse_request may have decoded session_id before rejecting another
+        // field; preserve that address in the protocol-level error as well.
+        error_response.m_session_id = request.m_session_id;
         m_output << serialize_response(id, error_response) << '\n';
         m_output.flush();
         return;
