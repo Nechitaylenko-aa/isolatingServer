@@ -98,6 +98,39 @@ bool duplicates_recent_answer(const std::string& answer,
     return false;
 }
 
+bool is_deictic_followup(const std::string& text)
+{
+    std::string normalized = text;
+    const std::string capital_a = "А";
+    const std::string lower_a = "а";
+    for (std::size_t position = normalized.find(capital_a);
+         position != std::string::npos;
+         position = normalized.find(capital_a, position + lower_a.size()))
+    {
+        normalized.replace(position, capital_a.size(), lower_a);
+    }
+    const std::string capital_what = "Что";
+    const std::string lower_what = "что";
+    for (std::size_t position = normalized.find(capital_what);
+         position != std::string::npos;
+         position = normalized.find(capital_what, position + lower_what.size()))
+    {
+        normalized.replace(position, capital_what.size(), lower_what);
+    }
+    return normalized.find("а что он делает") != std::string::npos
+        || normalized.find("что он делает") != std::string::npos
+        || normalized.find("а что она делает") != std::string::npos
+        || normalized.find("что она делает") != std::string::npos
+        || normalized.find("а что оно делает") != std::string::npos
+        || normalized.find("что оно делает") != std::string::npos
+        || normalized.find("а что это делает") != std::string::npos
+        || normalized.find("что это делает") != std::string::npos
+        || normalized.find("а что здесь происходит") != std::string::npos
+        || normalized.find("что здесь происходит") != std::string::npos
+        || normalized.find("а где он используется") != std::string::npos
+        || normalized.find("где он используется") != std::string::npos;
+}
+
 bool asks_about_unnamed_method(const std::string& text)
 {
     std::string normalized = text;
@@ -250,6 +283,13 @@ CAskService::EFastPathResult CAskService::try_fast_path(
     const SConfig& config = m_config_manager.config();
     {
         std::string classification_text = "[Current user message]\n" + text;
+        const bool authoritative_cursor =
+            react_context.find("[cursor symbol: ") != std::string::npos;
+        if (authoritative_cursor)
+        {
+            classification_text += "\n[Authoritative subject: use the symbol at the current cursor; "
+                                   "do not replace it with a subject from prior assistant answers.]";
+        }
         if (!history.empty())
         {
             classification_text += "\n\n[Recent conversation for reference resolution; not a new request]\n";
@@ -257,7 +297,12 @@ CAskService::EFastPathResult CAskService::try_fast_path(
             for (std::size_t i = first; i < history.size(); ++i)
             {
                 classification_text += "User: " + history[i].m_user_text + "\n";
-                classification_text += "Assistant: " + history[i].m_assistant_text + "\n";
+                // With a resolved current cursor, prior assistant text is not
+                // allowed to override the editor's current subject.
+                if (!authoritative_cursor)
+                {
+                    classification_text += "Assistant: " + history[i].m_assistant_text + "\n";
+                }
             }
         }
         if (!context_json.empty() && context_json != "{}")
@@ -856,9 +901,25 @@ bool CAskService::ask(const std::string& text,
         }
     }
 
+    const bool current_cursor_resolved =
+        react_context.find("[cursor symbol: ") != std::string::npos;
+    if (has_current_cursor && !current_cursor_resolved && is_deictic_followup(text))
+    {
+        out_answer = "Уточните, что имеется в виду: не удалось определить символ под текущим курсором. "
+                     "Переместите курсор на нужный метод или назовите его явно.";
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(ELogLevel::Warn, "ask.cursor.unresolved_followup", {
+                {"request_id", m_request_id}, {"symbol_resolved", false},
+                {"route", "clarify"}
+            });
+        }
+        return false;
+    }
+
     if (m_logger != nullptr && !cursor_file.empty())
     {
-        const bool symbol_resolved = react_context.find("[cursor symbol: ") != std::string::npos;
+        const bool symbol_resolved = current_cursor_resolved;
         const bool anchor_resolved = react_context.find("[hierarchy anchor: ") != std::string::npos;
         m_logger->log_event(symbol_resolved ? ELogLevel::Info : ELogLevel::Warn, "ask.cursor", {
             {"request_id", m_request_id}, {"cursor_provided", true},
