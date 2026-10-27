@@ -33,14 +33,14 @@
 {
   "id": "req-1",
   "error": {
-    "code": "INVALID_REQUEST",
+    "code": "InvalidRequest",
     "message": "Human-readable description",
     "details": {}
   }
 }
 ```
 
-Коды ошибок — строковые значения. Клиент не должен зависеть от текста `message`; показывать его пользователю допустимо.
+Коды ошибок — регистрозависимые строки с именами C++-enum: `InvalidRequest`, `SymbolNotFound`, `Ambiguous`, `NotUnderstood`, `IndexNotReady`, `IndexStale`, `IoError`, `ProjectNotOpen`, `PermissionDenied`, `PatchInvalid`, `PatchApplyFailed`, `BuildFailed`. Клиент не должен зависеть от текста `message`; показывать его пользователю допустимо. `Ok` — значение отсутствия ошибки и не должно встречаться в объекте `error`.
 
 ## 3. Проект и сессия
 
@@ -81,6 +81,24 @@
 ```
 
 Можно передать `projectId`, если нужно явно указать уже открытый проект. Успех содержит `result.project_id` и `result.session_id`.
+
+### Пример CLI
+
+```sh
+# Открыть проект; команда выводит project_id и session_id
+fcpp-agent open /absolute/path/to/project
+
+# Каждый ask использует адрес сессии, полученный при open
+fcpp-agent ask "Что делает этот метод?" --session session-...
+
+# В отдельном запуске восстановить сессию, указав проект
+fcpp-agent session resume /absolute/path/to/project
+
+# Закрыть конкретную сессию
+fcpp-agent session close session-...
+```
+
+CLI — такой же клиент API, как IDE-плагин. Команда `open` выводит `session_id`; `session resume` в однократном CLI-процессе принимает путь проекта (либо восстанавливает ранее открытый проект, если путь не указан и сохранённый адрес доступен).
 
 ### Рекомендуемый жизненный цикл клиента
 
