@@ -22,6 +22,7 @@ enum class EErrorKind
     InvalidRequest, ///< Некорректный запрос.
     SymbolNotFound, ///< Сущность не найдена.
     Ambiguous,      ///< Неоднозначное совпадение.
+    NotUnderstood,  ///< Запрос не удалось понять или подтвердить.
     IndexNotReady,  ///< Индекс не готов.
     IndexStale,     ///< Индекс устарел.
     IoError,        ///< Ошибка ввода-вывода.
