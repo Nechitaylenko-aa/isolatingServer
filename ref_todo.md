@@ -226,4 +226,4 @@
 ### R20 CI follow-up
 - CI for `b6a2d67` stopped at compile due `-Wmissing-field-initializers` in legacy three-field `SConversationTurn` initializers; this is fixed with a constructor that supplies defaults for new editor metadata.
 - Also clarified the prompt contract for `[Previous turn cursor symbol: ...]` so it cannot be mistaken for the current cursor.
-- **Статус:** awaiting CI after the compatibility fix.
+- **Статус:** CODE + TESTS DONE — CI `40544183171` зелёный (Build и 117/117 CTest); осталось ручное LLM-тестирование и анализ реальных JSONL-трасс.

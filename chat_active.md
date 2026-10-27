@@ -3,7 +3,7 @@
 Обновлено: 2026-10-27
 Репозиторий: https://github.com/Nechitaylenko-aa/isolatingServer
 Рабочая ветка: `dev`
-Последний подтверждённый базовый коммит: `16199a3dcc43c5547ba3dd5d694d90b9d03627a8` (коррелированная диагностика внутренних стадий `ask`, CI зелёный). Следующий пакет уточняет обработку отсутствующего субъекта и разрешение ссылок на объект в истории диалога.
+Текущий HEAD перед синхронизацией этого файла: `4568ed43625391e0cd09fc77c9fd51f640ead4c8`. CI run `40544183171` завершился успешно: сборка и 117/117 CTest прошли. Пакет уточняет обработку отсутствующего субъекта и сохраняет курсорный объект для последующих вопросов.
 
 ## Назначение
 
@@ -121,3 +121,10 @@
 
 - CI for `b6a2d67` found `-Wmissing-field-initializers` after adding editor metadata to `SConversationTurn`. The type now has a constructor with defaults so existing three-field turn creation remains source-compatible and warning-clean.
 - The historical cursor marker now uses an actual newline and the Intent prompt explicitly distinguishes a previous-turn cursor from the current editor cursor.
+
+
+## Проверка пакета контекста (2026-10-27)
+
+- Коммит `4568ed4` включает совместимость `SConversationTurn` с прежними трёхполевыми инициализаторами через конструктор с параметрами по умолчанию.
+- CI run `40544183171`: Build успешно; 117/117 CTest прошли. Ранний запуск `332ad99` остановился на LLVM apt signing key, а первый прогон `515f9a9` дошёл до тестов и выявил устаревшее ожидание streaming regression; после фикса контракта уточнения тест зелёный.
+- Осталось проверить на реальном LLM: (1) «Что делает этот метод?» без курсора и без antecedent → уточнение; (2) вопрос с курсором → follow-up без курсора разрешает тот же символ; (3) два возможных antecedent → уточнение; (4) общий вопрос RAII не захватывает курсорный контекст.
