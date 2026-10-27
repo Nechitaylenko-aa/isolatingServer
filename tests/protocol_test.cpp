@@ -142,6 +142,27 @@ TEST_CASE("protocol rejects malformed parameter types and non-object params", "[
     REQUIRE(error == "field 'params.editor.cursor.line' must be a non-negative 32-bit integer");
 }
 
+TEST_CASE("protocol preserves a decoded session id when later ask validation fails", "[protocol][validation][session]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"bad-ask","method":"ask","params":{"session_id":"session-kept"}})",
+        request, id, error));
+    REQUIRE(request.m_session_id == "session-kept");
+
+    fcpp::SApiResponse response;
+    response.m_ok = false;
+    response.m_error = fcpp::EErrorKind::InvalidRequest;
+    response.m_message = error;
+    response.m_session_id = request.m_session_id;
+    const nlohmann::json document = nlohmann::json::parse(
+        fcpp::CProtocolServer::serialize_response(id, response));
+    REQUIRE(document["error"]["session_id"] == "session-kept");
+}
+
 TEST_CASE("protocol requires a session for every ask", "[protocol][validation][session]")
 {
     fcpp::SApiRequest request;
