@@ -601,23 +601,28 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         }
         case EApiMethod::SessionResume:
         {
-            // Идентификатор сессии генерирует только агент, поэтому после
-            // перезапуска клиент восстанавливает адрес диалога запросом, а не
-            // хранением id у себя. Явный projectId в params имеет приоритет.
-            std::string project_id = request.m_project_id;
-            const bool explicit_project = !project_id.empty();
-            if (!explicit_project && m_project_manager.has_current())
+            // Resume is scoped to the currently opened project. A projectId
+            // parameter may confirm the address, but must not let a client
+            // select an arbitrary project's session without opening it.
+            if (!m_project_manager.is_opened())
             {
-                project_id = m_project_manager.current().m_project.m_project_id;
+                m_project_manager.restore_session();
             }
-            if (project_id.empty())
+            if (!m_project_manager.is_opened() || !m_project_manager.has_current())
             {
-                // Без открытого проекта адрес диалога не определён: поиск
-                // «любой сессии в базе» вернул бы историю чужого проекта.
                 return make_error(EErrorKind::ProjectNotOpen,
                                   "project not open; session.resume requires an open project");
             }
-            const auto session = m_conversation_store.latest_session_for_project(project_id);
+
+            const std::string& current_project =
+                m_project_manager.current().m_project.m_project_id;
+            if (!request.m_project_id.empty() && request.m_project_id != current_project)
+            {
+                return make_error(EErrorKind::InvalidRequest,
+                                  "projectId does not match the currently opened project");
+            }
+
+            const auto session = m_conversation_store.latest_session_for_project(current_project);
             if (!session.has_value())
             {
                 return make_error(EErrorKind::SymbolNotFound,
