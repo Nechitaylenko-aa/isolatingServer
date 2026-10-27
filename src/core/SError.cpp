@@ -20,6 +20,7 @@ static const char* const m_error_kind_names[static_cast<std::size_t>(EErrorKind:
     "InvalidRequest",
     "SymbolNotFound",
     "Ambiguous",
+    "NotUnderstood",
     "IndexNotReady",
     "IndexStale",
     "IoError",
