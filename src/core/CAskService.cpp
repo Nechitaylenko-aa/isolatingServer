@@ -983,7 +983,8 @@ bool CAskService::ask(const std::string& text,
 
     const bool current_cursor_resolved =
         react_context.find("[cursor symbol: ") != std::string::npos;
-    if (has_current_cursor && !current_cursor_resolved && is_deictic_followup(text))
+    if (has_current_cursor && !current_cursor_resolved
+        && (is_deictic_followup(text) || asks_about_unnamed_method(text)))
     {
         out_answer = "Уточните, что имеется в виду: не удалось определить символ под текущим курсором. "
                      "Переместите курсор на нужный метод или назовите его явно.";
