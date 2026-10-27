@@ -183,7 +183,10 @@ TEST_CASE("pipeline: light-restored project is not treated as fully opened", "[p
     REQUIRE(config.load());
     {
         fcpp::CProjectManager opened(config);
-        REQUIRE(opened.open(project));
+        std::string open_failure_stage;
+        const bool opened_ok = opened.open(project, &open_failure_stage);
+        INFO("project.open failure stage: " << open_failure_stage);
+        REQUIRE(opened_ok);
         REQUIRE(opened.is_opened());
         REQUIRE(opened.save_session());
         opened.close();
