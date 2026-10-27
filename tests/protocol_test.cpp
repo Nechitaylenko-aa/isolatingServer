@@ -142,6 +142,23 @@ TEST_CASE("protocol rejects malformed parameter types and non-object params", "[
     REQUIRE(error == "field 'params.editor.cursor.line' must be a non-negative 32-bit integer");
 }
 
+TEST_CASE("protocol requires a session for every ask", "[protocol][validation][session]")
+{
+    fcpp::SApiRequest request;
+    std::string id;
+    std::string error;
+
+    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"anon-ask","method":"ask","params":{"text":"что делает этот метод?"}})",
+        request, id, error));
+    REQUIRE(error == "missing or empty required field: params.session_id");
+
+    REQUIRE(fcpp::CProtocolServer::parse_request(
+        R"({"id":"session-ask","method":"ask","params":{"session_id":"s-1","text":"что делает этот метод?"}})",
+        request, id, error));
+    REQUIRE(request.m_session_id == "s-1");
+}
+
 TEST_CASE("protocol rejects missing required fields and invalid identifiers", "[protocol][validation]")
 {
     fcpp::SApiRequest request;

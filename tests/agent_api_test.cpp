@@ -127,6 +127,14 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     REQUIRE(session_response.m_ok);
     REQUIRE_FALSE(session_response.m_session_id.empty());
 
+    // После перезапуска клиент восстанавливает адрес диалога у агента,
+    // хранящего id в БД, а не у себя.
+    fcpp::SApiRequest session_resume;
+    session_resume.m_method = fcpp::EApiMethod::SessionResume;
+    const fcpp::SApiResponse resumed = api.execute(session_resume);
+    REQUIRE(resumed.m_ok);
+    REQUIRE(resumed.m_session_id == session_response.m_session_id);
+
     fcpp::SApiRequest update_context;
     update_context.m_method = fcpp::EApiMethod::SessionUpdateContext;
     update_context.m_session_id = session_response.m_session_id;
@@ -250,12 +258,29 @@ TEST_CASE("agent API: question about unnamed method returns CLARIFY", "[api][ask
     REQUIRE(config.load());
 
     fcpp::CAgentApi api(config);
+
+    // Диалог адресуется сессией: без неё ask отклоняется.
+    fcpp::SApiRequest anonymous;
+    anonymous.m_method = fcpp::EApiMethod::Ask;
+    anonymous.m_text = "Что делает этот метод?";
+    const fcpp::SApiResponse anonymous_response = api.execute(anonymous);
+    REQUIRE_FALSE(anonymous_response.m_ok);
+    REQUIRE(anonymous_response.m_error == fcpp::EErrorKind::InvalidRequest);
+
+    fcpp::SApiRequest session_open;
+    session_open.m_method = fcpp::EApiMethod::SessionOpen;
+    const fcpp::SApiResponse session = api.execute(session_open);
+    REQUIRE(session.m_ok);
+    REQUIRE_FALSE(session.m_session_id.empty());
+
     fcpp::SApiRequest request;
     request.m_method = fcpp::EApiMethod::Ask;
+    request.m_session_id = session.m_session_id;
     request.m_text = "Что делает этот метод?";
     const fcpp::SApiResponse response = api.execute(request);
     REQUIRE(response.m_ok);
     REQUIRE(response.m_state == "CLARIFY");
+    REQUIRE(response.m_session_id == session.m_session_id);
     REQUIRE(response.m_has_question);
     REQUIRE_FALSE(response.m_question.m_questions.empty());
     REQUIRE(response.m_question.m_questions.front().m_text.find("какой метод") != std::string::npos);

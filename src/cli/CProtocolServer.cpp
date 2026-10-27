@@ -58,6 +58,11 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::SessionOpen;
         return true;
     }
+    if (name == "session.resume")
+    {
+        out = EApiMethod::SessionResume;
+        return true;
+    }
     if (name == "session.close")
     {
         out = EApiMethod::SessionClose;
@@ -330,6 +335,7 @@ bool CProtocolServer::parse_request(const std::string& text,
         {"text", EExpectedJsonType::String}, {"answer", EExpectedJsonType::Object},
         {"question_id", EExpectedJsonType::Integer}, {"profile", EExpectedJsonType::String},
         {"session_id", EExpectedJsonType::String}, {"sessionId", EExpectedJsonType::String},
+        {"projectId", EExpectedJsonType::String},
         {"tool", EExpectedJsonType::String}, {"target", EExpectedJsonType::String},
         {"payload", EExpectedJsonType::String}, {"limit", EExpectedJsonType::UnsignedInteger},
         {"assumeYes", EExpectedJsonType::Boolean}, {"buildAfter", EExpectedJsonType::Boolean},
@@ -445,6 +451,10 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_session_id = params["sessionId"].get<std::string>();
     }
+    if (params.contains("projectId") && params["projectId"].is_string())
+    {
+        out_request.m_project_id = params["projectId"].get<std::string>();
+    }
     if (params.contains("context"))
     {
         out_request.m_context_json = params["context"].dump();
@@ -519,6 +529,12 @@ bool CProtocolServer::parse_request(const std::string& text,
             if (!require_non_empty(out_request.m_payload, "params.payload")) return false;
             break;
         case EApiMethod::Ask:
+            // Жёсткий контракт: диалог адресуется сессией. Без неё ответ не имеет
+            // истории, поэтому запрос отклоняется, а не исполняется анонимно.
+            if (!require_non_empty(out_request.m_session_id, "params.session_id"))
+            {
+                return false;
+            }
             if (params.contains("answer"))
             {
                 if (!out_request.m_text.empty())
@@ -526,8 +542,7 @@ bool CProtocolServer::parse_request(const std::string& text,
                     out_error = "params.text and params.answer are mutually exclusive";
                     return false;
                 }
-                if (!require_non_empty(out_request.m_session_id, "params.session_id")
-                        || out_request.m_answer_question_id == 0
+                if (out_request.m_answer_question_id == 0
                         || !require_non_empty(out_request.m_selected_option, "params.answer.option"))
                 {
                     if (out_error.empty()) out_error = "params.answer requires a non-zero question_id";
@@ -655,6 +670,12 @@ std::string CProtocolServer::serialize_response(const std::string& id,
             {"message", response.m_message},
             {"details", nlohmann::json::object()}
         };
+        // Адрес диалога обязателен и в ошибке: иначе клиент теряет привязку
+        // ответа к сессии при любом отказе.
+        if (!response.m_session_id.empty())
+        {
+            document["error"]["session_id"] = response.m_session_id;
+        }
     }
 
     return document.dump();

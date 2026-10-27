@@ -44,6 +44,7 @@ enum class EApiMethod
     Doctor,          ///< Проверка окружения.
     Ask,             ///< Пользовательский AI-запрос (§89.13, §94).
     SessionOpen,     ///< Создать conversation session.
+    SessionResume,   ///< Восстановить адрес активной сессии проекта.
     SessionClose,    ///< Закрыть conversation session.
     SessionUpdateContext, ///< Обновить структурированный контекст сессии.
     ProjectProfileSet, ///< Установить паспорт текущего проекта.
@@ -124,7 +125,8 @@ struct SApiRequest
     std::uint16_t m_answer_question_id = 0; ///< ID вопроса, на который отвечает пользователь.
     std::string m_selected_option;     ///< Выбранный вариант ответа.
     std::uint16_t m_question_id = 0;   ///< Вопрос для question.shrink.
-    std::string m_session_id;         ///< Идентификатор диалога (опционален для ask).
+    std::string m_session_id;         ///< Идентификатор диалога (обязателен для ask).
+    std::string m_project_id;         ///< Идентификатор проекта для session.resume.
     std::string m_context_json;       ///< Контекст для session.update_context (JSON).
     std::string m_profile_text;       ///< Текст паспорта для project.profile.set.
     std::string m_editor_file;        ///< Файл редактора (может быть пустым).

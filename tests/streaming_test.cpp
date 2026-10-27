@@ -459,9 +459,16 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
     open.m_path = project.path().string();
     REQUIRE(api.execute(open).m_ok);
 
+    // Диалог адресуется сессией (жёсткий контракт §41).
+    fcpp::SApiRequest session_open;
+    session_open.m_method = fcpp::EApiMethod::SessionOpen;
+    const fcpp::SApiResponse session = api.execute(session_open);
+    REQUIRE(session.m_ok);
+
     SApiStreamResult result;
     fcpp::SApiRequest ask;
     ask.m_method = fcpp::EApiMethod::Ask;
+    ask.m_session_id = session.m_session_id;
     ask.m_text = question;
     ask.m_stream = true;
     ask.m_on_stream_chunk = [&result, cancel_on_first_chunk](const std::string& chunk)

@@ -56,7 +56,9 @@ void print_usage(const std::string& program)
     std::cout << "\nДетерминированные запросы (tools):\n";
     std::cout << "  outline|callers|callees|refs|includes|overrides|dispatch\n";
     std::cout << "  def|ancestors|derived|search|source <symbol> [<path>]\n";
-    std::cout << "  ask \"<text>\" [--file F --line L --col C] [--stream]   Запрос (с курсором)\n";
+    std::cout << "  ask \"<text>\" --session <id> [--file F --line L --col C] [--stream]\n";
+    std::cout << "                                  Запрос в диалоге (сессия обязательна)\n";
+    std::cout << "  session <open|resume|close> [id]  Сессия диалога (resume берёт активную из БД)\n";
     std::cout << "\nОпции: --config PATH --project PATH --compile-commands PATH --yes --json --verbose\n";
 }
 
@@ -363,6 +365,50 @@ int main(int argc, char* argv[])
         std::cout << (command == "build" ? "сборка успешна\n" : "тесты пройдены\n");
         return 0;
     }
+    if (command == "session")
+    {
+        if (argc < 3)
+        {
+            std::cerr << "fcpp-agent: session требует подкоманду (open|resume|close)\n";
+            return 2;
+        }
+        const std::string subcommand = argv[2];
+
+        fcpp::SApiRequest request;
+        if (subcommand == "open")
+        {
+            request.m_method = fcpp::EApiMethod::SessionOpen;
+        }
+        else if (subcommand == "resume")
+        {
+            request.m_method = fcpp::EApiMethod::SessionResume;
+        }
+        else if (subcommand == "close")
+        {
+            if (argc < 4)
+            {
+                std::cerr << "fcpp-agent: session close требует id сессии\n";
+                return 2;
+            }
+            request.m_method = fcpp::EApiMethod::SessionClose;
+            request.m_session_id = argv[3];
+        }
+        else
+        {
+            std::cerr << "fcpp-agent: неизвестная подкоманда session: " << subcommand << '\n';
+            return 2;
+        }
+
+        const fcpp::SApiResponse response = api.execute(request);
+        if (!response.m_ok)
+        {
+            std::cerr << "fcpp-agent: " << fcpp::error_kind_name(response.m_error)
+                      << ": " << response.m_message << '\n';
+            return 1;
+        }
+        std::cout << response.m_session_id << '\n';
+        return 0;
+    }
     if (command == "ask")
     {
         if (argc < 3)
@@ -372,6 +418,7 @@ int main(int argc, char* argv[])
         }
 
         // Тело запроса §94: только text + editor{file,cursor}. --stream — режим вывода.
+        // Диалог адресуется сессией: без --session запрос отклоняется (§41).
         fcpp::SApiRequest request;
         request.m_method = fcpp::EApiMethod::Ask;
         request.m_text = argv[2];
@@ -386,6 +433,10 @@ int main(int argc, char* argv[])
             {
                 request.m_stream = true;
             }
+            else if (arg == "--session")
+            {
+                request.m_session_id = next();
+            }
             else if (arg == "--file")
             {
                 request.m_editor_file = next();
@@ -398,6 +449,11 @@ int main(int argc, char* argv[])
             {
                 request.m_editor_column = static_cast<std::uint32_t>(std::strtoul(next().c_str(), nullptr, 10));
             }
+        }
+        if (request.m_session_id.empty())
+        {
+            std::cerr << "fcpp-agent: ask требует --session <id>; диалог адресуется сессией\n";
+            return 2;
         }
 
         bool streamed_output = false;

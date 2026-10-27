@@ -435,6 +435,41 @@ bool CConversationStore::create_session(const std::string& session_id,
         && sqlite3_step(statement.get()) == SQLITE_DONE;
 }
 
+bool CConversationStore::bind_project(const std::string& session_id,
+                                      const std::string& project_id)
+{
+    if (m_db == nullptr || session_id.empty() || project_id.empty())
+    {
+        return false;
+    }
+
+    // Привязка только для открытой сессии и только если она ещё не привязана:
+    // смена проекта у существующей сессии запрещена.
+    Statement statement(m_db,
+        "UPDATE conversation_session SET project_id=?1, updated_at=?2 "
+        "WHERE session_id=?3 AND closed_at IS NULL AND project_id=''");
+    if (!statement.ok()
+        || statement.bind_text(1, project_id)
+        || !statement.bind_int64(2, now_unix_seconds())
+        || !statement.bind_text(3, session_id))
+    {
+        return false;
+    }
+    if (sqlite3_step(statement.get()) != SQLITE_DONE)
+    {
+        return false;
+    }
+    if (sqlite3_changes(m_db) == 1)
+    {
+        return true;
+    }
+
+    // Уже привязана: успех только при совпадении проекта.
+    const auto existing = get_session(session_id);
+    return existing.has_value() && !existing->m_closed
+        && existing->m_project_id == project_id;
+}
+
 bool CConversationStore::close_session_with_event(
     const std::string& session_id,
     const std::string& event_kind,
@@ -536,6 +571,34 @@ std::optional<SConversationSession> CConversationStore::get_session(
     session.m_created_at = sqlite3_column_int64(statement.get(), 3);
     session.m_updated_at = sqlite3_column_int64(statement.get(), 4);
     session.m_closed = sqlite3_column_type(statement.get(), 5) != SQLITE_NULL;
+    return session;
+}
+
+std::optional<SConversationSession> CConversationStore::latest_session_for_project(
+    const std::string& project_id) const
+{
+    if (m_db == nullptr)
+    {
+        return std::nullopt;
+    }
+
+    Statement statement(m_db,
+        "SELECT session_id, project_id, context_json, created_at, updated_at, closed_at "
+        "FROM conversation_session WHERE project_id=?1 AND closed_at IS NULL "
+        "ORDER BY updated_at DESC, session_id DESC LIMIT 1");
+    if (!statement.ok() || !statement.bind_text(1, project_id)
+        || sqlite3_step(statement.get()) != SQLITE_ROW)
+    {
+        return std::nullopt;
+    }
+
+    SConversationSession session;
+    session.m_id = column_text(statement.get(), 0);
+    session.m_project_id = column_text(statement.get(), 1);
+    session.m_context_json = column_text(statement.get(), 2);
+    session.m_created_at = sqlite3_column_int64(statement.get(), 3);
+    session.m_updated_at = sqlite3_column_int64(statement.get(), 4);
+    session.m_closed = false;
     return session;
 }
 

@@ -149,6 +149,18 @@ public:
                         const std::string& project_id = {});
 
     /**
+     * @brief Необратимо привязать открытую сессию к проекту.
+     *
+     * Сессия без проекта (созданная до open) не должна становиться лазейкой для
+     * смешивания историй: первое использование в открытом проекте фиксирует
+     * project_id. Повторная привязка к другому проекту запрещена.
+     * @param session_id Сессия.
+     * @param project_id Проект.
+     * @return True, если привязка установлена или уже совпадает.
+     */
+    bool bind_project(const std::string& session_id, const std::string& project_id);
+
+    /**
      * @brief Append a closing event and close the session atomically.
      * @param session_id Session to close.
      * @param event_kind Closing event kind.
@@ -193,6 +205,18 @@ public:
      * @return Session metadata, or empty when not found.
      */
     std::optional<SConversationSession> get_session(const std::string& session_id) const;
+
+    /**
+     * @brief Найти самую свежую открытую сессию проекта.
+     *
+     * Нужна для восстановления адреса диалога после перезапуска клиента: id
+     * сессии генерирует только агент, поэтому клиент обязан спросить его заново.
+     * Пустой project_id означает проект-независимую сессию (общие вопросы).
+     * @param project_id Идентификатор проекта либо пустая строка.
+     * @return Сессия или пустое значение, если открытых сессий нет.
+     */
+    std::optional<SConversationSession> latest_session_for_project(
+        const std::string& project_id) const;
 
     bool append_event(const std::string& session_id,
                       const std::string& kind,
