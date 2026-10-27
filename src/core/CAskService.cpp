@@ -435,6 +435,12 @@ bool CAskService::answer_codebase_request(
 {
     const SConfig& config = m_config_manager.config();
     const CAnswerService answer_service(m_config_manager, m_project_manager);
+    // A successfully resolved current cursor is authoritative for intent subject
+    // selection. Keep prior user messages for reference resolution, but exclude
+    // prior assistant answers from the intent-context source in that case.
+    const bool authoritative_current_cursor =
+        !cursor_file.empty() && cursor_line > 0
+        && cursor_symbol(cursor_file, cursor_line, cursor_col).has_value();
     if (m_logger != nullptr)
     {
         const bool has_project = m_project_manager.has_current();
@@ -489,7 +495,15 @@ bool CAskService::answer_codebase_request(
 
     // Chat is an independent source with a strict, deliberately small allowance.
     constexpr std::size_t k_chat_context_budget_tokens = 600;
-    const CChatContextSource chat_source(history);
+    std::vector<SConversationTurn> intent_history = history;
+    if (authoritative_current_cursor)
+    {
+        for (SConversationTurn& turn : intent_history)
+        {
+            turn.m_assistant_text.clear();
+        }
+    }
+    const CChatContextSource chat_source(intent_history);
     const SContextSourceResult chat_context = chat_source.collect_context(
         SContextSourceRequest{text, k_chat_context_budget_tokens});
     if (!chat_context.m_complete && !chat_context.m_note.empty())
@@ -931,8 +945,6 @@ bool CAskService::ask(const std::string& text,
     // If the current cursor is present but unresolved, never replace it with
     // a symbol from an older turn. Historical cursor context is fallback-only
     // when the current request has no editor position or its symbol resolved.
-    const bool current_cursor_resolved = react_context.find("[cursor symbol: ")
-        != std::string::npos;
     const bool may_restore_history_cursor = !has_current_cursor || current_cursor_resolved;
     std::size_t history_cursor_checks = 0;
     std::size_t history_cursor_resolved = 0;
