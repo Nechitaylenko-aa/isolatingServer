@@ -461,9 +461,11 @@ bool CAskService::answer_codebase_request(
     // A successfully resolved current cursor is authoritative for intent subject
     // selection. Keep prior user messages for reference resolution, but exclude
     // prior assistant answers from the intent-context source in that case.
-    const bool authoritative_current_cursor =
-        !cursor_file.empty() && cursor_line > 0
-        && cursor_symbol(cursor_file, cursor_line, cursor_col).has_value();
+    const std::optional<SClangSymbol> authoritative_cursor_symbol =
+        (!cursor_file.empty() && cursor_line > 0)
+            ? cursor_symbol(cursor_file, cursor_line, cursor_col)
+            : std::nullopt;
+    const bool authoritative_current_cursor = authoritative_cursor_symbol.has_value();
     if (m_logger != nullptr)
     {
         const bool has_project = m_project_manager.has_current();
@@ -595,11 +597,9 @@ bool CAskService::answer_codebase_request(
     std::string anchor_name;
     if (!cursor_file.empty() && cursor_line > 0)
     {
-        const std::optional<SClangSymbol> symbol =
-            cursor_symbol(cursor_file, cursor_line, cursor_col);
-        if (symbol.has_value())
+        if (authoritative_cursor_symbol.has_value())
         {
-            cursor_hint = "[cursor symbol: " + format_cursor_hint(*symbol) + "]";
+            cursor_hint = "[cursor symbol: " + format_cursor_hint(*authoritative_cursor_symbol) + "]";
         }
 
         anchor_name = hierarchy_anchor(cursor_file, cursor_line, cursor_col);
