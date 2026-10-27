@@ -166,16 +166,16 @@ TEST_CASE("pipeline: light-restored project is not treated as fully opened", "[p
     std::filesystem::create_directories(project / "src");
     std::filesystem::create_directories(project / "build");
     std::ofstream(project / "CMakeLists.txt")
-        << "cmake_minimum_required(VERSION 3.20)\\nproject(p LANGUAGES CXX)\\n";
+        << "cmake_minimum_required(VERSION 3.20)\nproject(p LANGUAGES CXX)\n";
     std::ofstream(project / "src" / "a.cpp")
-        << "struct A { int load(); };\\nint A::load() { return 1; }\\n";
+        << "struct A { int load(); };\nint A::load() { return 1; }\n";
     {
         std::ofstream commands(project / "build" / "compile_commands.json");
         const std::string source = (project / "src" / "a.cpp").string();
-        commands << "[{\\\"directory\\\":\\\"" << project.string()
-                 << "\\\",\\\"file\\\":\\\"" << source
-                 << "\\\",\\\"arguments\\\":[\\\"clang++\\\",\\\"-std=c++20\\\",\\\"-c\\\",\\\""
-                 << source << "\\\"]}]\\n";
+        commands << "[{\"directory\":\"" << project.string()
+                 << "\",\"file\":\"" << source
+                 << "\",\"arguments\":[\"clang++\",\"-std=c++20\",\"-c\",\""
+                 << source << "\"]}]\n";
     }
 
     fcpp::CConfigManager config;
