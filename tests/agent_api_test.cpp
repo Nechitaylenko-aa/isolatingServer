@@ -112,6 +112,14 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     status_request.m_method = fcpp::EApiMethod::AgentStatus;
     REQUIRE(api.execute(status_request).m_ok);
 
+    // Failed project opens expose a stable diagnostic stage to the IDE/log.
+    fcpp::SApiRequest invalid_open;
+    invalid_open.m_method = fcpp::EApiMethod::ProjectOpen;
+    invalid_open.m_path = (home / "missing-project-root").string();
+    const fcpp::SApiResponse invalid_open_response = api.execute(invalid_open);
+    REQUIRE_FALSE(invalid_open_response.m_ok);
+    REQUIRE(invalid_open_response.m_message.find("canonicalize_project_root") != std::string::npos);
+
     // Conversation sessions have a lifecycle independent of project sessions.
     fcpp::SApiRequest session_open;
     session_open.m_method = fcpp::EApiMethod::SessionOpen;

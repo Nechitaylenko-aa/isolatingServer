@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <system_error>
+#include <string>
 #include <vector>
 
 #include "core/CConfigManager.h"
@@ -60,7 +61,7 @@ public:
      * @param path Путь к CMake-корню проекта.
      * @return true при успехе; false при ошибке.
      */
-    bool open(const std::filesystem::path& path);
+    bool open(const std::filesystem::path& path, std::string* out_failure_stage = nullptr);
 
     /**
      * @brief Задать явный путь к compile_commands.json (флаг CLI).

@@ -339,10 +339,28 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
             // (m_project_root) либо как `m_path` (CLI). Приоритет — projectRoot.
             const std::string& target =
                 !request.m_project_root.empty() ? request.m_project_root : request.m_path;
-            if (target.empty() || !m_project_manager.open(target))
+            std::string failure_stage;
+            if (target.empty() || !m_project_manager.open(target, &failure_stage))
             {
-                return make_error(EErrorKind::InvalidRequest, "cannot open project: " + target);
+                if (target.empty())
+                {
+                    failure_stage = "missing_project_root";
+                }
+                m_logger.log_event(ELogLevel::Warn, "project.open.failed", {
+                    {"request_id", request.m_request_id},
+                    {"failure_stage", failure_stage},
+                    {"root_provided", !target.empty()}
+                });
+                return make_error(EErrorKind::InvalidRequest,
+                                  "cannot open project (stage: " + failure_stage + ")");
             }
+            m_logger.log_event(ELogLevel::Info, "project.open.succeeded", {
+                {"request_id", request.m_request_id},
+                {"project_id", m_project_manager.current().m_project.m_project_id},
+                {"index_state", static_cast<int>(m_project_manager.current().m_index_status.m_state)},
+                {"index_files", m_project_manager.current().m_index_status.m_file_count},
+                {"index_symbols", m_project_manager.current().m_index_status.m_symbol_count}
+            });
             m_project_manager.save_session();
             response.m_ok = true;
             response.m_state = "READY";

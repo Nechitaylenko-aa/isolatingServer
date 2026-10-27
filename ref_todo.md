@@ -227,3 +227,11 @@
 - CI for `b6a2d67` stopped at compile due `-Wmissing-field-initializers` in legacy three-field `SConversationTurn` initializers; this is fixed with a constructor that supplies defaults for new editor metadata.
 - Also clarified the prompt contract for `[Previous turn cursor symbol: ...]` so it cannot be mistaken for the current cursor.
 - **Статус:** CODE + TESTS DONE — CI `40544183171` зелёный (Build и 117/117 CTest); осталось ручное LLM-тестирование и анализ реальных JSONL-трасс.
+
+
+### D1.3 — Диагностика отказа открытия проекта
+- **Проблема:** `project.open` возвращал только общий отказ, а JSONL не показывал этап сбоя.
+- **Изменение:** `CProjectManager::open` сообщает стабильный `failure_stage`; `CAgentApi` пишет `project.open.failed` / `project.open.succeeded` с correlation ID. Ответ API также включает этап. В журнал не попадают пути, промпты или содержимое исходников.
+- **Этапы:** канонизация корня, проверка каталога/CMake, поиск и разбор compile commands, миграция/открытие БД, Clang backend, инвентаризация, прогрев/обновление индекса, паспорт и регистрация проекта.
+- **Тест:** добавлена API-регрессия для отсутствующего корня проекта.
+- **Статус:** подготовлено для CI; следующий этап — длительности внутренних стадий ask/LLM/evidence и причина неразрешённого курсора.

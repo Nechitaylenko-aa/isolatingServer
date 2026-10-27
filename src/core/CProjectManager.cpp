@@ -171,37 +171,50 @@ void CProjectManager::set_compile_commands_path(const std::filesystem::path& pat
     m_compile_commands_path = path;
 }
 
-bool CProjectManager::open(const std::filesystem::path& path)
+bool CProjectManager::open(const std::filesystem::path& path, std::string* out_failure_stage)
 {
+    if (out_failure_stage != nullptr)
+    {
+        out_failure_stage->clear();
+    }
+    const auto fail = [out_failure_stage](const char* stage)
+    {
+        if (out_failure_stage != nullptr)
+        {
+            *out_failure_stage = stage;
+        }
+        return false;
+    };
+
     std::error_code error_code;
     const std::filesystem::path canonical = std::filesystem::canonical(path, error_code);
     if (error_code)
     {
-        return false;
+        return fail("canonicalize_project_root");
     }
 
     if (!std::filesystem::is_directory(canonical, error_code) || error_code)
     {
-        return false;
+        return fail("validate_project_directory");
     }
 
     const std::filesystem::path cmake_lists = canonical / k_cmake_lists_name;
     if (!std::filesystem::exists(cmake_lists, error_code) || error_code)
     {
-        return false;
+        return fail("find_cmake_lists");
     }
 
     const std::filesystem::path compile_commands =
         locate_compile_commands(canonical, error_code);
     if (error_code)
     {
-        return false;
+        return fail("locate_compile_commands");
     }
 
     std::vector<SCompileCommand> commands;
     if (!CCompileCommandsParser::parse(compile_commands, commands))
     {
-        return false;
+        return fail("parse_compile_commands");
     }
 
     const std::string canonical_text = canonical.string();
@@ -213,7 +226,7 @@ bool CProjectManager::open(const std::filesystem::path& path)
     std::filesystem::create_directories(db_path.parent_path(), error_code);
     if (error_code)
     {
-        return false;
+        return fail("create_index_directory");
     }
 
     SProject project;
@@ -226,20 +239,20 @@ bool CProjectManager::open(const std::filesystem::path& path)
     CSchemaMigrator migrator;
     if (!migrator.migrate(db_path.string()))
     {
-        return false;
+        return fail("migrate_index_schema");
     }
 
     CSQLiteIndex index(db_path);
     if (!index.open(canonical))
     {
-        return false;
+        return fail("open_index_database");
     }
 
     std::unique_ptr<IClang> clang = create_clang_backend(m_config_manager.config().m_clang_path);
     if (clang == nullptr)
     {
         index.close_db();
-        return false;
+        return fail("create_clang_backend");
     }
 
     const SIndexStatus existing = index.status();
@@ -248,13 +261,13 @@ bool CProjectManager::open(const std::filesystem::path& path)
         if (!index.store_inventory(commands))
         {
             index.close_db();
-            return false;
+            return fail("store_compile_inventory");
         }
 
         if (!index.warm(*clang))
         {
             index.close_db();
-            return false;
+            return fail("warm_index");
         }
     }
     else
@@ -263,7 +276,7 @@ bool CProjectManager::open(const std::filesystem::path& path)
         if (!index.refresh_if_stale(*clang, compile_commands.string()))
         {
             index.close_db();
-            return false;
+            return fail("refresh_stale_index");
         }
     }
 
@@ -275,23 +288,23 @@ bool CProjectManager::open(const std::filesystem::path& path)
     CProjectProfile project_profile;
     if (!load_project_profile(db_path, project_profile))
     {
-        return false;
+        return fail("load_project_profile");
     }
 
     CSchemaMigrator registry_migrator;
     if (!registry_migrator.migrate(m_config_manager.config().m_registry_path.string()))
     {
-        return false;
+        return fail("migrate_project_registry");
     }
     if (!m_registry.open_db())
     {
-        return false;
+        return fail("open_project_registry");
     }
     const bool registered = m_registry.upsert(project);
     m_registry.close_db();
     if (!registered)
     {
-        return false;
+        return fail("register_project");
     }
 
     m_current.m_project = project;
