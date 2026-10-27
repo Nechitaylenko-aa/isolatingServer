@@ -101,3 +101,9 @@
 - Добавлено событие `ask.cursor`: фиксирует наличие курсора, факт разрешения символа и иерархического якоря без записи имени символа или пути.
 - Добавлены regression-тесты: пустой субъект требует уточнения; контекст чата сохраняет предыдущий вопрос и ответ для разрешения местоимения.
 - Ограничение: unit-тест контекстного источника подтверждает сохранность истории, но фактическое разрешение местоимений остаётся поведением LLM; нужен ручной тест на целевой конфигурации модели. Параллельно проверять, что классификация follow-up не уходит в general-engineering route, минуя evidence pipeline.
+
+
+### CI environment note — 2026-10-27
+
+- Run `40542209000` for commit `332ad99` failed before CMake/build/tests: `ubuntu-latest` resolved to Ubuntu 26.04 (resolute), and `apt-get update` rejected the LLVM apt repository because its signing key `15CF4D18AF4F7421` was unavailable. This is an infrastructure/dependency-bootstrap failure, not a compiler/test result.
+- Workflow runner is pinned to `ubuntu-24.04` to avoid an unreviewed major runner-image migration; the follow-up commit will trigger a fresh CI run.

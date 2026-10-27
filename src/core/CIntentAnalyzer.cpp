@@ -29,6 +29,7 @@ constexpr const char* k_system_prompt =
     "- GENERAL_ENGINEERING: conceptual C++/software engineering questions and new component design not asking for facts from the current repository. No project, file, cursor, or symbol is required.\n"
     "- CODEBASE: questions about existing code, project-specific architecture, diagnostics, changes, builds, and tests.\n"
     "- If repository-specific constraints matter, choose CODEBASE. Missing cursor/file context alone never means GENERAL_ENGINEERING.\n"
+    "- A deictic question about an existing code entity without a cursor or clear conversational antecedent (for example, 'what does this method do?') is CODEBASE; leave subject.name empty so the agent can clarify. Do not answer as a generic concept question.\n"
     "- If the current message is a follow-up (for example, 'what does it do?', 'а что он делает?', 'а где это?') referring to a repository object discussed in recent conversation, choose CODEBASE.\n"
     "- Resolve pronouns from recent conversation only when there is one clear antecedent. If the antecedent is ambiguous or absent, leave subject.name empty; never invent an entity.\n"
     "- A cursor hint is evidence of the current code context, not proof that every question is about that code. If the current question asks about the pointed-at code, choose CODEBASE; if it is an independent conceptual question, GENERAL_ENGINEERING may be appropriate.\n"
