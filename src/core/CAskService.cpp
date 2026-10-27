@@ -648,6 +648,12 @@ bool CAskService::answer_codebase_request(
                 }
                 return answer_ok;
             }
+            else if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
+            {
+                // The cursor-follow-up policy overrules scope-only classification;
+                // the full Intent analyzer must now resolve the operation.
+                have_preclassified_intent = false;
+            }
         }
         else
         {
