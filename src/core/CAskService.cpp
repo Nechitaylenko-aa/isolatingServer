@@ -98,6 +98,29 @@ bool duplicates_recent_answer(const std::string& answer,
     return false;
 }
 
+ESubjectKind cursor_subject_kind(ESymbolKind kind)
+{
+    switch (kind)
+    {
+        case ESymbolKind::Namespace: return ESubjectKind::Namespace;
+        case ESymbolKind::Class: return ESubjectKind::Class;
+        case ESymbolKind::Struct:
+        case ESymbolKind::Union: return ESubjectKind::Struct;
+        case ESymbolKind::Enum:
+        case ESymbolKind::EnumConstant: return ESubjectKind::Enum;
+        case ESymbolKind::Function: return ESubjectKind::Function;
+        case ESymbolKind::Method:
+        case ESymbolKind::Constructor:
+        case ESymbolKind::Destructor: return ESubjectKind::Method;
+        case ESymbolKind::Variable: return ESubjectKind::Variable;
+        case ESymbolKind::Field: return ESubjectKind::Field;
+        case ESymbolKind::Typedef: return ESubjectKind::Symbol;
+        case ESymbolKind::Parameter: return ESubjectKind::Variable;
+        case ESymbolKind::Count: break;
+    }
+    return ESubjectKind::Symbol;
+}
+
 bool is_deictic_followup(const std::string& text)
 {
     std::string normalized = text;
