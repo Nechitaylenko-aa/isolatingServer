@@ -305,3 +305,38 @@ TEST_CASE("agent API: question about unnamed method returns CLARIFY", "[api][ask
 
     std::filesystem::remove_all(home);
 }
+
+TEST_CASE("agent API: unresolved current cursor does not fall back to historical topic", "[api][ask][cursor]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-api-cursor-home");
+    HomeScope scope(home);
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    const std::filesystem::path project_dir = make_project();
+    fcpp::CAgentApi api(config);
+
+    fcpp::SApiRequest open_request;
+    open_request.m_method = fcpp::EApiMethod::ProjectOpen;
+    open_request.m_path = project_dir.string();
+    const fcpp::SApiResponse opened = api.execute(open_request);
+    REQUIRE(opened.m_ok);
+    REQUIRE_FALSE(opened.m_session_id.empty());
+
+    fcpp::SApiRequest request;
+    request.m_method = fcpp::EApiMethod::Ask;
+    request.m_session_id = opened.m_session_id;
+    request.m_text = "А что он делает?";
+    request.m_editor_file = (project_dir / "src" / "missing.cpp").string();
+    request.m_editor_line = 5;
+    request.m_editor_column = 1;
+
+    const fcpp::SApiResponse response = api.execute(request);
+    REQUIRE(response.m_ok);
+    REQUIRE(response.m_state == "CLARIFY");
+    REQUIRE(response.m_has_question);
+    REQUIRE(response.m_question.m_questions.front().m_text.find("не удалось определить символ") != std::string::npos);
+
+    std::filesystem::remove_all(home);
+}
