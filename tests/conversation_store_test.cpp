@@ -254,3 +254,24 @@ TEST_CASE("conversation shrink rejects missing, closed, and non-question targets
     store.close();
     std::filesystem::remove(path);
 }
+
+
+TEST_CASE("conversation replay preserves cursor coordinates for follow-up context", "[conversation]")
+{
+    const std::vector<fcpp::SConversationEvent> events{
+        {1, "s", "user",
+         R"({"text":"Тут есть ошибки?","editor_file":"/project/src/a.cpp","editor_line":17,"editor_column":5})", 1},
+        {2, "s", "assistant", R"({"text":"Обсуждаемый метод содержит проверку входных данных."})", 2},
+        {3, "s", "user", R"({"text":"А что он делает?","editor_file":"","editor_line":0,"editor_column":0})", 3},
+        {4, "s", "assistant", R"({"text":"Он проверяет входные данные."})", 4}
+    };
+
+    const auto turns = fcpp::reconstruct_conversation_turns(events);
+    REQUIRE(turns.size() == 2);
+    REQUIRE(turns[0].m_editor_file == "/project/src/a.cpp");
+    REQUIRE(turns[0].m_editor_line == 17);
+    REQUIRE(turns[0].m_editor_column == 5);
+    REQUIRE(turns[1].m_editor_file.empty());
+    REQUIRE(turns[1].m_editor_line == 0);
+    REQUIRE(turns[1].m_editor_column == 0);
+}

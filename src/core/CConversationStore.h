@@ -47,6 +47,9 @@ struct SConversationTurn
     std::int64_t m_last_event_id = 0;
     std::string m_user_text;
     std::string m_assistant_text;
+    std::string m_editor_file;
+    unsigned m_editor_line = 0;
+    unsigned m_editor_column = 0;
 };
 
 /**

@@ -366,6 +366,8 @@ struct SApiStreamResult
 {
     bool m_ok = false;
     std::string m_answer;
+    std::string m_state;
+    bool m_has_question = false;
     std::vector<std::string> m_chunks;
     std::vector<std::string> m_requests;
     std::string m_diagnostics;
@@ -472,6 +474,8 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
     const fcpp::SApiResponse response = api.execute(ask);
     result.m_ok = response.m_ok;
     result.m_answer = response.m_text;
+    result.m_state = response.m_state;
+    result.m_has_question = response.m_has_question;
     result.m_requests = server.requests();
     result.m_diagnostics = diagnostics.str();
     return result;
@@ -526,7 +530,12 @@ TEST_CASE("answer review integration: rejected candidate is never streamed to th
         {reviewer_completion("ESCALATE", 92, "unsupported claims"), "application/json", 0}
     }, false, true, true);
 
-    REQUIRE_FALSE(result.m_ok);
+    // Rejected candidate is not exposed; the deterministic fallback now asks
+    // for the missing code subject, which is a successful CLARIFY protocol result.
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_state == "CLARIFY");
+    REQUIRE(result.m_has_question);
+    REQUIRE(result.m_answer.empty());
     REQUIRE(result.m_chunks.empty());
     REQUIRE(result.m_requests.size() == 3);
     REQUIRE(result.m_diagnostics.find("ReAct answer rejected by quality gate") != std::string::npos);

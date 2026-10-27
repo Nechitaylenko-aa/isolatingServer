@@ -6,6 +6,7 @@
 #include "core/CConversationStore.h"
 
 #include <algorithm>
+#include <limits>
 #include <chrono>
 #include <filesystem>
 #include <system_error>
@@ -241,6 +242,9 @@ std::vector<SConversationTurn> reconstruct_conversation_turns(
     std::vector<SConversationTurn> turns;
     std::string pending_user;
     std::int64_t pending_user_event_id = 0;
+    std::string pending_editor_file;
+    unsigned pending_editor_line = 0;
+    unsigned pending_editor_column = 0;
 
     for (const SConversationEvent& event : active_events)
     {
@@ -252,19 +256,53 @@ std::vector<SConversationTurn> reconstruct_conversation_turns(
             {
                 if (!pending_user.empty())
                 {
-                    turns.push_back(SConversationTurn{pending_user_event_id, pending_user, {}});
+                    turns.push_back(SConversationTurn{
+                        pending_user_event_id, pending_user, {}, pending_editor_file,
+                        pending_editor_line, pending_editor_column});
                 }
                 pending_user = payload["text"].get<std::string>();
                 pending_user_event_id = event.m_id;
+                pending_editor_file = payload.contains("editor_file") && payload["editor_file"].is_string()
+                    ? payload["editor_file"].get<std::string>() : std::string();
+                pending_editor_line = 0;
+                pending_editor_column = 0;
+                const auto read_coordinate = [&payload](const char* key) -> unsigned
+                {
+                    if (!payload.contains(key))
+                    {
+                        return 0;
+                    }
+                    const nlohmann::json& value = payload[key];
+                    if (value.is_number_unsigned())
+                    {
+                        const std::uint64_t number = value.get<std::uint64_t>();
+                        return number <= std::numeric_limits<unsigned>::max()
+                            ? static_cast<unsigned>(number) : 0;
+                    }
+                    if (value.is_number_integer())
+                    {
+                        const std::int64_t number = value.get<std::int64_t>();
+                        return number >= 0
+                                && static_cast<std::uint64_t>(number) <= std::numeric_limits<unsigned>::max()
+                            ? static_cast<unsigned>(number) : 0;
+                    }
+                    return 0;
+                };
+                pending_editor_line = read_coordinate("editor_line");
+                pending_editor_column = read_coordinate("editor_column");
             }
             else if (event.m_kind == "assistant" && payload.is_object()
                      && payload.contains("text") && payload["text"].is_string()
                      && !pending_user.empty())
             {
                 turns.push_back(SConversationTurn{
-                    event.m_id, pending_user, payload["text"].get<std::string>()});
+                    event.m_id, pending_user, payload["text"].get<std::string>(),
+                    pending_editor_file, pending_editor_line, pending_editor_column});
                 pending_user.clear();
                 pending_user_event_id = 0;
+                pending_editor_file.clear();
+                pending_editor_line = 0;
+                pending_editor_column = 0;
             }
         }
         catch (const nlohmann::json::exception&)
@@ -275,7 +313,9 @@ std::vector<SConversationTurn> reconstruct_conversation_turns(
 
     if (!pending_user.empty())
     {
-        turns.push_back(SConversationTurn{pending_user_event_id, pending_user, {}});
+        turns.push_back(SConversationTurn{
+            pending_user_event_id, pending_user, {}, pending_editor_file,
+            pending_editor_line, pending_editor_column});
     }
     return turns;
 }

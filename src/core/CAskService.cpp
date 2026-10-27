@@ -775,10 +775,41 @@ bool CAskService::ask(const std::string& text,
         });
     }
 
+    std::vector<SConversationTurn> contextual_history = history;
+    std::size_t history_cursor_checks = 0;
+    std::size_t history_cursor_resolved = 0;
+    const std::size_t history_start = contextual_history.size() > 4
+        ? contextual_history.size() - 4 : 0;
+    for (std::size_t i = history_start; i < contextual_history.size(); ++i)
+    {
+        SConversationTurn& turn = contextual_history[i];
+        if (turn.m_editor_file.empty() || turn.m_editor_line == 0)
+        {
+            continue;
+        }
+        ++history_cursor_checks;
+        const std::optional<SClangSymbol> previous_symbol =
+            cursor_symbol(turn.m_editor_file, turn.m_editor_line, turn.m_editor_column);
+        if (previous_symbol.has_value())
+        {
+            turn.m_user_text += "\\n[Previous turn cursor symbol: "
+                + format_cursor_hint(*previous_symbol) + "]";
+            ++history_cursor_resolved;
+        }
+    }
+    if (m_logger != nullptr && history_cursor_checks > 0)
+    {
+        m_logger->log_event(history_cursor_resolved > 0 ? ELogLevel::Info : ELogLevel::Warn,
+                            "ask.history_cursor", {
+            {"request_id", m_request_id}, {"turns_checked", history_cursor_checks},
+            {"symbols_resolved", history_cursor_resolved}
+        });
+    }
+
     SIntent preclassified_intent;
     bool have_preclassified_intent = false;
     const EFastPathResult fast_path = try_fast_path(
-        text, react_context, context_json, history, stream, out_answer, on_stream_chunk,
+        text, react_context, context_json, contextual_history, stream, out_answer, on_stream_chunk,
         answer_service, preclassified_intent, have_preclassified_intent);
     if (fast_path == EFastPathResult::Answered || fast_path == EFastPathResult::Failed)
     {
@@ -796,7 +827,7 @@ bool CAskService::ask(const std::string& text,
 
     const auto codebase_started = std::chrono::steady_clock::now();
     const bool answer_ok = answer_codebase_request(
-        text, cursor_file, cursor_line, cursor_col, context_json, history,
+        text, cursor_file, cursor_line, cursor_col, context_json, contextual_history,
         preclassified_intent, have_preclassified_intent, stream, out_answer, on_stream_chunk);
     if (m_logger != nullptr)
     {

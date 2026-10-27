@@ -107,3 +107,11 @@
 
 - Run `40542209000` for commit `332ad99` failed before CMake/build/tests: `ubuntu-latest` resolved to Ubuntu 26.04 (resolute), and `apt-get update` rejected the LLVM apt repository because its signing key `15CF4D18AF4F7421` was unavailable. This is an infrastructure/dependency-bootstrap failure, not a compiler/test result.
 - Workflow runner is pinned to `ubuntu-24.04` to avoid an unreviewed major runner-image migration; the follow-up commit will trigger a fresh CI run.
+
+
+## Сохранение курсора в истории диалога (2026-10-27)
+
+- В событиях user уже сохранялись editor file/line/column, но реконструкция `SConversationTurn` отбрасывала эти поля. Теперь координаты переживают replay истории.
+- Перед маршрутизацией `ask` агент пытается восстановить символ по курсору в четырёх последних ходах и добавляет только имя/вид сущности как `[Previous turn cursor symbol: ...]` в временную проекцию контекста. Исторические события не переписываются.
+- Добавлено событие `ask.history_cursor` с количеством проверенных ходов и разрешённых символов; пути и имена не попадают в журнал.
+- Тесты проверяют replay координат. Регрессионный тест streaming обновлён: после отказа ReAct от неподтверждённого ответа корректным результатом может быть `CLARIFY`, а не только ошибка; запрещено выдавать/стримить отвергнутый текст.
