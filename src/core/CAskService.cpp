@@ -51,6 +51,53 @@ namespace
 /** @brief Жёсткий лимит числа подзадач (guardrail ADR-16). */
 constexpr std::size_t k_max_subtasks = 6;
 
+std::string normalize_answer_for_comparison(const std::string& text)
+{
+    std::string result;
+    bool previous_space = false;
+    for (const unsigned char ch : text)
+    {
+        if (std::isspace(ch))
+        {
+            if (!result.empty() && !previous_space)
+            {
+                result.push_back(' ');
+            }
+            previous_space = true;
+        }
+        else
+        {
+            result.push_back(static_cast<char>(std::tolower(ch)));
+            previous_space = false;
+        }
+    }
+    if (!result.empty() && result.back() == ' ')
+    {
+        result.pop_back();
+    }
+    return result;
+}
+
+bool duplicates_recent_answer(const std::string& answer,
+                              const std::vector<SConversationTurn>& history)
+{
+    const std::string normalized_answer = normalize_answer_for_comparison(answer);
+    if (normalized_answer.empty())
+    {
+        return false;
+    }
+    const std::size_t first = history.size() > 3 ? history.size() - 3 : 0;
+    for (std::size_t i = first; i < history.size(); ++i)
+    {
+        if (!history[i].m_assistant_text.empty()
+                && normalize_answer_for_comparison(history[i].m_assistant_text) == normalized_answer)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool asks_about_unnamed_method(const std::string& text)
 {
     std::string normalized = text;
@@ -244,6 +291,19 @@ CAskService::EFastPathResult CAskService::try_fast_path(
                             std::chrono::steady_clock::now() - answer_started).count()}
                     });
                 }
+                if (answer_ok && duplicates_recent_answer(out_answer, history))
+                {
+                    if (m_logger != nullptr)
+                    {
+                        m_logger->log_event(ELogLevel::Warn, "ask.answer.duplicate_history", {
+                            {"request_id", m_request_id}, {"stage", "general_engineering"},
+                            {"fallback", "codebase"}
+                        });
+                    }
+                    out_answer.clear();
+                    have_preclassified_intent = false;
+                    return EFastPathResult::Continue;
+                }
                 return answer_ok ? EFastPathResult::Answered : EFastPathResult::Failed;
             }
         }
@@ -282,7 +342,18 @@ CAskService::EFastPathResult CAskService::try_fast_path(
                 {"answer_bytes", react_ok ? out_answer.size() : 0}
             });
         }
-        if (react_ok)
+        if (react_ok && duplicates_recent_answer(out_answer, history))
+        {
+            if (m_logger != nullptr)
+            {
+                m_logger->log_event(ELogLevel::Warn, "ask.answer.duplicate_history", {
+                    {"request_id", m_request_id}, {"stage", "react"},
+                    {"fallback", "evidence"}
+                });
+            }
+            out_answer.clear();
+        }
+        else if (react_ok)
         {
             const SAnswerQualityAssessment quality =
                 answer_service.assess_answer_quality(react_candidate_level, text, out_answer);

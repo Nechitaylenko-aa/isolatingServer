@@ -185,3 +185,5 @@
 - C: public clarification options are deduplicated after whitespace/case normalization, covering duplicate display labels in cache-first paths.
 - `CProjectPaths::resolve` moved out of the header into `src/core/CProjectPaths.cpp`; CMake includes the implementation.
 - Regression tests added for unnamed-method clarification and path resolution. CI pending.
+
+- Дополнение B: ReAct/general-engineering fast-path отклоняет ответ, текстуально совпадающий с одним из последних трёх ответов ассистента; пишет `ask.answer.duplicate_history`, очищает кандидат и продолжает через evidence pipeline.

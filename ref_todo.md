@@ -292,7 +292,7 @@
 
 ### R27 — Follow-up answer could repeat prior response (B)
 - **Priority:** P0 — answer correctness.
-- **Fix:** final evidence answer receives the current raw user text, while conversation context remains available to intent resolution/evidence collection. An unresolved current cursor suppresses old cursor-symbol restoration, preventing stale symbol substitution.
+- **Fix:** final evidence answer receives the current raw user text, while conversation context remains available to intent resolution/evidence collection. An unresolved current cursor suppresses old cursor-symbol restoration. Fast-path/ReAct answers identical to one of the last three assistant answers are rejected and fall through to the evidence route.
 - **Regression:** manual scenarios 2/3/5 required; automated targeted tests still desirable.
 
 ### R28 — Duplicate clarification options on alternate/cache-first path (C)
