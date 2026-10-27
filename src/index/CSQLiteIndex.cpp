@@ -572,7 +572,7 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
         }
         sqlite3_bind_int64(statement, 1, generation);
         sqlite3_bind_int64(statement, 2, timestamp);
-        sqlite3_bind_int64(statement, 3, static_cast<sqlite3_int64>(commands.size()));
+        sqlite3_bind_int64(statement, 3, static_cast<sqlite3_int64>(inventory_commands.size()));
         const bool inserted = (sqlite3_step(statement) == SQLITE_DONE);
         sqlite3_finalize(statement);
         if (!inserted)
@@ -602,14 +602,28 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
         }
     }
 
+    // Одна compile command на путь: один TU может повторяться для нескольких targets.
+    // Сохраняем первое вхождение в compile_commands.json и нормализуем путь.
+    std::vector<const SCompileCommand*> inventory_commands;
+    std::unordered_set<std::string> seen_paths;
+    inventory_commands.reserve(commands.size());
     for (const SCompileCommand& command : commands)
     {
-        // Не регистрируем внешние TU (системные/сторонние: /usr, _deps) — в индекс
-        // попадает только код проекта (§15).
-        if (is_external_path(command.m_file.string(), m_project_root.string()))
+        const std::string normalized_path = command.m_file.lexically_normal().string();
+        if (is_external_path(normalized_path, m_project_root.string()))
         {
             continue;
         }
+        if (!seen_paths.insert(normalized_path).second)
+        {
+            continue;
+        }
+        inventory_commands.push_back(&command);
+    }
+
+    for (const SCompileCommand* command_ptr : inventory_commands)
+    {
+        const SCompileCommand& command = *command_ptr;
 
         std::error_code error_code;
         const std::uint64_t size = std::filesystem::file_size(command.m_file, error_code);
@@ -625,7 +639,7 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
             }
         }
 
-        const std::string path = command.m_file.string();
+        const std::string path = command.m_file.lexically_normal().string();
 
         sqlite3_stmt* file_statement = nullptr;
         const char* file_sql =

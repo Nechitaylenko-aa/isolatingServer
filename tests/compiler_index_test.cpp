@@ -15,6 +15,7 @@
 #include "fcpp-agent/SProject.h"
 #include "index/CClangFactory.h"
 #include "index/CSQLiteIndex.h"
+#include "index/CSchemaMigrator.h"
 #include "index/CSqlCompilerIndex.h"
 
 namespace
@@ -99,6 +100,66 @@ std::filesystem::path dogfood_path()
 }
 
 } // namespace
+
+TEST_CASE("store_inventory дедуплицирует TU из нескольких targets", "[compiler_index]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-ci-inventory-dedup");
+    const std::filesystem::path project = home / "project";
+    const std::filesystem::path source = project / "src" / "CProtocolServer.cpp";
+    const std::filesystem::path database = home / "index.db";
+    std::filesystem::create_directories(source.parent_path());
+    {
+        std::ofstream output(source);
+        REQUIRE(output.is_open());
+        output << "int protocol_server() { return 1; }\\n";
+    }
+
+    fcpp::CSchemaMigrator migrator;
+    REQUIRE(migrator.migrate(database.string()));
+
+    fcpp::CSQLiteIndex index(database);
+    REQUIRE(index.open(project));
+
+    fcpp::SCompileCommand agent_command;
+    agent_command.m_file = source;
+    agent_command.m_directory = project;
+    agent_command.m_arguments = {"-std=c++20", "-DAGENT_TARGET"};
+    fcpp::SCompileCommand test_command;
+    test_command.m_file = source;
+    test_command.m_directory = project;
+    test_command.m_arguments = {"-std=c++20", "-DTEST_TARGET"};
+
+    REQUIRE(index.store_inventory({agent_command, test_command}));
+
+    sqlite3* db = index.handle();
+    REQUIRE(db != nullptr);
+    const auto scalar = [db](const char* sql) -> std::int64_t
+    {
+        sqlite3_stmt* statement = nullptr;
+        if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK)
+        {
+            return -1;
+        }
+        std::int64_t value = -1;
+        if (sqlite3_step(statement) == SQLITE_ROW)
+        {
+            value = sqlite3_column_int64(statement, 0);
+        }
+        sqlite3_finalize(statement);
+        return value;
+    };
+
+    REQUIRE(scalar("SELECT COUNT(*) FROM file WHERE generation = 1;") == 1);
+    REQUIRE(scalar("SELECT COUNT(*) FROM compile_command;") == 1);
+    REQUIRE(scalar("SELECT file_count FROM index_generation WHERE generation = 1;") == 1);
+
+    std::vector<std::string> stored_arguments;
+    REQUIRE(index.load_file_arguments(source.string(), stored_arguments));
+    REQUIRE(stored_arguments == agent_command.m_arguments);
+
+    index.close_db();
+    std::filesystem::remove_all(home);
+}
 
 TEST_CASE("CClang22 доступен и сообщает версию", "[compiler_index]")
 {
