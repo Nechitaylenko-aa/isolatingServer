@@ -134,6 +134,14 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     REQUIRE_FALSE(resume_rejected.m_ok);
     REQUIRE(resume_rejected.m_error == fcpp::EErrorKind::ProjectNotOpen);
 
+    // Supplying a projectId must not bypass the open-project requirement.
+    fcpp::SApiRequest resume_arbitrary_project;
+    resume_arbitrary_project.m_method = fcpp::EApiMethod::SessionResume;
+    resume_arbitrary_project.m_project_id = "project-that-is-not-open";
+    const fcpp::SApiResponse arbitrary_resume = api.execute(resume_arbitrary_project);
+    REQUIRE_FALSE(arbitrary_resume.m_ok);
+    REQUIRE(arbitrary_resume.m_error == fcpp::EErrorKind::ProjectNotOpen);
+
     fcpp::SApiRequest update_context;
     update_context.m_method = fcpp::EApiMethod::SessionUpdateContext;
     update_context.m_session_id = session_response.m_session_id;
