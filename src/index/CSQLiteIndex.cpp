@@ -26,6 +26,7 @@
 #include <sqlite3.h>
 
 #include "core/CHash.h"
+#include "core/CProjectPaths.h"
 
 namespace fcpp
 {
@@ -52,12 +53,14 @@ constexpr const char* k_active_generation =
  * @param project_root Корень проекта (может быть пустым).
  * @return true если файл внешний.
  */
-bool is_external_path(const std::string& path, const std::string& project_root)
+bool is_external_path(const std::filesystem::path& file,
+                      const std::filesystem::path& project_root)
 {
-    if (path.empty())
+    if (file.empty() || !file.is_absolute())
     {
         return true;
     }
+    const std::string path = file.string();
     if (path.rfind("/usr/", 0) == 0 || path.rfind("/opt/", 0) == 0
             || path.rfind("/etc/", 0) == 0 || path.rfind("/Library/", 0) == 0)
     {
@@ -67,10 +70,14 @@ bool is_external_path(const std::string& path, const std::string& project_root)
     {
         return true;
     }
-    // Абсолютный путь вне корня проекта — внешний.
-    if (!project_root.empty() && path.front() == '/' && path.rfind(project_root, 0) != 0)
+    if (!project_root.empty())
     {
-        return true;
+        const std::filesystem::path relative = file.lexically_relative(project_root);
+        if (relative.empty() || relative.is_absolute()
+                || *relative.begin() == std::filesystem::path(".."))
+        {
+            return true;
+        }
     }
     return false;
 }
@@ -536,22 +543,28 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
     }
 
     // Одна compile command на путь: один TU может повторяться для нескольких targets.
-    // Сохраняем первое вхождение в compile_commands.json и нормализуем путь.
-    std::vector<const SCompileCommand*> inventory_commands;
+    // Во всём индексе путь хранится как absolute + lexically_normal.
+    struct SInventoryCommand
+    {
+        const SCompileCommand* m_command;
+        std::filesystem::path m_path;
+    };
+    std::vector<SInventoryCommand> inventory_commands;
     std::unordered_set<std::string> seen_paths;
     inventory_commands.reserve(commands.size());
     for (const SCompileCommand& command : commands)
     {
-        const std::string normalized_path = command.m_file.lexically_normal().string();
-        if (is_external_path(normalized_path, m_project_root.string()))
+        const std::filesystem::path normalized =
+            CProjectPaths::resolve(command.m_file, command.m_directory);
+        if (normalized.empty() || is_external_path(normalized, m_project_root.lexically_normal()))
         {
             continue;
         }
-        if (!seen_paths.insert(normalized_path).second)
+        if (!seen_paths.insert(normalized.string()).second)
         {
             continue;
         }
-        inventory_commands.push_back(&command);
+        inventory_commands.push_back(SInventoryCommand{&command, normalized});
     }
 
     if (!exec_sql("BEGIN IMMEDIATE;"))
@@ -621,25 +634,26 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
         }
     }
 
-    for (const SCompileCommand* command_ptr : inventory_commands)
+    for (const SInventoryCommand& inventory_command : inventory_commands)
     {
-        const SCompileCommand& command = *command_ptr;
+        const SCompileCommand& command = *inventory_command.m_command;
+        const std::filesystem::path& normalized_path = inventory_command.m_path;
 
         std::error_code error_code;
-        const std::uint64_t size = std::filesystem::file_size(command.m_file, error_code);
+        const std::uint64_t size = std::filesystem::file_size(normalized_path, error_code);
         const std::uint64_t resolved_size = error_code ? 0u : size;
 
         sqlite3_int64 mtime = 0;
         if (!error_code)
         {
-            const auto file_time = std::filesystem::last_write_time(command.m_file, error_code);
+            const auto file_time = std::filesystem::last_write_time(normalized_path, error_code);
             if (!error_code)
             {
                 mtime = std::chrono::duration_cast<std::chrono::seconds>(file_time.time_since_epoch()).count();
             }
         }
 
-        const std::string path = command.m_file.lexically_normal().string();
+        const std::string path = normalized_path.string();
 
         sqlite3_stmt* file_statement = nullptr;
         const char* file_sql =

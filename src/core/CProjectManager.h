@@ -64,6 +64,13 @@ public:
     bool open(const std::filesystem::path& path, std::string* out_failure_stage = nullptr);
 
     /**
+     * @brief Разрешить путь редактора относительно канонического корня текущего проекта.
+     * @return Абсолютный лексически нормализованный путь или пустой путь,
+     *         если проект не открыт либо база разрешения недоступна.
+     */
+    std::filesystem::path resolve_path(const std::filesystem::path& path) const;
+
+    /**
      * @brief Задать явный путь к compile_commands.json (флаг CLI).
      *
      * Имеет наивысший приоритет среди источников (ADR-04).

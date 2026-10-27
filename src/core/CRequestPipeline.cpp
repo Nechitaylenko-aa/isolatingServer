@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "fcpp-agent/IIndex.h"
@@ -250,9 +251,13 @@ SRequestOutcome CRequestPipeline::resolve_subject(const SIntent& intent) const
 
     // Несколько кандидатов -> ровно один уточняющий вопрос с перечислением (§22).
     SRequestOutcome outcome = make_outcome(EOutcomeKind::Clarify, EStage::Resolved, "ambiguous subject");
+    std::unordered_set<std::string> seen_options;
     for (const SSymbol& symbol : matches)
     {
-        outcome.m_options.push_back(symbol.m_qualified_name);
+        if (seen_options.insert(symbol.m_qualified_name).second)
+        {
+            outcome.m_options.push_back(symbol.m_qualified_name);
+        }
     }
     return outcome;
 }

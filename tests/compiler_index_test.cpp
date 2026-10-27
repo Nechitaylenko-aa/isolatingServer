@@ -169,6 +169,32 @@ TEST_CASE("CClang22 доступен и сообщает версию", "[compil
     REQUIRE_FALSE(clang->version().empty());
 }
 
+TEST_CASE("cursor_at предпочитает метод параметру для контекста вопроса", "[compiler_index]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-ci-cursor-parameter");
+    const std::filesystem::path source = home / "cursor.cpp";
+    const std::string code = "struct C { void run(int commands) {} };\n";
+    {
+        std::ofstream output(source);
+        REQUIRE(output.is_open());
+        output << code;
+    }
+
+    const std::size_t offset = code.find("commands");
+    REQUIRE(offset != std::string::npos);
+    std::unique_ptr<fcpp::IClang> clang = fcpp::create_clang_backend({});
+    REQUIRE(clang != nullptr);
+
+    const std::optional<fcpp::SClangSymbol> symbol =
+        clang->cursor_at(source, 1, static_cast<std::uint32_t>(offset + 1), {},
+                         fcpp::EFocusKind::Innermost);
+    REQUIRE(symbol.has_value());
+    REQUIRE(symbol->m_kind == fcpp::ESymbolKind::Method);
+    REQUIRE(symbol->m_qualified_name == "C::run");
+
+    std::filesystem::remove_all(home);
+}
+
 TEST_CASE("open идемпотентен, refresh/rebuild сохраняют одну generation", "[compiler_index]")
 {
     const std::filesystem::path dogfood = dogfood_path();

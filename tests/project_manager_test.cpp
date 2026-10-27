@@ -142,6 +142,9 @@ TEST_CASE("open регистрирует проект и создаёт инде
     REQUIRE(manager.has_current());
 
     const fcpp::SProjectContext& context = manager.current();
+    REQUIRE(manager.resolve_path("src/../main.cpp") == (project_dir / "main.cpp").lexically_normal());
+    REQUIRE(manager.resolve_path(project_dir / "src" / ".." / "main.cpp")
+            == (project_dir / "main.cpp").lexically_normal());
     REQUIRE(context.m_project.m_project_id.rfind("project-", 0) == 0);
     REQUIRE(std::filesystem::exists(context.m_project.m_db_path));
     REQUIRE(manager.list().size() == 1);

@@ -759,6 +759,15 @@ std::optional<SClangSymbol> CClang22::cursor_at(const std::filesystem::path& sou
                 {
                     innermost = symbol;
                 }
+
+                // Для контекстного фокуса параметр не должен заслонять метод:
+                // сохраняем его как fallback, но продолжаем подъём по AST.
+                if (focus == EFocusKind::Innermost && symbol.m_kind == ESymbolKind::Parameter)
+                {
+                    cursor = clang_getCursorSemanticParent(cursor);
+                    continue;
+                }
+
                 if (matches_focus(symbol.m_kind, focus))
                 {
                     result = std::move(symbol);

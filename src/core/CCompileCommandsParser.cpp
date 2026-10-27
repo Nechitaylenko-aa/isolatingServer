@@ -4,6 +4,7 @@
  */
 
 #include "core/CCompileCommandsParser.h"
+#include "core/CProjectPaths.h"
 
 #include <filesystem>
 #include <fstream>
@@ -32,22 +33,6 @@ constexpr const char* k_key_arguments = "arguments";
 
 /** @brief Ключ записи: язык. */
 constexpr const char* k_key_language = "language";
-
-/**
- * @brief Развернуть путь относительно базовой директории.
- * @param base Базовая директория.
- * @param value Путь (абсолютный или относительный).
- * @return Нормализованный абсолютный путь.
- */
-std::filesystem::path resolve_path(const std::filesystem::path& base, const std::string& value)
-{
-    const std::filesystem::path path(value);
-    if (path.is_absolute())
-    {
-        return path.lexically_normal();
-    }
-    return (base / path).lexically_normal();
-}
 
 /**
  * @brief Разбить командную строку на аргументы (учёт кавычек).
@@ -176,16 +161,17 @@ bool CCompileCommandsParser::parse(const std::filesystem::path& json_path,
             return false;
         }
 
-        const std::filesystem::path directory(entry[k_key_directory].get<std::string>());
+        const std::filesystem::path raw_directory(entry[k_key_directory].get<std::string>());
         const std::string file_value = entry[k_key_file].get<std::string>();
 
         // compile_commands.json requires an absolute working directory and a
         // non-empty source-file path. Without these, relative paths are resolved
         // against the agent's process directory and can index the wrong file.
-        if (directory.empty() || !directory.is_absolute() || file_value.empty())
+        if (raw_directory.empty() || !raw_directory.is_absolute() || file_value.empty())
         {
             return false;
         }
+        const std::filesystem::path directory = raw_directory.lexically_normal();
 
         const bool has_command = entry.contains(k_key_command) && entry[k_key_command].is_string();
         const bool has_arguments = entry.contains(k_key_arguments) && entry[k_key_arguments].is_array();
@@ -196,7 +182,11 @@ bool CCompileCommandsParser::parse(const std::filesystem::path& json_path,
 
         SCompileCommand command;
         command.m_directory = directory;
-        command.m_file = resolve_path(directory, file_value);
+        command.m_file = CProjectPaths::resolve(file_value, directory);
+        if (command.m_file.empty())
+        {
+            return false;
+        }
 
         if (has_command)
         {

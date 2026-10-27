@@ -11,6 +11,7 @@
 #include <utility>
 #include "core/CAnswerService.h"
 #include "core/CContextDiagnostics.h"
+#include "core/CProjectPaths.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
 #include "core/CProjectProfileContextSource.h"
@@ -86,6 +87,12 @@ std::optional<SClangSymbol> CAskService::cursor_symbol(const std::string& file,
         return std::nullopt;
     }
 
+    const std::filesystem::path resolved_file = m_project_manager.resolve_path(file);
+    if (resolved_file.empty())
+    {
+        return std::nullopt;
+    }
+
     const SProjectContext& context = m_project_manager.current();
     CToolContext tool_context(context.m_project.m_db_path,
                               context.m_project.m_canonical_path, nullptr);
@@ -95,7 +102,7 @@ std::optional<SClangSymbol> CAskService::cursor_symbol(const std::string& file,
     if (index_open)
     {
         const std::optional<SSymbol> cached =
-            tool_context.graph().symbol_at(file, line, col);
+            tool_context.graph().symbol_at(resolved_file.string(), line, col);
         if (cached.has_value() && !cached->m_qualified_name.empty())
         {
             SClangSymbol symbol;
@@ -125,12 +132,12 @@ std::optional<SClangSymbol> CAskService::cursor_symbol(const std::string& file,
     std::vector<std::string> arguments;
     if (index_open)
     {
-        tool_context.index().load_file_arguments(file, arguments);
+        tool_context.index().load_file_arguments(resolved_file.string(), arguments);
     }
 
     // B2 (ADR-20): отдаём то, что вернул cursor_at (innermost), без фильтра вида.
     const std::optional<SClangSymbol> symbol =
-        clang->cursor_at(file, line, col, arguments, EFocusKind::Innermost);
+        clang->cursor_at(resolved_file, line, col, arguments, EFocusKind::Innermost);
     if (!symbol.has_value() || symbol->m_qualified_name.empty())
     {
         return std::nullopt;
@@ -153,6 +160,12 @@ std::string CAskService::hierarchy_anchor(const std::string& file,
         return {};
     }
 
+    const std::filesystem::path resolved_file = m_project_manager.resolve_path(file);
+    if (resolved_file.empty())
+    {
+        return {};
+    }
+
     const SProjectContext& context = m_project_manager.current();
     CToolContext tool_context(context.m_project.m_db_path,
                               context.m_project.m_canonical_path, nullptr);
@@ -163,10 +176,10 @@ std::string CAskService::hierarchy_anchor(const std::string& file,
 
     // Аргументы компиляции — иначе clang не находит символ на реальном проекте.
     std::vector<std::string> arguments;
-    tool_context.index().load_file_arguments(file, arguments);
+    tool_context.index().load_file_arguments(resolved_file.string(), arguments);
 
     const std::optional<SClangSymbol> symbol =
-        clang->cursor_at(file, line, col, arguments, EFocusKind::Type);
+        clang->cursor_at(resolved_file, line, col, arguments, EFocusKind::Type);
     if (!symbol.has_value() || symbol->m_usr.empty())
     {
         return {};

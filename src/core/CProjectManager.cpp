@@ -19,6 +19,7 @@
 #include <sqlite3.h>
 
 #include "core/CHash.h"
+#include "core/CProjectPaths.h"
 #include "core/CCompileCommandsLocator.h"
 #include "core/CCompileCommandsParser.h"
 #include "index/CClangFactory.h"
@@ -165,6 +166,15 @@ CProjectManager::CProjectManager(const CConfigManager& config_manager)
 }
 
 CProjectManager::~CProjectManager() = default;
+
+std::filesystem::path CProjectManager::resolve_path(const std::filesystem::path& path) const
+{
+    if (!m_has_current)
+    {
+        return {};
+    }
+    return CProjectPaths::resolve(path, m_current.m_project.m_canonical_path);
+}
 
 void CProjectManager::set_compile_commands_path(const std::filesystem::path& path)
 {
