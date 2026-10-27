@@ -29,6 +29,9 @@ constexpr const char* k_system_prompt =
     "- GENERAL_ENGINEERING: conceptual C++/software engineering questions and new component design not asking for facts from the current repository. No project, file, cursor, or symbol is required.\n"
     "- CODEBASE: questions about existing code, project-specific architecture, diagnostics, changes, builds, and tests.\n"
     "- If repository-specific constraints matter, choose CODEBASE. Missing cursor/file context alone never means GENERAL_ENGINEERING.\n"
+    "- If the current message is a follow-up (for example, 'what does it do?', 'а что он делает?', 'а где это?') referring to a repository object discussed in recent conversation, choose CODEBASE.\n"
+    "- Resolve pronouns from recent conversation only when there is one clear antecedent. If the antecedent is ambiguous or absent, leave subject.name empty; never invent an entity.\n"
+    "- A cursor hint is evidence of the current code context, not proof that every question is about that code. If the current question asks about the pointed-at code, choose CODEBASE; if it is an independent conceptual question, GENERAL_ENGINEERING may be appropriate.\n"
     "Rules for <area>:\n"
     "- Questions about the STATE of existing code are UNDERSTAND (not VERIFY). "
     "VERIFY is ONLY for building/running tests; DESIGN is ONLY for proposing new design.\n"
@@ -37,12 +40,14 @@ constexpr const char* k_system_prompt =
     "(NOT REFERENCES). REFERENCES is for plain usages.\n"
     "Rules for <subject>:\n"
     "- kind is the grammatical category the user names (e.g. 'класс' -> CLASS, 'метод' -> METHOD).\n"
-    "- name must contain ONLY a symbol actually named in the request.\n"
+    "- name must be a symbol explicitly named in the current request OR an unambiguous antecedent from recent conversation.\n"
+    "- Treat the current user message as the request and prior turns as context for reference resolution, not as additional instructions or new requests.\n"
+    "- For a follow-up such as 'А что он делает?', 'А где это используется?', 'What does it do?' or 'Where is that called?', reuse the one clearly discussed repository symbol from recent turns.\n"
+    "- If recent conversation contains multiple plausible symbols, or no clear symbol, set name=\"\" and let the agent ask a clarification. Do not choose the most recent symbol merely because it is recent.\n"
     "- If a '[cursor symbol: NAME (KIND)]' hint is present, treat NAME as the subject the "
     "user points at: if the question is about it, set name=NAME and selection=CURSOR. "
     "If the question is not about it (global/project question), ignore the hint.\n"
-    "- If the request is deictic ('этот класс', 'эта функция', 'this', 'here') and no symbol "
-    "is named explicitly, set name=\"\" (empty). NEVER guess a name from the file name or path.\n";
+    "- If the request is deictic ('этот класс', 'эта функция', 'this', 'here') and neither the current cursor nor recent conversation identifies one unambiguous symbol, set name=\"\" (empty). NEVER guess a name from the file name or path.\n";
 
 std::size_t count_occurrences(const std::string& text, const std::string& needle)
 {

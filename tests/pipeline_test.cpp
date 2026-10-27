@@ -122,15 +122,17 @@ TEST_CASE("pipeline: нет маршрута -> NOT_UNDERSTOOD на VALIDATED", 
     REQUIRE(outcome.m_stage == fcpp::EStage::Validated);
 }
 
-TEST_CASE("pipeline: пустой субъект -> NOT_UNDERSTOOD на RESOLVED", "[pipeline]")
+TEST_CASE("pipeline: пустой субъект -> CLARIFY на RESOLVED", "[pipeline]")
 {
     fcpp::CRequestPipeline pipeline(nullptr, nullptr);
     const fcpp::SRequestOutcome outcome =
         pipeline.run(make_intent(fcpp::EArea::Understand, fcpp::ERelation::Self,
                                  fcpp::EProjection::Explanation, ""));
 
-    REQUIRE(outcome.m_kind == fcpp::EOutcomeKind::NotUnderstood);
+    REQUIRE(outcome.m_kind == fcpp::EOutcomeKind::Clarify);
     REQUIRE(outcome.m_stage == fcpp::EStage::Resolved);
+    REQUIRE(outcome.m_options.empty());
+    REQUIRE(outcome.m_message.find("ask the user") != std::string::npos);
 }
 
 TEST_CASE("pipeline: policy allow_read=NO -> REFUSED", "[pipeline]")

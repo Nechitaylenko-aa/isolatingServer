@@ -194,7 +194,8 @@ SRequestOutcome CRequestPipeline::resolve_subject(const SIntent& intent) const
 
     if (intent.m_subject.m_name.empty())
     {
-        return make_outcome(EOutcomeKind::NotUnderstood, EStage::Resolved, "subject name is empty");
+        return make_outcome(EOutcomeKind::Clarify, EStage::Resolved,
+                            "subject name is empty; ask the user to identify the code entity");
     }
 
     // Чистый роутинг без проекта (benchmark уровня A): имя есть -> считаем разрешённым.

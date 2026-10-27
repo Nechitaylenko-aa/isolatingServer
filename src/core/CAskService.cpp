@@ -612,12 +612,20 @@ bool CAskService::answer_codebase_request(
         }
         if (outcome.m_kind == EOutcomeKind::Clarify)
         {
-            clarification += "Уточните, что имеется в виду:";
-            for (const std::string& option : outcome.m_options)
+            if (outcome.m_options.empty()
+                    && outcome.m_message.find("subject name is empty") != std::string::npos)
             {
-                clarification += "\n  - " + option;
+                clarification += "Уточните, что имеется в виду: какой класс, метод или функцию вы имеете в виду?\n";
             }
-            clarification += '\n';
+            else
+            {
+                clarification += "Уточните, что имеется в виду:";
+                for (const std::string& option : outcome.m_options)
+                {
+                    clarification += "\n  - " + option;
+                }
+                clarification += '\n';
+            }
             continue;
         }
         if (outcome.m_kind != EOutcomeKind::Ok)
@@ -755,6 +763,16 @@ bool CAskService::ask(const std::string& text,
             }
             react_context += "[hierarchy anchor: " + anchor + "]";
         }
+    }
+
+    if (m_logger != nullptr && !cursor_file.empty())
+    {
+        const bool symbol_resolved = react_context.find("[cursor symbol: ") != std::string::npos;
+        const bool anchor_resolved = react_context.find("[hierarchy anchor: ") != std::string::npos;
+        m_logger->log_event(symbol_resolved ? ELogLevel::Info : ELogLevel::Warn, "ask.cursor", {
+            {"request_id", m_request_id}, {"cursor_provided", true},
+            {"symbol_resolved", symbol_resolved}, {"hierarchy_anchor_resolved", anchor_resolved}
+        });
     }
 
     SIntent preclassified_intent;
