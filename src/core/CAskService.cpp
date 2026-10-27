@@ -677,6 +677,7 @@ bool CAskService::answer_codebase_request(
     SEvidence accumulated;
     std::string clarification;
     bool produced = false;
+    bool unsupported_verify_locations = false;
     std::size_t index = 0;
     for (const std::string& question : questions)
     {
@@ -766,6 +767,11 @@ bool CAskService::answer_codebase_request(
         }
         if (outcome.m_kind != EOutcomeKind::Ok)
         {
+            if (intent.m_area == EArea::Verify
+                && intent.m_projection == EProjection::Locations)
+            {
+                unsupported_verify_locations = true;
+            }
             std::cerr << "шаг " << index << ": " << outcome_kind_name(outcome.m_kind)
                       << ": " << outcome.m_message << '\n';
             continue;
@@ -829,6 +835,23 @@ bool CAskService::answer_codebase_request(
             });
         }
         return answer_ok;
+    }
+
+    if (!produced && clarification.empty() && unsupported_verify_locations)
+    {
+        // VERIFY/LOCATIONS has no read-only index route. Be explicit about the
+        // supported verification actions instead of returning an empty failure.
+        out_answer = "По индексу нельзя достоверно определить все ошибки проекта. "
+                     "Для проверки запустите build (сборку) и tests (тесты) через API агента; "
+                     "я пока не запускал эти проверки.";
+        if (m_logger != nullptr)
+        {
+            m_logger->log_event(ELogLevel::Info, "ask.verify.suggest_checks", {
+                {"request_id", m_request_id}, {"suggested_actions", 2},
+                {"build_executed", false}, {"tests_executed", false}
+            });
+        }
+        return true;
     }
 
     if (!clarification.empty())
