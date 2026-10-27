@@ -156,7 +156,7 @@
 - `CClang22::cursor_at(..., Innermost)` теперь не останавливается на параметре: параметр сохраняется как fallback, а ближайший callable выше по AST становится контекстным символом.
 - `CRequestPipeline::resolve_subject` удаляет дублирующиеся qualified names в вариантах уточнения, сохраняя порядок.
 - Добавлены regression-тесты на относительный/абсолютный путь и на курсор внутри параметра метода.
-- Требуется проверить CI и реальные прогоны: путь редактора `src/index/CSQLiteIndex.cpp`, cursor в имени параметра, уточнение неоднозначного символа.
+- CI `40561659680` (нормализация путей и выбор enclosing method) и `40562241290` (разделение light/full open) зелёные. Smoke на целевом проекте ещё нужен; последующий аудит выявил, что cache-first в `CAskService` всё равно обходил libclang.
 
 
 ## Разделение light context и полного project.open (2026-10-27)
@@ -167,3 +167,11 @@
 - `handle_ask` и команды, которым нужен рабочий проект/индекс, выполняют полное восстановление сессии, если до этого был только light context. Если light context был известен, но полноценное открытие не удалось, ask завершается явной ошибкой вместо работы с неготовым проектом.
 - Добавлен тест: `restore_session_light()` даёт `has_current=true, is_opened=false`; обычный `restore_session()` переводит контекст в полностью открытый.
 - Статус: реализация и тест добавлены; ждёт CI.
+
+
+## Cursor-cache audit follow-up (2026-10-27)
+
+- Critical review found that `CAskService::cursor_symbol` still returned `CSqlCompilerIndex::symbol_at(file,line,column)` before invoking libclang. `symbol_at` explicitly ignores `column` and chooses a symbol by line span, so the cache could return the parameter or another same-line declaration and bypass the tested `CClang22::cursor_at` behavior. The cache-first result is removed; cursor context now uses libclang with normalized file path and indexed compile arguments.
+- Clarification options are deduplicated at the API text-to-DTO boundary too, because model-authored clarification text does not necessarily pass through `CRequestPipeline::resolve_subject`. Pipeline regression now includes overloads with the same qualified name and requires exactly two unique choices.
+- A known project context that has not passed full `project.open` now fails closed in `CRequestPipeline::resolve_subject`; a direct regression test covers light restore followed by symbol resolution.
+- This package is committed to `dev`; verify its CI before claiming these latest changes are green. Next manual smoke: cursor on `commands` in a method parameter; confirm returned cursor hint names the enclosing method; follow-up question options contain no duplicates.

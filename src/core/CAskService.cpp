@@ -11,7 +11,6 @@
 #include <utility>
 #include "core/CAnswerService.h"
 #include "core/CContextDiagnostics.h"
-#include "core/CProjectPaths.h"
 #include "core/CContextManager.h"
 #include "core/CChatContextSource.h"
 #include "core/CProjectProfileContextSource.h"
@@ -76,13 +75,7 @@ std::optional<SClangSymbol> CAskService::cursor_symbol(const std::string& file,
                                                        unsigned line,
                                                        unsigned col) const
 {
-    if (file.empty() || line == 0 || !m_project_manager.has_current())
-    {
-        return std::nullopt;
-    }
-
-    std::unique_ptr<IClang> clang = create_clang_backend(m_config_manager.config().m_clang_path);
-    if (clang == nullptr)
+    if (file.empty() || line == 0 || !m_project_manager.is_opened())
     {
         return std::nullopt;
     }
@@ -93,49 +86,27 @@ std::optional<SClangSymbol> CAskService::cursor_symbol(const std::string& file,
         return std::nullopt;
     }
 
+    std::unique_ptr<IClang> clang = create_clang_backend(m_config_manager.config().m_clang_path);
+    if (clang == nullptr)
+    {
+        return std::nullopt;
+    }
+
     const SProjectContext& context = m_project_manager.current();
     CToolContext tool_context(context.m_project.m_db_path,
                               context.m_project.m_canonical_path, nullptr);
     const bool index_open = tool_context.open();
 
-    // ADR-22: cache-first — позиционный резолв над индексом (кэш symbol_location).
-    if (index_open)
-    {
-        const std::optional<SSymbol> cached =
-            tool_context.graph().symbol_at(resolved_file.string(), line, col);
-        if (cached.has_value() && !cached->m_qualified_name.empty())
-        {
-            SClangSymbol symbol;
-            symbol.m_usr = cached->m_usr;
-            symbol.m_name = cached->m_name;
-            symbol.m_qualified_name = cached->m_qualified_name;
-            symbol.m_signature = cached->m_signature;
-            symbol.m_kind = cached->m_kind;
-            symbol.m_access = cached->m_access;
-            symbol.m_location.m_file = cached->m_location.m_file;
-            symbol.m_location.m_line = cached->m_location.m_range.m_line;
-            symbol.m_location.m_column = cached->m_location.m_range.m_column;
-            symbol.m_location.m_end_line = cached->m_location.m_range.m_end_line;
-            symbol.m_location.m_end_column = cached->m_location.m_range.m_end_column;
-            symbol.m_is_definition = cached->m_is_definition;
-            symbol.m_is_virtual = cached->m_is_virtual;
-            symbol.m_is_pure_virtual = cached->m_is_pure_virtual;
-            symbol.m_is_static = cached->m_is_static;
-            symbol.m_parent_usr = cached->m_parent_usr;
-            return symbol;
-        }
-    }
-
-    // Fallback: libclang по позиции (файл вне индекса / нет сущности в диапазоне).
-    // Аргументы компиляции — без них clang не строит корректный AST на реальных
-    // проектах (нужны -I/-std), и символ под курсором не находится.
+    // Аргументы compile_commands необходимы libclang для корректного AST на реальном проекте.
     std::vector<std::string> arguments;
     if (index_open)
     {
         tool_context.index().load_file_arguments(resolved_file.string(), arguments);
     }
 
-    // B2 (ADR-20): отдаём то, что вернул cursor_at (innermost), без фильтра вида.
+    // Точный выбор сущности требует колонки курсора. symbol_at() в SQLite пока
+    // ограничен диапазонами строк и игнорирует column, поэтому его нельзя ставить
+    // перед libclang: он может вернуть параметр/соседнюю сущность с той же строки.
     const std::optional<SClangSymbol> symbol =
         clang->cursor_at(resolved_file, line, col, arguments, EFocusKind::Innermost);
     if (!symbol.has_value() || symbol->m_qualified_name.empty())

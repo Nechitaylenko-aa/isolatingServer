@@ -158,6 +158,53 @@ TEST_CASE("pipeline: policy allow_read=NO -> REFUSED", "[pipeline]")
     std::filesystem::remove_all(home);
 }
 
+TEST_CASE("pipeline: light-restored project is not treated as fully opened", "[pipeline][project]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-pipe-light-home");
+    HomeScope scope(home);
+    const std::filesystem::path project = make_temp_dir("fcpp-pipe-light-project");
+    std::filesystem::create_directories(project / "src");
+    std::filesystem::create_directories(project / "build");
+    std::ofstream(project / "CMakeLists.txt")
+        << "cmake_minimum_required(VERSION 3.20)\\nproject(p LANGUAGES CXX)\\n";
+    std::ofstream(project / "src" / "a.cpp")
+        << "struct A { int load(); };\\nint A::load() { return 1; }\\n";
+    {
+        std::ofstream commands(project / "build" / "compile_commands.json");
+        const std::string source = (project / "src" / "a.cpp").string();
+        commands << "[{\\\"directory\\\":\\\"" << project.string()
+                 << "\\\",\\\"file\\\":\\\"" << source
+                 << "\\\",\\\"arguments\\\":[\\\"clang++\\\",\\\"-std=c++20\\\",\\\"-c\\\",\\\""
+                 << source << "\\\"]}]\\n";
+    }
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+    {
+        fcpp::CProjectManager opened(config);
+        REQUIRE(opened.open(project));
+        REQUIRE(opened.is_opened());
+        REQUIRE(opened.save_session());
+        opened.close();
+    }
+
+    fcpp::CProjectManager light(config);
+    REQUIRE(light.restore_session_light());
+    REQUIRE(light.has_current());
+    REQUIRE_FALSE(light.is_opened());
+
+    fcpp::CRequestPipeline pipeline(&light, &config);
+    const fcpp::SRequestOutcome outcome =
+        pipeline.run(make_intent(fcpp::EArea::Understand, fcpp::ERelation::Self,
+                                 fcpp::EProjection::Explanation, "load"));
+    REQUIRE(outcome.m_kind == fcpp::EOutcomeKind::Failed);
+    REQUIRE(outcome.m_message.find("full project.open") != std::string::npos);
+
+    std::filesystem::remove_all(project);
+    std::filesystem::remove_all(home);
+}
+
 TEST_CASE("pipeline: интерактивная неоднозначность -> CLARIFY с вариантами", "[pipeline]")
 {
     const std::filesystem::path home = make_temp_dir("fcpp-pipe-home2");
@@ -169,7 +216,11 @@ TEST_CASE("pipeline: интерактивная неоднозначность -
     std::filesystem::create_directories(project / "build");
     std::ofstream(project / "CMakeLists.txt") << "cmake_minimum_required(VERSION 3.20)\nproject(p LANGUAGES CXX)\n";
     std::ofstream(project / "src" / "a.cpp")
-        << "struct A { int load(); };\nstruct B { int load(); };\nint A::load() { return 1; }\nint B::load() { return 2; }\n";
+        << "struct A { int load(); int load(int mode); };\n"
+           "struct B { int load(); };\n"
+           "int A::load() { return 1; }\n"
+           "int A::load(int mode) { return mode; }\n"
+           "int B::load() { return 2; }\n";
 
     const std::string directory = project.string();
     const std::string include_flag = "-I" + (project / "src").string();
@@ -193,7 +244,7 @@ TEST_CASE("pipeline: интерактивная неоднозначность -
                                  fcpp::EProjection::Explanation, "load"));
 
     REQUIRE(outcome.m_kind == fcpp::EOutcomeKind::Clarify);
-    REQUIRE(outcome.m_options.size() >= 2);
+    REQUIRE(outcome.m_options.size() == 2);
 
     std::filesystem::remove_all(home);
     std::filesystem::remove_all(project);

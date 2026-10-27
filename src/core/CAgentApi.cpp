@@ -118,7 +118,17 @@ SChatQuestion make_chat_question(const std::string& text, std::uint16_t question
             }
             else if (line.rfind("- ", 0) == 0)
             {
-                question.m_options.push_back(line.substr(2));
+                std::string option = line.substr(2);
+                const std::size_t option_start = option.find_first_not_of(" \\t");
+                if (option_start != std::string::npos)
+                {
+                    option.erase(0, option_start);
+                    if (std::find(question.m_options.begin(), question.m_options.end(), option)
+                            == question.m_options.end())
+                    {
+                        question.m_options.push_back(std::move(option));
+                    }
+                }
             }
             else
             {

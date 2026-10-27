@@ -199,10 +199,17 @@ SRequestOutcome CRequestPipeline::resolve_subject(const SIntent& intent) const
                             "subject name is empty; ask the user to identify the code entity");
     }
 
-    // Чистый роутинг без проекта (benchmark уровня A): имя есть -> считаем разрешённым.
+    // Чистый роутинг без project manager (benchmark уровня A).
     if (m_project_manager == nullptr || !m_project_manager->has_current())
     {
         return make_outcome(EOutcomeKind::Ok, EStage::Resolved, "subject accepted (no index)");
+    }
+    // Известный, но только light-restored проект нельзя считать открытым:
+    // иначе отсутствие результатов индекса маскируется под SymbolNotFound.
+    if (!m_project_manager->is_opened())
+    {
+        return make_outcome(EOutcomeKind::Failed, EStage::Resolved,
+                            "project context is known but full project.open has not succeeded");
     }
 
     // Резолвинг: короткое имя, а для квалифицированного — по последнему сегменту + фильтр по суффиксу.
