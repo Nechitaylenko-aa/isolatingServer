@@ -874,10 +874,15 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         response.m_state = "COMPLETED";
         response.m_text = answer;
     }
-    else if (!response.m_ok && !answer.empty())
+    else if (!response.m_ok)
     {
-        response.m_error = EErrorKind::Ambiguous;
-        response.m_message = answer;
+        // A failed ask must never leak EErrorKind::Ok with an empty message.
+        // Distinguish a genuine ambiguity from a pipeline that produced neither
+        // an answer nor a clarification.
+        response.m_error = answer.empty() ? EErrorKind::NotUnderstood : EErrorKind::Ambiguous;
+        response.m_message = answer.empty()
+            ? "request not understood; no evidence or clarification was produced"
+            : answer;
     }
     return response;
 }
