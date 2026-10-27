@@ -346,6 +346,11 @@ CAskService::EFastPathResult CAskService::try_fast_path(
             }
             if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
             {
+                if (authoritative_cursor && is_deictic_followup(text))
+                {
+                    have_preclassified_intent = false;
+                    return EFastPathResult::Continue;
+                }
                 std::cerr << "fcpp-agent: request scope=GENERAL_ENGINEERING; bypassing code index pipeline\n";
                 const auto answer_started = std::chrono::steady_clock::now();
                 const bool answer_ok = answer_service.answer_general_engineering(
@@ -626,7 +631,8 @@ bool CAskService::answer_codebase_request(
                         ? "GENERAL_ENGINEERING" : "CODEBASE"}
                 });
             }
-            if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering)
+            if (preclassified_intent.m_scope == ERequestScope::GeneralEngineering
+                && !(authoritative_current_cursor && is_deictic_followup(text)))
             {
                 const auto answer_started = std::chrono::steady_clock::now();
                 const bool answer_ok = answer_service.answer_general_engineering(
@@ -734,6 +740,14 @@ bool CAskService::answer_codebase_request(
         if (compound && intent.m_subject.m_name.empty() && !anchor_name.empty())
         {
             intent.m_subject.m_name = anchor_name;
+        }
+
+        if (authoritative_cursor_symbol.has_value()
+            && is_deictic_followup(text) && !compound)
+        {
+            intent.m_subject.m_selection = ESubjectSelection::Cursor;
+            intent.m_subject.m_name = authoritative_cursor_symbol->m_qualified_name;
+            intent.m_subject.m_kind = cursor_subject_kind(authoritative_cursor_symbol->m_kind);
         }
 
         std::cerr << "Понял так: " << area_name(intent.m_area) << " "
