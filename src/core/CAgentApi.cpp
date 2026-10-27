@@ -417,11 +417,11 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         }
         case EApiMethod::IndexRefresh:
         {
-            if (!m_project_manager.has_current())
+            if (!m_project_manager.is_opened())
             {
                 m_project_manager.restore_session();
             }
-            if (!m_project_manager.refresh_index())
+            if (!m_project_manager.is_opened() || !m_project_manager.refresh_index())
             {
                 return make_error(EErrorKind::IndexNotReady, "index refresh failed");
             }
@@ -431,11 +431,11 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         }
         case EApiMethod::IndexRebuild:
         {
-            if (!m_project_manager.has_current())
+            if (!m_project_manager.is_opened())
             {
                 m_project_manager.restore_session();
             }
-            if (!m_project_manager.rebuild_index())
+            if (!m_project_manager.is_opened() || !m_project_manager.rebuild_index())
             {
                 return make_error(EErrorKind::IndexNotReady, "index rebuild failed");
             }
@@ -446,13 +446,13 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         case EApiMethod::Build:
         case EApiMethod::Tests:
         {
-            if (!m_project_manager.has_current())
+            if (!m_project_manager.is_opened())
             {
                 m_project_manager.restore_session();
             }
-            if (!m_project_manager.has_current())
+            if (!m_project_manager.is_opened())
             {
-                return make_error(EErrorKind::ProjectNotOpen, "project not open");
+                return make_error(EErrorKind::ProjectNotOpen, "project not fully open");
             }
             if (!m_config_manager.config().m_allow_exec)
             {
@@ -619,9 +619,16 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 
     const std::string effective_text = answering_choice ? request.m_selected_option : request.m_text;
 
-    if (!m_project_manager.has_current())
+    const bool had_light_project = m_project_manager.has_current()
+        && !m_project_manager.is_opened();
+    if (!m_project_manager.is_opened())
     {
         m_project_manager.restore_session();
+    }
+    if (had_light_project && !m_project_manager.is_opened())
+    {
+        return make_error(EErrorKind::IndexNotReady,
+                          "project context is known but full project open failed");
     }
 
     std::string session_context_json = "{}";

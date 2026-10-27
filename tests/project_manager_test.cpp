@@ -258,6 +258,42 @@ TEST_CASE("паспорт проекта переживает переключе
     std::filesystem::remove_all(not_a_project);
 }
 
+TEST_CASE("light restore не считается полноценным открытием проекта", "[project][session]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-home-light");
+    HomeScope scope(home);
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    const std::filesystem::path project_dir = make_temp_dir("fcpp-proj-light");
+    write_cmake_lists(project_dir);
+    write_compile_commands(project_dir);
+    {
+        fcpp::CProjectManager manager(config);
+        REQUIRE(manager.open(project_dir));
+        REQUIRE(manager.is_opened());
+        REQUIRE(manager.save_session());
+    }
+
+    {
+        fcpp::CProjectManager manager(config);
+        REQUIRE(manager.restore_session_light());
+        REQUIRE(manager.has_current());
+        REQUIRE_FALSE(manager.is_opened());
+        REQUIRE(manager.resolve_path("main.cpp").empty());
+
+        REQUIRE(manager.restore_session());
+        REQUIRE(manager.has_current());
+        REQUIRE(manager.is_opened());
+        REQUIRE(manager.resolve_path("main.cpp").is_absolute());
+    }
+
+    std::filesystem::remove_all(home);
+    std::filesystem::remove_all(project_dir);
+}
+
 TEST_CASE("sha256 детерминирован", "[hash]")
 {
     REQUIRE(fcpp::CHash::sha256_hex("abc")

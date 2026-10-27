@@ -161,6 +161,7 @@ CProjectManager::CProjectManager(const CConfigManager& config_manager)
     , m_registry(config_manager.config().m_registry_path)
     , m_compile_commands_path()
     , m_has_current(false)
+    , m_current_opened(false)
     , m_current()
 {
 }
@@ -169,7 +170,7 @@ CProjectManager::~CProjectManager() = default;
 
 std::filesystem::path CProjectManager::resolve_path(const std::filesystem::path& path) const
 {
-    if (!m_has_current)
+    if (!m_current_opened)
     {
         return {};
     }
@@ -321,6 +322,7 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
     m_current.m_index_status = index_status;
     m_current.m_profile = std::move(project_profile);
     m_has_current = true;
+    m_current_opened = true;
     return true;
 }
 
@@ -346,12 +348,18 @@ std::filesystem::path CProjectManager::locate_compile_commands(const std::filesy
 void CProjectManager::close()
 {
     m_has_current = false;
+    m_current_opened = false;
     m_current = SProjectContext{};
 }
 
 bool CProjectManager::has_current() const
 {
     return m_has_current;
+}
+
+bool CProjectManager::is_opened() const
+{
+    return m_current_opened;
 }
 
 const SProjectContext& CProjectManager::current() const
@@ -371,7 +379,7 @@ const CProjectProfile& CProjectManager::profile() const
 
 bool CProjectManager::set_profile(std::string original_text)
 {
-    if (!m_has_current)
+    if (!m_current_opened)
     {
         return false;
     }
@@ -389,7 +397,7 @@ bool CProjectManager::set_profile(std::string original_text)
 
 bool CProjectManager::refresh_index()
 {
-    if (!m_has_current)
+    if (!m_current_opened)
     {
         return false;
     }
@@ -424,7 +432,7 @@ bool CProjectManager::refresh_index()
 
 bool CProjectManager::rebuild_index()
 {
-    if (!m_has_current)
+    if (!m_current_opened)
     {
         return false;
     }
@@ -464,7 +472,7 @@ bool CProjectManager::rebuild_index()
 
 bool CProjectManager::save_session() const
 {
-    if (!m_has_current)
+    if (!m_current_opened)
     {
         return false;
     }
@@ -573,6 +581,7 @@ bool CProjectManager::restore_session_light()
     m_current.m_index_status = index_status;
     m_current.m_profile = std::move(project_profile);
     m_has_current = true;
+    m_current_opened = false;
     return true;
 }
 
@@ -585,7 +594,7 @@ void CProjectManager::clear_session() const
 
 std::vector<SSymbol> CProjectManager::find_symbols(const std::string& name) const
 {
-    if (!m_has_current || name.empty())
+    if (!m_current_opened || name.empty())
     {
         return {};
     }

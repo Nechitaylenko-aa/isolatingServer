@@ -90,6 +90,14 @@ public:
     bool has_current() const;
 
     /**
+     * @brief Проверить, прошёл ли текущий контекст полный project.open.
+     *
+     * Отличается от has_current(): restore_session_light() только читает
+     * идентификатор проекта и статус индекса для read-only status-команд.
+     */
+    bool is_opened() const;
+
+    /**
      * @brief Получить контекст текущего проекта.
      * @return Константная ссылка на контекст.
      */
@@ -170,7 +178,8 @@ private:
     const CConfigManager& m_config_manager;      ///< Источник путей и конфигурации.
     CProjectRegistry m_registry;                 ///< Реестр проектов.
     std::filesystem::path m_compile_commands_path;///< Явный путь compile_commands.json (CLI).
-    bool m_has_current;                          ///< Признак открытого проекта.
+    bool m_has_current;                          ///< Контекст проекта известен (включая light restore).
+    bool m_current_opened;                        ///< Полный успешный open/warm/refresh.
     SProjectContext m_current;                   ///< Контекст текущего проекта.
 };
 
