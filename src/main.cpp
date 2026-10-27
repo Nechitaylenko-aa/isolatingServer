@@ -58,7 +58,9 @@ void print_usage(const std::string& program)
     std::cout << "  def|ancestors|derived|search|source <symbol> [<path>]\n";
     std::cout << "  ask \"<text>\" --session <id> [--file F --line L --col C] [--stream]\n";
     std::cout << "                                  Запрос в диалоге (сессия обязательна)\n";
-    std::cout << "  session <open|resume|close> [id]  Сессия диалога (resume берёт активную из БД)\n";
+    std::cout << "  session open                    Создать отдельную сессию\n";
+    std::cout << "  session resume [project-path]   Восстановить сессию проекта\n";
+    std::cout << "  session close <id>              Закрыть сессию\n";
     std::cout << "\nОпции: --config PATH --project PATH --compile-commands PATH --yes --json --verbose\n";
 }
 
@@ -174,6 +176,10 @@ void print_status(const fcpp::SApiResponse& response)
 
     const std::size_t state_index = static_cast<std::size_t>(response.m_index_status.m_state);
     std::cout << "project_id:  " << response.m_project_id << '\n';
+    if (!response.m_session_id.empty())
+    {
+        std::cout << "session_id:  " << response.m_session_id << '\n';
+    }
     std::cout << "state:       " << m_index_state_names[state_index] << '\n';
     std::cout << "generation:  " << response.m_index_status.m_generation << '\n';
     std::cout << "files:       " << response.m_index_status.m_file_count << '\n';
@@ -381,6 +387,34 @@ int main(int argc, char* argv[])
         }
         else if (subcommand == "resume")
         {
+            // CLI is one-shot, unlike the long-lived IDE protocol server.
+            // Open the supplied project in this process, or restore the last
+            // project address before asking the API to resume its session.
+            if (argc >= 4)
+            {
+                fcpp::SApiRequest open_request;
+                open_request.m_method = fcpp::EApiMethod::ProjectOpen;
+                open_request.m_path = argv[3];
+                const fcpp::SApiResponse opened = api.execute(open_request);
+                if (!opened.m_ok)
+                {
+                    std::cerr << "fcpp-agent: cannot open project for session resume: "
+                              << opened.m_message << '\n';
+                    return 1;
+                }
+            }
+            else
+            {
+                fcpp::SApiRequest status_request;
+                status_request.m_method = fcpp::EApiMethod::ProjectStatus;
+                const fcpp::SApiResponse status = api.execute(status_request);
+                if (!status.m_ok)
+                {
+                    std::cerr << "fcpp-agent: session resume requires a project path "
+                                 "or a previously opened project; use 'session resume <path>'\n";
+                    return 1;
+                }
+            }
             request.m_method = fcpp::EApiMethod::SessionResume;
         }
         else if (subcommand == "close")
