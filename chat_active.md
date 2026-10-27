@@ -175,3 +175,13 @@
 - Clarification options are deduplicated at the API text-to-DTO boundary too, because model-authored clarification text does not necessarily pass through `CRequestPipeline::resolve_subject`. Pipeline regression now includes overloads with the same qualified name and requires exactly two unique choices.
 - A known project context that has not passed full `project.open` now fails closed in `CRequestPipeline::resolve_subject`; a direct regression test covers light restore followed by symbol resolution.
 - This package is committed to `dev`; verify its CI before claiming these latest changes are green. Next manual smoke: cursor on `commands` in a method parameter; confirm returned cursor hint names the enclosing method; follow-up question options contain no duplicates.
+
+
+## Ask regressions A/B/C and path resolver cleanup (2026-10-27)
+
+- A: deterministic preflight asks for a method name/cursor for common Russian deictic method questions when there is neither a current cursor nor a historical cursor referent. The existing API clarification adapter should return `CLARIFY` with a question.
+- A/B: if the current request supplies a cursor but it cannot be resolved, old cursor-bearing turns are not injected as a replacement symbol. This prevents stale-symbol substitution.
+- B: final evidence answer generation receives the raw current user message; richer context remains available for intent resolution and evidence collection, but is no longer misrepresented as the question to answer.
+- C: public clarification options are deduplicated after whitespace/case normalization, covering duplicate display labels in cache-first paths.
+- `CProjectPaths::resolve` moved out of the header into `src/core/CProjectPaths.cpp`; CMake includes the implementation.
+- Regression tests added for unnamed-method clarification and path resolution. CI pending.

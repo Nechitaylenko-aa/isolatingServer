@@ -6,7 +6,9 @@
 #include "core/CAskService.h"
 #include "core/CLogger.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <filesystem>
 #include <utility>
 #include "core/CAnswerService.h"
@@ -48,6 +50,26 @@ namespace
 
 /** @brief Жёсткий лимит числа подзадач (guardrail ADR-16). */
 constexpr std::size_t k_max_subtasks = 6;
+
+bool asks_about_unnamed_method(const std::string& text)
+{
+    std::string normalized = text;
+    // std::tolower is byte-oriented in the default C locale; normalize the
+    // common initial Cyrillic capital explicitly before matching UTF-8 text.
+    const std::string capital_what = "Что";
+    const std::string lower_what = "что";
+    for (std::size_t position = normalized.find(capital_what);
+         position != std::string::npos;
+         position = normalized.find(capital_what, position + lower_what.size()))
+    {
+        normalized.replace(position, capital_what.size(), lower_what);
+    }
+    // Narrow deterministic guard for common Russian deictic requests.
+    return normalized.find("что делает этот метод") != std::string::npos
+        || normalized.find("что делает данный метод") != std::string::npos
+        || normalized.find("что делает метод") != std::string::npos
+        || normalized.find("что выполняет этот метод") != std::string::npos;
+}
 
 /**
  * @brief Скомпоновать текст хинта символа под курсором для промпта (B2/ADR-20).
@@ -663,8 +685,10 @@ bool CAskService::answer_codebase_request(
             });
         }
         const auto answer_started = std::chrono::steady_clock::now();
+        // Keep the current request distinct from the contextual prompt used for
+        // intent resolution; otherwise the model can repeat a previous turn.
         const bool answer_ok = answer_service.answer_from_evidence(
-            contextual_text, accumulated, stream, out_answer, on_stream_chunk);
+            text, accumulated, stream, out_answer, on_stream_chunk);
         if (m_logger != nullptr)
         {
             m_logger->log_event(answer_ok ? ELogLevel::Info : ELogLevel::Warn, "ask.answer", {
@@ -707,6 +731,18 @@ bool CAskService::ask(const std::string& text,
                       const std::function<bool(const std::string&)>& on_stream_chunk) const
 {
     out_answer.clear();
+
+    const bool has_current_cursor = !cursor_file.empty() && cursor_line > 0;
+    const bool has_historical_cursor = std::any_of(history.begin(), history.end(),
+        [](const SConversationTurn& turn)
+        {
+            return !turn.m_editor_file.empty() && turn.m_editor_line > 0;
+        });
+    if (!has_current_cursor && !has_historical_cursor && asks_about_unnamed_method(text))
+    {
+        out_answer = "Уточните, что имеется в виду: какой метод? Укажите его имя или установите курсор на код.";
+        return false;
+    }
 
     if (m_logger != nullptr)
     {
@@ -760,6 +796,12 @@ bool CAskService::ask(const std::string& text,
     }
 
     std::vector<SConversationTurn> contextual_history = history;
+    // If the current cursor is present but unresolved, never replace it with
+    // a symbol from an older turn. Historical cursor context is fallback-only
+    // when the current request has no editor position or its symbol resolved.
+    const bool current_cursor_resolved = react_context.find("[cursor symbol: ")
+        != std::string::npos;
+    const bool may_restore_history_cursor = !has_current_cursor || current_cursor_resolved;
     std::size_t history_cursor_checks = 0;
     std::size_t history_cursor_resolved = 0;
     const std::size_t history_start = contextual_history.size() > 4
@@ -767,7 +809,7 @@ bool CAskService::ask(const std::string& text,
     for (std::size_t i = history_start; i < contextual_history.size(); ++i)
     {
         SConversationTurn& turn = contextual_history[i];
-        if (turn.m_editor_file.empty() || turn.m_editor_line == 0)
+        if (!may_restore_history_cursor || turn.m_editor_file.empty() || turn.m_editor_line == 0)
         {
             continue;
         }

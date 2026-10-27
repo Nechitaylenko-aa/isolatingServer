@@ -11,32 +11,16 @@ namespace fcpp
 {
 
 /**
- * @brief Разрешить путь в абсолютный лексически нормализованный путь.
+ * @brief Единый резолвер путей в абсолютный лексически нормализованный формат.
  *
  * Абсолютный вход нормализуется без изменения базы. Относительный вход
- * разрешается только относительно явно переданной абсолютной базы: скрытая
- * зависимость от current_path() запрещена.
+ * разрешается только относительно явно переданной абсолютной базы.
  */
 class CProjectPaths
 {
 public:
     static std::filesystem::path resolve(const std::filesystem::path& value,
-                                         const std::filesystem::path& base)
-    {
-        if (value.empty())
-        {
-            return {};
-        }
-        if (value.is_absolute())
-        {
-            return value.lexically_normal();
-        }
-        if (base.empty() || !base.is_absolute())
-        {
-            return {};
-        }
-        return (base / value).lexically_normal();
-    }
+                                         const std::filesystem::path& base);
 };
 
 } // namespace fcpp

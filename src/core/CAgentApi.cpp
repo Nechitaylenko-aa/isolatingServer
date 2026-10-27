@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstddef>
+#include <cctype>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -123,8 +124,40 @@ SChatQuestion make_chat_question(const std::string& text, std::uint16_t question
                 if (option_start != std::string::npos)
                 {
                     option.erase(0, option_start);
-                    if (std::find(question.m_options.begin(), question.m_options.end(), option)
-                            == question.m_options.end())
+                    const auto normalize_option = [](const std::string& value)
+                    {
+                        std::string result;
+                        bool previous_space = false;
+                        for (const unsigned char ch : value)
+                        {
+                            if (std::isspace(ch))
+                            {
+                                if (!result.empty() && !previous_space)
+                                {
+                                    result.push_back(' ');
+                                }
+                                previous_space = true;
+                            }
+                            else
+                            {
+                                result.push_back(static_cast<char>(std::tolower(ch)));
+                                previous_space = false;
+                            }
+                        }
+                        if (!result.empty() && result.back() == ' ')
+                        {
+                            result.pop_back();
+                        }
+                        return result;
+                    };
+                    const std::string normalized_option = normalize_option(option);
+                    const bool duplicate = std::any_of(
+                        question.m_options.begin(), question.m_options.end(),
+                        [&normalize_option, &normalized_option](const std::string& existing)
+                        {
+                            return normalize_option(existing) == normalized_option;
+                        });
+                    if (!duplicate)
                     {
                         question.m_options.push_back(std::move(option));
                     }

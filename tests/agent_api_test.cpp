@@ -239,3 +239,26 @@ TEST_CASE("agent API: lifecycle diagnostics are JSONL and correlate request IDs"
     REQUIRE_FALSE(records[0].contains("text"));
     std::filesystem::remove_all(home);
 }
+
+
+TEST_CASE("agent API: question about unnamed method returns CLARIFY", "[api][ask]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-api-clarify-home");
+    HomeScope scope(home);
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    fcpp::CAgentApi api(config);
+    fcpp::SApiRequest request;
+    request.m_method = fcpp::EApiMethod::Ask;
+    request.m_text = "Что делает этот метод?";
+    const fcpp::SApiResponse response = api.execute(request);
+    REQUIRE(response.m_ok);
+    REQUIRE(response.m_state == "CLARIFY");
+    REQUIRE(response.m_has_question);
+    REQUIRE_FALSE(response.m_question.m_questions.empty());
+    REQUIRE(response.m_question.m_questions.front().m_text.find("какой метод") != std::string::npos);
+
+    std::filesystem::remove_all(home);
+}

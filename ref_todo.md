@@ -283,3 +283,24 @@
 - **Исправление:** точное разрешение курсора выполняется libclang по нормализованному пути, координатам и compile arguments; строковый кэш больше не является источником истины для cursor context.
 - **Регрессии:** существующий тест `C::run(int commands)` проверяет callable selection; pipeline ambiguity test усилен overloads с одинаковым qualified name; API parser дедуплицирует повторные варианты из текста уточнения; добавлен guardrail-тест light restore → отказ в разрешении символа до полного open.
 - **Статус:** CODE + TESTS UPDATED; ожидает CI и ручной smoke-test на целевом проекте.
+
+
+### R26 — Ask returned COMPLETED for a request missing its method reference (A)
+- **Priority:** P0 — client protocol correctness.
+- **Fix:** deterministic preflight handles common Russian deictic method questions when no current or historical cursor referent exists. Existing clarification adapter maps this to `state=CLARIFY`.
+- **Regression:** API test asserts `CLARIFY`, question payload, and no false `COMPLETED`.
+
+### R27 — Follow-up answer could repeat prior response (B)
+- **Priority:** P0 — answer correctness.
+- **Fix:** final evidence answer receives the current raw user text, while conversation context remains available to intent resolution/evidence collection. An unresolved current cursor suppresses old cursor-symbol restoration, preventing stale symbol substitution.
+- **Regression:** manual scenarios 2/3/5 required; automated targeted tests still desirable.
+
+### R28 — Duplicate clarification options on alternate/cache-first path (C)
+- **Priority:** P1.
+- **Fix:** normalize whitespace and case for visible option deduplication in the public API question builder, in addition to pipeline qualified-name deduplication.
+- **Regression:** manual scenario 3 required.
+
+### R29 — CProjectPaths header implementation
+- **Priority:** P2.
+- **Fix:** moved implementation into `src/core/CProjectPaths.cpp` and registered it in CMake.
+- **Status:** waiting for CI.

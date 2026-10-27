@@ -109,6 +109,7 @@ target_compile_options(sqlite3 PRIVATE -w)
 add_library(fcpp_core STATIC
     src/core/CConfigManager.cpp
     src/core/CProjectProfile.cpp
+    src/core/CProjectPaths.cpp
     src/core/CExecutor.cpp
     src/core/CHash.cpp
     src/core/CCompileCommandsLocator.cpp

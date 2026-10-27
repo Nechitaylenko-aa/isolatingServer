@@ -10,6 +10,7 @@
 #include "core/CConfigManager.h"
 #include "core/CHash.h"
 #include "core/CProjectManager.h"
+#include "core/CProjectPaths.h"
 #include "fcpp-agent/SProject.h"
 #include "index/CSchemaMigrator.h"
 
@@ -292,6 +293,16 @@ TEST_CASE("light restore не считается полноценным откр
 
     std::filesystem::remove_all(home);
     std::filesystem::remove_all(project_dir);
+}
+
+TEST_CASE("project paths resolve absolute and relative inputs without cwd", "[project][paths]")
+{
+    const std::filesystem::path base = std::filesystem::temp_directory_path() / "fcpp-path-base";
+    REQUIRE(fcpp::CProjectPaths::resolve("src/../main.cpp", base)
+            == (base / "main.cpp").lexically_normal());
+    REQUIRE(fcpp::CProjectPaths::resolve(base / "src" / ".." / "main.cpp", {})
+            == (base / "main.cpp").lexically_normal());
+    REQUIRE(fcpp::CProjectPaths::resolve("main.cpp", {}).empty());
 }
 
 TEST_CASE("sha256 детерминирован", "[hash]")
