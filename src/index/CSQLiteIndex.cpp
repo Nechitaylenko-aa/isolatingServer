@@ -535,6 +535,25 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
         return false;
     }
 
+    // Одна compile command на путь: один TU может повторяться для нескольких targets.
+    // Сохраняем первое вхождение в compile_commands.json и нормализуем путь.
+    std::vector<const SCompileCommand*> inventory_commands;
+    std::unordered_set<std::string> seen_paths;
+    inventory_commands.reserve(commands.size());
+    for (const SCompileCommand& command : commands)
+    {
+        const std::string normalized_path = command.m_file.lexically_normal().string();
+        if (is_external_path(normalized_path, m_project_root.string()))
+        {
+            continue;
+        }
+        if (!seen_paths.insert(normalized_path).second)
+        {
+            continue;
+        }
+        inventory_commands.push_back(&command);
+    }
+
     if (!exec_sql("BEGIN IMMEDIATE;"))
     {
         return false;
@@ -600,25 +619,6 @@ bool CSQLiteIndex::store_inventory(const std::vector<SCompileCommand>& commands)
             exec_sql("ROLLBACK;");
             return false;
         }
-    }
-
-    // Одна compile command на путь: один TU может повторяться для нескольких targets.
-    // Сохраняем первое вхождение в compile_commands.json и нормализуем путь.
-    std::vector<const SCompileCommand*> inventory_commands;
-    std::unordered_set<std::string> seen_paths;
-    inventory_commands.reserve(commands.size());
-    for (const SCompileCommand& command : commands)
-    {
-        const std::string normalized_path = command.m_file.lexically_normal().string();
-        if (is_external_path(normalized_path, m_project_root.string()))
-        {
-            continue;
-        }
-        if (!seen_paths.insert(normalized_path).second)
-        {
-            continue;
-        }
-        inventory_commands.push_back(&command);
     }
 
     for (const SCompileCommand* command_ptr : inventory_commands)
