@@ -336,6 +336,7 @@ TEST_CASE("agent API: unresolved current cursor does not fall back to historical
     REQUIRE(response.m_ok);
     REQUIRE(response.m_state == "CLARIFY");
     REQUIRE(response.m_has_question);
+    REQUIRE_FALSE(response.m_question.m_questions.empty());
     REQUIRE(response.m_question.m_questions.front().m_text.find("не удалось определить символ") != std::string::npos);
 
     std::filesystem::remove_all(home);
