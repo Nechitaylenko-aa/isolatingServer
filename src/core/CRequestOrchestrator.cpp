@@ -4,6 +4,7 @@
  */
 
 #include "core/CRequestOrchestrator.h"
+#include "core/CHistorian.h"
 
 #include <chrono>
 #include <utility>
@@ -15,8 +16,9 @@
 namespace fcpp
 {
 
-CRequestOrchestrator::CRequestOrchestrator(CLogger& logger)
+CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historian)
     : m_logger(logger)
+    , m_historian(historian)
 {
 }
 
@@ -78,14 +80,37 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         stage("INTELLIGIBILITY_CHECK", "STUB_ACCEPTED",
               {{"implementation", "placeholder_non_empty_check"}});
 
-        // Placeholders intentionally do not infer relevance from mere presence.
-        // Until analyzers are implemented, neither context source is marked applicable.
-        stage("HISTORY_APPLICABILITY", "STUB_NOT_APPLICABLE",
-              {{"implementation", "pending_semantic_analyzer"}});
+        bool history_applicable = false;
+        bool history_analysis_failed = false;
+        std::string history_error;
+        if (request.m_history.empty())
+        {
+            // The historian is deliberately not called for an empty history.
+            stage("HISTORY_APPLICABILITY", "NOT_APPLICABLE_NO_HISTORY");
+        }
+        else if (m_historian != nullptr)
+        {
+            const SHistoryRelevance relevance =
+                m_historian->assess_relevance(request.m_text, request.m_history);
+            history_applicable = relevance.m_ok && relevance.m_history_needed;
+            history_analysis_failed = !relevance.m_ok;
+            history_error = relevance.m_error;
+            stage("HISTORY_APPLICABILITY",
+                  relevance.m_ok ? (relevance.m_history_needed ? "APPLICABLE" : "NOT_APPLICABLE")
+                                 : "FAILED",
+                  {{"used_role", llm_role_name(relevance.m_used_role)},
+                   {"escalated", relevance.m_escalated},
+                   {"reason", relevance.m_error}});
+        }
+        else
+        {
+            stage("HISTORY_APPLICABILITY", "STUB_NO_HISTORIAN_INJECTED",
+                  {{"implementation", "historian_dependency_not_supplied"}});
+        }
         stage("CURSOR_APPLICABILITY", "STUB_NOT_APPLICABLE",
               {{"implementation", "pending_semantic_analyzer"}});
 
-        result.m_route = "NO_APPLICABLE_CONTEXT";
+        result.m_route = history_applicable ? "HISTORY_CONTEXT_REQUIRED" : "NO_APPLICABLE_CONTEXT";
         stage("CONTEXT_BRANCH", result.m_route);
 
         // Placeholder: general question vs. codebase question is not guessed here.
@@ -104,6 +129,13 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_status = "STUB_COMPLETE";
         result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
         result.m_message = "No answer generated: scope classification is not implemented yet.";
+        if (history_analysis_failed)
+        {
+            result.m_ok = false;
+            result.m_status = "FAILED";
+            result.m_exit_reason = "HISTORY_RELEVANCE_FAILED";
+            result.m_message = "History relevance assessment failed: " + history_error;
+        }
     }
 
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(

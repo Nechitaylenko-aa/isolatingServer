@@ -16,6 +16,7 @@ namespace fcpp
 {
 
 class CLogger;
+class CHistorian;
 class CProjectManager;
 
 /** @brief Normalized input passed from the client-facing API facade. */
@@ -50,12 +51,13 @@ struct SOrchestrationResult
 class CRequestOrchestrator
 {
 public:
-    explicit CRequestOrchestrator(CLogger& logger);
+    explicit CRequestOrchestrator(CLogger& logger, CHistorian* historian = nullptr);
 
     SOrchestrationResult run(const SOrchestrationRequest& request) const;
 
 private:
     CLogger& m_logger;
+    CHistorian* m_historian = nullptr;
 };
 
 } // namespace fcpp
