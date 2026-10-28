@@ -45,12 +45,13 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         nlohmann::json fields = details;
         fields["stage"] = name;
         fields["outcome"] = outcome;
-        log_event(ELogLevel::Debug, "orchestrator.stage", fields);
+        log_event(ELogLevel::Info, "orchestrator.stage", fields);
     };
 
     log_event(ELogLevel::Info, "orchestrator.started", {
         {"session_id", request.m_session_id},
         {"text_length", request.m_text.size()},
+        {"query", request.m_text},
         {"has_cursor", !request.m_cursor_file.empty()
             && request.m_cursor_line > 0 && request.m_cursor_column > 0},
         {"history_turns", request.m_history.size()},
@@ -94,8 +95,20 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_status = "STUB_COMPLETE";
         result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
         result.m_message =
-            "Request orchestration tree reached its current stub boundary. "
-            "No answer was generated: scope classification is not implemented.";
+            "ORCHESTRATION_STATUS=" + result.m_status
+            + "\\nROUTE=" + result.m_route
+            + "\\nEXIT_REASON=" + result.m_exit_reason
+            + "\\nTRACE=";
+        for (std::size_t index = 0; index < result.m_trace.size(); ++index)
+        {
+            if (index != 0)
+            {
+                result.m_message += " -> ";
+            }
+            result.m_message += result.m_trace[index];
+        }
+        result.m_message +=
+            "\\nNo answer generated: scope classification is not implemented yet.";
     }
 
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
