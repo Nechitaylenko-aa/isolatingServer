@@ -35,7 +35,7 @@ TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
     REQUIRE(result.m_status == "STUB_COMPLETE");
     REQUIRE(result.m_exit_reason == "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED");
     REQUIRE(result.m_route == "NO_APPLICABLE_CONTEXT");
-    REQUIRE(result.m_trace.size() == 8);
+    REQUIRE(result.m_trace.size() == 13);
     REQUIRE(result.m_trace.back() == "EXIT:SCOPE_CLASSIFICATION_NOT_IMPLEMENTED");
     REQUIRE(result.m_message.find("ORCHESTRATION_STATUS=STUB_COMPLETE") != std::string::npos);
     REQUIRE(result.m_message.find("EXIT_REASON=SCOPE_CLASSIFICATION_NOT_IMPLEMENTED") != std::string::npos);
