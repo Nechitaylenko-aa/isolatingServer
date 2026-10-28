@@ -116,7 +116,7 @@ add_library(fcpp_core STATIC
     src/core/CCompileCommandsParser.cpp
     src/core/CProjectRegistry.cpp
     src/core/CProjectManager.cpp
-    src/index/CSchemaMigrator.cpp
+    src/index/CSchemaInitializer.cpp
     src/index/CSQLiteIndex.cpp
     src/index/CClang22.cpp
     src/index/CClangFactory.cpp
@@ -171,7 +171,7 @@ target_include_directories(fcpp_core PRIVATE
 )
 target_compile_features(fcpp_core PUBLIC cxx_std_20)
 target_compile_definitions(fcpp_core PRIVATE
-    FCPP_AGENT_MIGRATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/migrations"
+    FCPP_AGENT_SCHEMA_FILE="${CMAKE_CURRENT_SOURCE_DIR}/schema/current.sql"
 )
 target_link_libraries(fcpp_core PUBLIC
     nlohmann_json::nlohmann_json
