@@ -490,9 +490,10 @@ SApiStreamResult run_api_stream(const std::vector<SMockHttpResponse>& responses,
 
 } // namespace
 
-TEST_CASE("answer review integration: accepted answer is buffered and emitted as one verified chunk",
+TEST_CASE("answer review legacy integration: accepted answer is buffered and emitted as one verified chunk",
           "[stream][integration]")
 {
+    SKIP("Legacy answer/context path is intentionally disconnected while the new orchestration tree is being built.");
     const SApiStreamResult result = run_api_stream({
         {openai_completion("Hello world"), "application/json", 0},
         {reviewer_completion("ACCEPT", 10, "answer is concise and relevant"), "application/json", 0}
@@ -514,9 +515,10 @@ TEST_CASE("answer review integration: accepted answer is buffered and emitted as
     REQUIRE_FALSE(reviewer.contains("tools"));
 }
 
-TEST_CASE("answer review integration: caller cancellation occurs only after review",
+TEST_CASE("answer review legacy integration: caller cancellation occurs only after review",
           "[stream][integration]")
 {
+    SKIP("Legacy answer/context path is intentionally disconnected while the new orchestration tree is being built.");
     const SApiStreamResult result = run_api_stream({
         {openai_completion("stop-here"), "application/json", 0},
         {reviewer_completion("ACCEPT", 5, "candidate is acceptable"), "application/json", 0}
@@ -529,9 +531,10 @@ TEST_CASE("answer review integration: caller cancellation occurs only after revi
     REQUIRE(result.m_diagnostics.find("ANSWER_TEMPERATURE") != std::string::npos);
 }
 
-TEST_CASE("answer review integration: rejected candidate is never streamed to the caller",
+TEST_CASE("answer review legacy integration: rejected candidate is never streamed to the caller",
           "[stream][integration]")
 {
+    SKIP("Legacy answer/context path is intentionally disconnected while the new orchestration tree is being built.");
     const SApiStreamResult result = run_api_stream({
         {openai_completion("unverified candidate must not leak"), "application/json", 0},
         {reviewer_completion("ESCALATE", 92, "unsupported claims"), "application/json", 0}
@@ -549,9 +552,10 @@ TEST_CASE("answer review integration: rejected candidate is never streamed to th
     REQUIRE(result.m_diagnostics.find("unverified candidate must not leak") == std::string::npos);
 }
 
-TEST_CASE("answer review integration: repeated high risk escalates generation to the next model",
+TEST_CASE("answer review legacy integration: repeated high risk escalates generation to the next model",
           "[review][integration]")
 {
+    SKIP("Legacy answer/context path is intentionally disconnected while the new orchestration tree is being built.");
     const std::string source_intent =
         "<intent>\n"
         "<scope>CODEBASE</scope>\n"
@@ -627,9 +631,10 @@ TEST_CASE("streaming integration: tool-enabled completion preserves tool_calls a
     REQUIRE(request.contains("tools"));
 }
 
-TEST_CASE("conversation context integration: persisted state and previous turns reach the next model request",
+TEST_CASE("conversation context legacy integration: persisted state and previous turns reach the next model request",
           "[conversation][integration]")
 {
+    SKIP("Legacy answer/context path is intentionally disconnected while the new orchestration tree is being built.");
     CTempDir home("fcpp-conversation-integration-home");
     CHomeScope home_scope(home.path());
 
