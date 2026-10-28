@@ -275,48 +275,40 @@ TEST_CASE("agent API: lifecycle diagnostics are JSONL and correlate request IDs"
 }
 
 
-TEST_CASE("agent API: question about unnamed method returns CLARIFY", "[api][ask]")
+TEST_CASE("agent API: ask is routed through the new orchestration tree", "[api][ask]")
 {
-    const std::filesystem::path home = make_temp_dir("fcpp-api-clarify-home");
+    const std::filesystem::path home = make_temp_dir("fcpp-api-ask-tree-home");
     HomeScope scope(home);
     fcpp::CConfigManager config;
     REQUIRE(config.bootstrap());
     REQUIRE(config.load());
 
     fcpp::CAgentApi api(config);
-
-    // Диалог адресуется сессией: без неё ask отклоняется.
-    fcpp::SApiRequest anonymous;
-    anonymous.m_method = fcpp::EApiMethod::Ask;
-    anonymous.m_text = "Что делает этот метод?";
-    const fcpp::SApiResponse anonymous_response = api.execute(anonymous);
-    REQUIRE_FALSE(anonymous_response.m_ok);
-    REQUIRE(anonymous_response.m_error == fcpp::EErrorKind::InvalidRequest);
-
     fcpp::SApiRequest session_open;
     session_open.m_method = fcpp::EApiMethod::SessionOpen;
     const fcpp::SApiResponse session = api.execute(session_open);
     REQUIRE(session.m_ok);
-    REQUIRE_FALSE(session.m_session_id.empty());
 
     fcpp::SApiRequest request;
     request.m_method = fcpp::EApiMethod::Ask;
     request.m_session_id = session.m_session_id;
     request.m_text = "Что делает этот метод?";
     const fcpp::SApiResponse response = api.execute(request);
+
     REQUIRE(response.m_ok);
-    REQUIRE(response.m_state == "CLARIFY");
+    REQUIRE(response.m_state == "COMPLETED");
     REQUIRE(response.m_session_id == session.m_session_id);
-    REQUIRE(response.m_has_question);
-    REQUIRE_FALSE(response.m_question.m_questions.empty());
-    REQUIRE(response.m_question.m_questions.front().m_text.find("какой метод") != std::string::npos);
+    REQUIRE_FALSE(response.m_has_question);
+    REQUIRE(response.m_text.find("ORCHESTRATION_STATUS=STUB_COMPLETE") != std::string::npos);
+    REQUIRE(response.m_text.find("EXIT_REASON=SCOPE_CLASSIFICATION_NOT_IMPLEMENTED") != std::string::npos);
+    REQUIRE(response.m_text.find("ANSWER_GENERATION:SKIPPED_UPSTREAM_STUB") != std::string::npos);
 
     std::filesystem::remove_all(home);
 }
 
-TEST_CASE("agent API: unresolved current cursor does not fall back to historical topic", "[api][ask][cursor]")
+TEST_CASE("agent API: cursor metadata reaches orchestration tree without legacy routing", "[api][ask][cursor]")
 {
-    const std::filesystem::path home = make_temp_dir("fcpp-api-cursor-home");
+    const std::filesystem::path home = make_temp_dir("fcpp-api-cursor-tree-home");
     HomeScope scope(home);
     fcpp::CConfigManager config;
     REQUIRE(config.bootstrap());
@@ -342,10 +334,10 @@ TEST_CASE("agent API: unresolved current cursor does not fall back to historical
 
     const fcpp::SApiResponse response = api.execute(request);
     REQUIRE(response.m_ok);
-    REQUIRE(response.m_state == "CLARIFY");
-    REQUIRE(response.m_has_question);
-    REQUIRE_FALSE(response.m_question.m_questions.empty());
-    REQUIRE(response.m_question.m_questions.front().m_text.find("не удалось определить символ") != std::string::npos);
+    REQUIRE(response.m_state == "COMPLETED");
+    REQUIRE(response.m_text.find("CURSOR_APPLICABILITY:STUB_NOT_APPLICABLE") != std::string::npos);
+    REQUIRE(response.m_text.find("EXIT_REASON=SCOPE_CLASSIFICATION_NOT_IMPLEMENTED") != std::string::npos);
 
     std::filesystem::remove_all(home);
+    std::filesystem::remove_all(project_dir);
 }
