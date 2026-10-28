@@ -17,7 +17,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "core/CAskService.h"
+#include "core/CRequestOrchestrator.h"
 #include "core/CLogger.h"
 #include "core/CHash.h"
 #include "core/CDoctor.h"
@@ -831,18 +831,24 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
     }
 
-    CAskService service(m_config_manager, m_project_manager, &m_logger, request.m_request_id);
+    SOrchestrationRequest orchestration_request;
+    orchestration_request.m_request_id = request.m_request_id;
+    orchestration_request.m_text = effective_text;
+    orchestration_request.m_session_id = request.m_session_id;
+    orchestration_request.m_cursor_file = request.m_editor_file;
+    orchestration_request.m_cursor_line = request.m_editor_line;
+    orchestration_request.m_cursor_column = request.m_editor_column;
+    orchestration_request.m_context_json = session_context_json;
+    orchestration_request.m_history = conversation_history;
+    orchestration_request.m_project_open = m_project_manager.is_opened();
+
+    CRequestOrchestrator orchestrator(m_logger);
+    const SOrchestrationResult orchestration_result = orchestrator.run(orchestration_request);
+
     SApiResponse response;
-    std::string answer;
-    response.m_ok = service.ask(effective_text,
-                                request.m_stream,
-                                request.m_editor_file,
-                                request.m_editor_line,
-                                request.m_editor_column,
-                                answer,
-                                session_context_json,
-                                conversation_history,
-                                request.m_on_stream_chunk);
+    std::string answer = orchestration_result.m_message;
+    response.m_ok = orchestration_result.m_ok;
+    response.m_message = orchestration_result.m_message;
 
     const bool clarification = !response.m_ok
         && answer.rfind("Уточните, что имеется в виду:", 0) == 0;
