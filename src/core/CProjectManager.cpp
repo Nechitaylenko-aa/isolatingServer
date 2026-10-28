@@ -612,8 +612,7 @@ std::vector<SProject> CProjectManager::list() const
 {
     const std::filesystem::path registry_path = m_config_manager.config().m_registry_path;
 
-    CSchemaMigrator registry_migrator;
-    if (!registry_migrator.migrate(registry_path.string()))
+    if (!CSchemaInitializer::initialize_or_validate(registry_path))
     {
         return {};
     }
