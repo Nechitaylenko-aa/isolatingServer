@@ -34,6 +34,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     {
         nlohmann::json payload = fields;
         payload["request_id"] = request.m_request_id;
+        payload["session_id"] = request.m_session_id;
         m_logger.log_event(level, event, payload);
     };
 
@@ -96,9 +97,9 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
         result.m_message =
             "ORCHESTRATION_STATUS=" + result.m_status
-            + "\\nROUTE=" + result.m_route
-            + "\\nEXIT_REASON=" + result.m_exit_reason
-            + "\\nTRACE=";
+            + "\nROUTE=" + result.m_route
+            + "\nEXIT_REASON=" + result.m_exit_reason
+            + "\nTRACE=";
         for (std::size_t index = 0; index < result.m_trace.size(); ++index)
         {
             if (index != 0)
@@ -108,7 +109,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
             result.m_message += result.m_trace[index];
         }
         result.m_message +=
-            "\\nNo answer generated: scope classification is not implemented yet.";
+            "\nNo answer generated: scope classification is not implemented yet.";
     }
 
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
