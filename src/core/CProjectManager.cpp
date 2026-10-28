@@ -24,7 +24,7 @@
 #include "core/CCompileCommandsParser.h"
 #include "index/CClangFactory.h"
 #include "index/CSQLiteIndex.h"
-#include "index/CSchemaMigrator.h"
+#include "index/CSchemaInitializer.h"
 
 namespace fcpp
 {
@@ -58,8 +58,7 @@ std::int64_t now_unix_seconds()
 }
 
 /**
- * @brief Загрузить паспорт из БД проекта. Отсутствующая таблица означает
- * пустой паспорт для совместимости с БД до миграции.
+ * @brief Загрузить паспорт из БД проекта. Отсутствие актуальной таблицы — ошибка.
  */
 bool load_project_profile(const std::filesystem::path& db_path, CProjectProfile& profile)
 {
@@ -77,9 +76,8 @@ bool load_project_profile(const std::filesystem::path& db_path, CProjectProfile&
     const char* sql = "SELECT original_text, compact_text FROM project_profile WHERE id = 1;";
     if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK)
     {
-        const std::string error = sqlite3_errmsg(db);
         sqlite3_close(db);
-        return error.find("no such table: project_profile") != std::string::npos;
+        return false;
     }
 
     const int step_result = sqlite3_step(statement);
@@ -247,10 +245,15 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
     project.m_name = canonical.filename().string();
     project.m_last_opened_at = now_unix_seconds();
 
-    CSchemaMigrator migrator;
-    if (!migrator.migrate(db_path.string()))
+    if (!CSchemaInitializer::initialize_or_validate(db_path))
     {
-        return fail("migrate_index_schema");
+        return fail("initialize_index_schema");
+    }
+
+    const std::filesystem::path registry_path = m_config_manager.config().m_registry_path;
+    if (!CSchemaInitializer::initialize_or_validate(registry_path))
+    {
+        return fail("initialize_project_registry_schema");
     }
 
     CSQLiteIndex index(db_path);
@@ -302,11 +305,6 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
         return fail("load_project_profile");
     }
 
-    CSchemaMigrator registry_migrator;
-    if (!registry_migrator.migrate(m_config_manager.config().m_registry_path.string()))
-    {
-        return fail("migrate_project_registry");
-    }
     if (!m_registry.open_db())
     {
         return fail("open_project_registry");
