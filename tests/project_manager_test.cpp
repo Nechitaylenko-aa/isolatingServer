@@ -12,7 +12,9 @@
 #include "core/CProjectManager.h"
 #include "core/CProjectPaths.h"
 #include "fcpp-agent/SProject.h"
-#include "index/CSchemaMigrator.h"
+#include "index/CSchemaInitializer.h"
+
+#include <sqlite3.h>
 
 namespace
 {
@@ -110,6 +112,33 @@ private:
 
 } // namespace
 
+TEST_CASE("incompatible existing database is rejected without schema repair", "[project][schema]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-home");
+    const std::filesystem::path db_path = home / "incompatible.db";
+
+    sqlite3* db = nullptr;
+    REQUIRE(sqlite3_open(db_path.string().c_str(), &db) == SQLITE_OK);
+    REQUIRE(sqlite3_exec(db,
+                         "CREATE TABLE project_profile (id INTEGER PRIMARY KEY);",
+                         nullptr, nullptr, nullptr) == SQLITE_OK);
+    REQUIRE(sqlite3_close(db) == SQLITE_OK);
+
+    REQUIRE_FALSE(fcpp::CSchemaInitializer::initialize_or_validate(db_path));
+
+    REQUIRE(sqlite3_open_v2(db_path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK);
+    sqlite3_stmt* statement = nullptr;
+    REQUIRE(sqlite3_prepare_v2(db,
+                               "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%';",
+                               -1, &statement, nullptr) == SQLITE_OK);
+    REQUIRE(sqlite3_step(statement) == SQLITE_ROW);
+    REQUIRE(sqlite3_column_int(statement, 0) == 1);
+    sqlite3_finalize(statement);
+    REQUIRE(sqlite3_close(db) == SQLITE_OK);
+
+    std::filesystem::remove_all(home);
+}
+
 TEST_CASE("bootstrap создаёт пустой реестр проектов", "[project]")
 {
     const std::filesystem::path home = make_temp_dir("fcpp-home");
@@ -150,9 +179,8 @@ TEST_CASE("open регистрирует проект и создаёт инде
     REQUIRE(std::filesystem::exists(context.m_project.m_db_path));
     REQUIRE(manager.list().size() == 1);
 
-    // ADR-12: до v1 схема задаётся единым baseline-файлом; точная версия не проверяется.
-    fcpp::CSchemaMigrator migrator;
-    REQUIRE(migrator.schema_version(context.m_project.m_db_path.string()) >= 1);
+    // Existing databases are validated without changing their schema.
+    REQUIRE(fcpp::CSchemaInitializer::initialize_or_validate(context.m_project.m_db_path));
 
     std::filesystem::remove_all(home);
     std::filesystem::remove_all(project_dir);
