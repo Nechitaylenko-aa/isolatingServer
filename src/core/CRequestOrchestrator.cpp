@@ -92,6 +92,14 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         stage("SCOPE_CLASSIFICATION", "STUB_NOT_IMPLEMENTED",
               {{"implementation", "pending_scope_analyzer"}});
 
+        // Continue walking the declared tree so callers receive a complete,
+        // explicit trace. These stages are skipped because scope is unresolved.
+        stage("CONTEXT_DATA_COLLECTION", "SKIPPED_UPSTREAM_STUB");
+        stage("CONTEXT_ASSEMBLY", "SKIPPED_UPSTREAM_STUB");
+        stage("ANSWER_STRATEGY_SELECTION", "SKIPPED_UPSTREAM_STUB");
+        stage("ANSWER_GENERATION", "SKIPPED_UPSTREAM_STUB");
+        stage("FINAL_RESPONSE", "SERVICE_DIAGNOSTIC_ONLY");
+
         result.m_ok = true;
         result.m_status = "STUB_COMPLETE";
         result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
