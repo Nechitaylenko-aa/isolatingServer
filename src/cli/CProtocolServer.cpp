@@ -665,9 +665,15 @@ std::string CProtocolServer::serialize_response(const std::string& id,
     }
     else
     {
+        // An unsuccessful response must never serialize the sentinel Ok code,
+        // even if an upstream handler forgot to assign a typed error.
+        const EErrorKind error_kind = response.m_error == EErrorKind::Ok
+            ? EErrorKind::NotUnderstood : response.m_error;
+        const std::string error_message = response.m_message.empty()
+            ? "request failed without a diagnostic message" : response.m_message;
         document["error"] = {
-            {"code", error_kind_name(response.m_error)},
-            {"message", response.m_message},
+            {"code", error_kind_name(error_kind)},
+            {"message", error_message},
             {"details", nlohmann::json::object()}
         };
         // Адрес диалога обязателен и в ошибке: иначе клиент теряет привязку

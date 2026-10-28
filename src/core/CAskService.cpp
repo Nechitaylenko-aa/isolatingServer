@@ -748,9 +748,11 @@ bool CAskService::answer_codebase_request(
             intent.m_subject.m_name = anchor_name;
         }
 
-        if (authoritative_cursor_symbol.has_value()
-            && is_deictic_followup(text) && !compound)
+        if (authoritative_cursor_symbol.has_value() && !compound)
         {
+            // Once the current cursor resolves, it is the authoritative subject
+            // for codebase intents, not merely a hint for deictic wording.
+            // General-engineering requests have already exited through fast path.
             intent.m_subject.m_selection = ESubjectSelection::Cursor;
             intent.m_subject.m_name = authoritative_cursor_symbol->m_qualified_name;
             intent.m_subject.m_kind = cursor_subject_kind(authoritative_cursor_symbol->m_kind);
@@ -928,7 +930,10 @@ bool CAskService::ask(const std::string& text,
 {
     out_answer.clear();
 
-    const bool has_current_cursor = !cursor_file.empty() && cursor_line > 0;
+    // A file path is editor context even when the client omitted/invalidated the
+    // cursor coordinates. For a deictic follow-up, do not silently fall back to
+    // an older turn just because line == 0.
+    const bool has_current_cursor = !cursor_file.empty();
     const bool has_historical_cursor = std::any_of(history.begin(), history.end(),
         [](const SConversationTurn& turn)
         {

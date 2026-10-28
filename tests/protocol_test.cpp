@@ -210,3 +210,33 @@ TEST_CASE("protocol rejects missing required fields and invalid identifiers", "[
     REQUIRE(fcpp::CProtocolServer::parse_request(
         R"({"id":"status-no-params","method":"status"})", request, id, error));
 }
+
+TEST_CASE("protocol never serializes Ok for a failed response", "[protocol][errors]")
+{
+    fcpp::SApiResponse response;
+    response.m_ok = false;
+    response.m_error = fcpp::EErrorKind::Ok;
+    response.m_message.clear();
+    response.m_session_id = "session-preserved";
+
+    const nlohmann::json document = nlohmann::json::parse(
+        fcpp::CProtocolServer::serialize_response("failed-ask", response));
+    REQUIRE(document.contains("error"));
+    REQUIRE(document["error"]["code"] == "NotUnderstood");
+    REQUIRE_FALSE(document["error"]["message"].get<std::string>().empty());
+    REQUIRE(document["error"]["session_id"] == "session-preserved");
+    REQUIRE_FALSE(document.contains("result"));
+}
+
+TEST_CASE("protocol preserves NotUnderstood as a typed failure", "[protocol][errors]")
+{
+    fcpp::SApiResponse response;
+    response.m_ok = false;
+    response.m_error = fcpp::EErrorKind::NotUnderstood;
+    response.m_message = "request not understood";
+
+    const nlohmann::json document = nlohmann::json::parse(
+        fcpp::CProtocolServer::serialize_response("not-understood", response));
+    REQUIRE(document["error"]["code"] == "NotUnderstood");
+    REQUIRE(document["error"]["message"] == "request not understood");
+}
