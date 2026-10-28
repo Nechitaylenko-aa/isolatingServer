@@ -390,15 +390,49 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
             const std::string& target =
                 !request.m_project_root.empty() ? request.m_project_root : request.m_path;
             std::string failure_stage;
-            if (target.empty() || !m_project_manager.open(target, &failure_stage))
+            bool opened = false;
+
+            if (target.empty())
             {
-                if (target.empty())
+                failure_stage = "missing_project_root";
+            }
+            else
+            {
+                // Empty directories are outside the supported initialization
+                // scope for now. Reject explicitly instead of treating this as
+                // an opaque CMake/project-manager failure.
+                std::error_code directory_error;
+                const std::filesystem::path target_path(target);
+                if (std::filesystem::is_directory(target_path, directory_error)
+                    && !directory_error)
                 {
-                    failure_stage = "missing_project_root";
+                    const bool empty = std::filesystem::is_empty(target_path, directory_error);
+                    if (directory_error)
+                    {
+                        failure_stage = "inspect_project_directory";
+                    }
+                    else if (empty)
+                    {
+                        failure_stage = "empty_project_directory";
+                    }
+                }
+
+                if (failure_stage.empty())
+                {
+                    opened = m_project_manager.open(target, &failure_stage);
+                }
+            }
+
+            if (!opened)
+            {
+                if (failure_stage.empty())
+                {
+                    failure_stage = "project_open_failed";
                 }
                 m_logger.log_event(ELogLevel::Warn, "project.open.failed", {
                     {"request_id", request.m_request_id},
                     {"failure_stage", failure_stage},
+                    {"project_root", target},
                     {"root_provided", !target.empty()}
                 });
                 return make_error(EErrorKind::InvalidRequest,
