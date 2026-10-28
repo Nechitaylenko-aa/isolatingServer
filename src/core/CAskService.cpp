@@ -719,9 +719,10 @@ bool CAskService::answer_codebase_request(
         ++index;
 
         // Фаза B: подвопрос -> SIntent (lite->main->remote, ADR-10).
-        // Одиночный запрос: B2 — lite видит [cursor symbol: ...] и берёт его как subject.
-        // Составной: подвопросы самодостаточны, курсор не подаём; имя восстанавливаем якорем.
-        const std::string question_hint = compound ? std::string() : cursor_hint;
+        // Передаём текущий cursor hint и в декомпозированные подвопросы.
+        // Intent всё ещё может выбрать явно названный в конкретном подвопросе символ;
+        // cursor hint даёт модели возможность разрешить неявные ссылки на текущий объект.
+        const std::string question_hint = cursor_hint;
         SIntent intent;
         std::string error;
         const bool reuse_preclassification =
