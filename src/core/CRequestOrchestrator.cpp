@@ -103,6 +103,14 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_ok = true;
         result.m_status = "STUB_COMPLETE";
         result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
+        result.m_message = "No answer generated: scope classification is not implemented yet.";
+    }
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        TClock::now() - started).count();
+    result.m_trace.push_back("EXIT:" + result.m_exit_reason);
+    if (result.m_status == "STUB_COMPLETE")
+    {
         result.m_message =
             "ORCHESTRATION_STATUS=" + result.m_status
             + "\nROUTE=" + result.m_route
@@ -118,14 +126,6 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         }
         result.m_message +=
             "\nNo answer generated: scope classification is not implemented yet.";
-    }
-
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        TClock::now() - started).count();
-    result.m_trace.push_back("EXIT:" + result.m_exit_reason);
-    if (result.m_status == "STUB_COMPLETE")
-    {
-        result.m_message += " -> EXIT:" + result.m_exit_reason;
     }
 
     log_event(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
