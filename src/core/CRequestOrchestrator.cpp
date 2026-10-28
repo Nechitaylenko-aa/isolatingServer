@@ -109,24 +109,21 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         TClock::now() - started).count();
     result.m_trace.push_back("EXIT:" + result.m_exit_reason);
-    if (result.m_status == "STUB_COMPLETE")
+    const std::string detail_message = result.m_message;
+    result.m_message =
+        "ORCHESTRATION_STATUS=" + result.m_status
+        + "\nROUTE=" + result.m_route
+        + "\nEXIT_REASON=" + result.m_exit_reason
+        + "\nTRACE=";
+    for (std::size_t index = 0; index < result.m_trace.size(); ++index)
     {
-        result.m_message =
-            "ORCHESTRATION_STATUS=" + result.m_status
-            + "\nROUTE=" + result.m_route
-            + "\nEXIT_REASON=" + result.m_exit_reason
-            + "\nTRACE=";
-        for (std::size_t index = 0; index < result.m_trace.size(); ++index)
+        if (index != 0)
         {
-            if (index != 0)
-            {
-                result.m_message += " -> ";
-            }
-            result.m_message += result.m_trace[index];
+            result.m_message += " -> ";
         }
-        result.m_message +=
-            "\nNo answer generated: scope classification is not implemented yet.";
+        result.m_message += result.m_trace[index];
     }
+    result.m_message += "\nDETAIL=" + detail_message;
 
     log_event(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
               "orchestrator.finished",
