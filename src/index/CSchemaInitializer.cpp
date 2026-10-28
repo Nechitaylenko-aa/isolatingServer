@@ -10,8 +10,9 @@
 #include <fstream>
 #include <iterator>
 #include <string>
-#include <unordered_set>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 #include <sqlite3.h>
 
@@ -25,55 +26,58 @@ namespace fcpp
 namespace
 {
 
-constexpr std::array<const char*, 13> k_required_tables = {
-    "registry_project",
-    "project",
-    "index_generation",
-    "file",
-    "symbol",
-    "symbol_location",
-    "compile_command",
-    "include",
-    "inheritance",
-    "override",
-    "reference",
-    "call",
-    "project_profile"
-};
+using SExpectedTable = std::pair<const char*, std::vector<const char*>>;
+
+const std::array<SExpectedTable, 13> k_expected_tables = {{
+    {"registry_project", {"project_id", "canonical_path", "db_path", "last_opened_at", "created_at"}},
+    {"project", {"id", "canonical_path", "name", "build_dir", "last_indexed_at", "index_generation"}},
+    {"index_generation", {"generation", "state", "started_at", "finished_at", "file_count", "symbol_count", "error"}},
+    {"file", {"id", "path", "generation", "mtime", "size", "hash"}},
+    {"symbol", {"id", "generation", "usr", "kind", "name", "qualified_name", "file_id", "parent_id", "parent_usr", "is_definition", "is_declaration", "signature", "access", "flags"}},
+    {"symbol_location", {"id", "symbol_id", "file_id", "line", "column", "end_line", "end_column"}},
+    {"compile_command", {"id", "file_id", "directory", "arguments", "language"}},
+    {"include", {"id", "generation", "from_file_id", "to_path", "resolved_file_id", "is_angle"}},
+    {"inheritance", {"id", "generation", "derived_id", "base_id", "base_qname", "access", "is_virtual"}},
+    {"override", {"id", "generation", "method_id", "base_method_id"}},
+    {"reference", {"id", "generation", "symbol_id", "file_id", "line", "column", "kind"}},
+    {"call", {"id", "generation", "caller_id", "callee_id", "callee_qname", "file_id", "line", "column"}},
+    {"project_profile", {"id", "original_text", "compact_text"}}
+}};
 
 bool validate_existing_schema(sqlite3* db)
 {
-    sqlite3_stmt* statement = nullptr;
-    constexpr const char* sql =
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%';";
-    if (sqlite3_prepare_v2(db, sql, -1, &statement, nullptr) != SQLITE_OK)
+    for (const SExpectedTable& expected : k_expected_tables)
     {
-        return false;
-    }
-
-    std::unordered_set<std::string> found;
-    int result = SQLITE_OK;
-    while ((result = sqlite3_step(statement)) == SQLITE_ROW)
-    {
-        const unsigned char* name = sqlite3_column_text(statement, 0);
-        if (name != nullptr)
-        {
-            found.emplace(reinterpret_cast<const char*>(name));
-        }
-    }
-    const bool query_ok = result == SQLITE_DONE;
-    sqlite3_finalize(statement);
-
-    if (!query_ok)
-    {
-        return false;
-    }
-
-    for (const char* table : k_required_tables)
-    {
-        if (found.find(table) == found.end())
+        const std::string sql = std::string("PRAGMA table_info('") + expected.first + "');";
+        sqlite3_stmt* statement = nullptr;
+        if (sqlite3_prepare_v2(db, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK)
         {
             return false;
+        }
+
+        std::vector<std::string> actual_columns;
+        int result = SQLITE_OK;
+        while ((result = sqlite3_step(statement)) == SQLITE_ROW)
+        {
+            const unsigned char* name = sqlite3_column_text(statement, 1);
+            if (name != nullptr)
+            {
+                actual_columns.emplace_back(reinterpret_cast<const char*>(name));
+            }
+        }
+        const bool query_ok = result == SQLITE_DONE;
+        sqlite3_finalize(statement);
+        if (!query_ok || actual_columns.size() != expected.second.size())
+        {
+            return false;
+        }
+
+        for (std::size_t i = 0; i < expected.second.size(); ++i)
+        {
+            if (actual_columns[i] != expected.second[i])
+            {
+                return false;
+            }
         }
     }
     return true;
