@@ -2,7 +2,7 @@
 -- This file is applied only when the database file does not yet exist.
 -- Existing databases are validated; their schema is never altered.
 
-CREATE TABLE IF NOT EXISTS registry_project
+CREATE TABLE registry_project
 (
     project_id     TEXT PRIMARY KEY,
     canonical_path TEXT NOT NULL UNIQUE,
@@ -11,10 +11,10 @@ CREATE TABLE IF NOT EXISTS registry_project
     created_at     INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_registry_project_path
+CREATE INDEX idx_registry_project_path
     ON registry_project(canonical_path);
 
-CREATE TABLE IF NOT EXISTS project
+CREATE TABLE project
 (
     id               INTEGER PRIMARY KEY,
     canonical_path   TEXT NOT NULL UNIQUE,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS project
     index_generation INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS index_generation
+CREATE TABLE index_generation
 (
     generation   INTEGER PRIMARY KEY,
     state        TEXT NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS index_generation
     error        TEXT
 );
 
-CREATE TABLE IF NOT EXISTS file
+CREATE TABLE file
 (
     id         INTEGER PRIMARY KEY,
     path       TEXT NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS file
     UNIQUE(path, generation)
 );
 
-CREATE TABLE IF NOT EXISTS symbol
+CREATE TABLE symbol
 (
     id             INTEGER PRIMARY KEY,
     generation     INTEGER NOT NULL REFERENCES index_generation(generation),
@@ -64,16 +64,16 @@ CREATE TABLE IF NOT EXISTS symbol
     flags          INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_symbol_usr
+CREATE INDEX idx_symbol_usr
     ON symbol(usr);
 
-CREATE INDEX IF NOT EXISTS idx_symbol_name
+CREATE INDEX idx_symbol_name
     ON symbol(name);
 
-CREATE INDEX IF NOT EXISTS idx_symbol_qualified_name
+CREATE INDEX idx_symbol_qualified_name
     ON symbol(qualified_name);
 
-CREATE TABLE IF NOT EXISTS symbol_location
+CREATE TABLE symbol_location
 (
     id         INTEGER PRIMARY KEY,
     symbol_id  INTEGER NOT NULL REFERENCES symbol(id) ON DELETE CASCADE,
@@ -84,10 +84,10 @@ CREATE TABLE IF NOT EXISTS symbol_location
     end_column INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_symbol_location_symbol
+CREATE INDEX idx_symbol_location_symbol
     ON symbol_location(symbol_id);
 
-CREATE TABLE IF NOT EXISTS compile_command
+CREATE TABLE compile_command
 (
     id        INTEGER PRIMARY KEY,
     file_id   INTEGER NOT NULL REFERENCES file(id) ON DELETE CASCADE,
@@ -96,10 +96,10 @@ CREATE TABLE IF NOT EXISTS compile_command
     language  TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_compile_command_file
+CREATE INDEX idx_compile_command_file
     ON compile_command(file_id);
 
-CREATE TABLE IF NOT EXISTS include
+CREATE TABLE include
 (
     id               INTEGER PRIMARY KEY,
     generation       INTEGER NOT NULL REFERENCES index_generation(generation),
@@ -109,13 +109,13 @@ CREATE TABLE IF NOT EXISTS include
     is_angle         INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_include_from
+CREATE INDEX idx_include_from
     ON include(from_file_id);
 
-CREATE INDEX IF NOT EXISTS idx_include_resolved
+CREATE INDEX idx_include_resolved
     ON include(resolved_file_id);
 
-CREATE TABLE IF NOT EXISTS inheritance
+CREATE TABLE inheritance
 (
     id         INTEGER PRIMARY KEY,
     generation INTEGER NOT NULL REFERENCES index_generation(generation),
@@ -126,13 +126,13 @@ CREATE TABLE IF NOT EXISTS inheritance
     is_virtual INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_inheritance_derived
+CREATE INDEX idx_inheritance_derived
     ON inheritance(derived_id);
 
-CREATE INDEX IF NOT EXISTS idx_inheritance_base
+CREATE INDEX idx_inheritance_base
     ON inheritance(base_id);
 
-CREATE TABLE IF NOT EXISTS override
+CREATE TABLE override
 (
     id             INTEGER PRIMARY KEY,
     generation     INTEGER NOT NULL REFERENCES index_generation(generation),
@@ -140,13 +140,13 @@ CREATE TABLE IF NOT EXISTS override
     base_method_id INTEGER REFERENCES symbol(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_override_method
+CREATE INDEX idx_override_method
     ON override(method_id);
 
-CREATE INDEX IF NOT EXISTS idx_override_base_method
+CREATE INDEX idx_override_base_method
     ON override(base_method_id);
 
-CREATE TABLE IF NOT EXISTS reference
+CREATE TABLE reference
 (
     id         INTEGER PRIMARY KEY,
     generation INTEGER NOT NULL REFERENCES index_generation(generation),
@@ -157,10 +157,10 @@ CREATE TABLE IF NOT EXISTS reference
     kind       TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_reference_symbol
+CREATE INDEX idx_reference_symbol
     ON reference(symbol_id);
 
-CREATE TABLE IF NOT EXISTS call
+CREATE TABLE call
 (
     id           INTEGER PRIMARY KEY,
     generation   INTEGER NOT NULL REFERENCES index_generation(generation),
@@ -172,13 +172,13 @@ CREATE TABLE IF NOT EXISTS call
     column       INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_call_caller
+CREATE INDEX idx_call_caller
     ON call(caller_id);
 
-CREATE INDEX IF NOT EXISTS idx_call_callee
+CREATE INDEX idx_call_callee
     ON call(callee_id);
 
-CREATE TABLE IF NOT EXISTS project_profile
+CREATE TABLE project_profile
 (
     id            INTEGER PRIMARY KEY CHECK (id = 1),
     original_text TEXT NOT NULL,
