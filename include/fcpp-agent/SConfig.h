@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
+#include "fcpp-agent/SLlmRoleConfig.h"
 
 namespace fcpp
 {
@@ -68,6 +69,7 @@ struct SConfig
     SModelConfig m_model_light;              ///< Роль `lite` (§6.1); пусто/same_as_main — как main.
     SModelConfig m_model_remote;             ///< Роль `remote` (§6.3, задел).
     EModelRemoteType m_remote_type = EModelRemoteType::OpenAICompat; ///< Тип remote-провайдера.
+    SLlmRoleSet m_llm_roles; ///< Typed LLM roles.
 };
 
 /**

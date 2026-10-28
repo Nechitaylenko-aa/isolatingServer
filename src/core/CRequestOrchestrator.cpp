@@ -139,3 +139,6 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
 }
 
 } // namespace fcpp
+
+// Historian implementation is a separate class; compile it with the orchestration unit.
+#include "core/CHistorian.cpp"

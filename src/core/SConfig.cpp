@@ -41,3 +41,6 @@ EModelRemoteType remote_type_from_name(const std::string& name)
 }
 
 } // namespace fcpp
+
+// The typed role resolver is compiled with the existing config translation unit.
+#include "core/SLlmRoleConfig.cpp"

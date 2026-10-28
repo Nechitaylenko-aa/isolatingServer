@@ -7,6 +7,7 @@
  */
 
 #include "core/CConfigManager.h"
+#include "fcpp-agent/SLlmRoleConfig.h"
 
 #include <algorithm>
 #include <cctype>
@@ -239,7 +240,11 @@ bool CConfigManager::bootstrap()
         {"model_light_context_window_tokens", "0"},
         {"model_light_output_reserve_tokens", "0"},
         {"model_remote_context_window_tokens", "0"},
-        {"model_remote_output_reserve_tokens", "4096"}
+        {"model_remote_output_reserve_tokens", "4096"},
+        {"llm_coder_remote_api", ""}, {"llm_coder_remote_model", ""}, {"llm_coder_remote_key", ""}, {"llm_coder_remote_alias", ""},
+        {"llm_coder_local_api", ""}, {"llm_coder_local_model", ""}, {"llm_coder_local_key", ""}, {"llm_coder_local_alias", ""},
+        {"llm_thinker_remote_api", ""}, {"llm_thinker_remote_model", ""}, {"llm_thinker_remote_key", ""}, {"llm_thinker_remote_alias", ""},
+        {"llm_thinker_local_api", ""}, {"llm_thinker_local_model", ""}, {"llm_thinker_local_key", ""}, {"llm_thinker_local_alias", ""}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -283,6 +288,10 @@ bool CConfigManager::bootstrap()
         content << "model_light_output_reserve_tokens=\"" << defaults[26].second << "\"\n";
         content << "model_remote_context_window_tokens=\"" << defaults[27].second << "\"\n";
         content << "model_remote_output_reserve_tokens=\"" << defaults[28].second << "\"\n";
+        content << "llm_coder_remote_api=\"\"\nllm_coder_remote_model=\"\"\nllm_coder_remote_key=\"\"\nllm_coder_remote_alias=\"\"\n";
+        content << "llm_coder_local_api=\"\"\nllm_coder_local_model=\"\"\nllm_coder_local_key=\"\"\nllm_coder_local_alias=\"\"\n";
+        content << "llm_thinker_remote_api=\"\"\nllm_thinker_remote_model=\"\"\nllm_thinker_remote_key=\"\"\nllm_thinker_remote_alias=\"\"\n";
+        content << "llm_thinker_local_api=\"\"\nllm_thinker_local_model=\"\"\nllm_thinker_local_key=\"\"\nllm_thinker_local_alias=\"\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -435,6 +444,18 @@ bool CConfigManager::load() const
     m_config.m_model_remote.m_name = value_or_empty(entries, "model_remote_name");
     m_config.m_model_remote.m_key = value_or_empty(entries, "model_remote_key");
     m_config.m_remote_type = remote_type_from_name(m_config.m_model_remote.m_type);
+    auto load_llm_role = [&entries](SLlmModelRole& role, const std::string& prefix) {
+        role.m_api = value_or_empty(entries, prefix + "_api");
+        role.m_model = value_or_empty(entries, prefix + "_model");
+        role.m_key = value_or_empty(entries, prefix + "_key");
+        role.m_alias = value_or_empty(entries, prefix + "_alias");
+    };
+    load_llm_role(m_config.m_llm_roles.at(ELlmRole::CoderSmart), "llm_coder_remote");
+    load_llm_role(m_config.m_llm_roles.at(ELlmRole::CoderLocal), "llm_coder_local");
+    load_llm_role(m_config.m_llm_roles.at(ELlmRole::ThinkerSmart), "llm_thinker_remote");
+    load_llm_role(m_config.m_llm_roles.at(ELlmRole::ThinkerLocal), "llm_thinker_local");
+    std::string alias_error;
+    if (!resolve_llm_role_aliases(m_config.m_llm_roles, alias_error)) return false;
 
     auto read_size = [&entries](const std::string& key, std::size_t fallback,
                                 std::size_t& output) -> bool
