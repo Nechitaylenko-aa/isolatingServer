@@ -216,6 +216,7 @@ add_executable(fcpp_tests
     tests/cascade_test.cpp
     tests/subtask_test.cpp
     tests/streaming_test.cpp
+    tests/request_orchestrator_test.cpp
 )
 target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 
