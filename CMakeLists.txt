@@ -140,6 +140,7 @@ add_library(fcpp_core STATIC
     src/core/SSubtasks.cpp
     src/core/SRequestOutcome.cpp
     src/core/CRequestPipeline.cpp
+    src/core/CRequestOrchestrator.cpp
     src/core/CIntentAnalyzer.cpp
     src/core/CAskService.cpp
     src/core/CAnswerService.cpp
