@@ -350,7 +350,7 @@ CLI — такой же клиент API, как IDE-плагин. Команд�
 
 ### `project.open` diagnostics
 
-При неудачном открытии проектного корня JSONL содержит событие `project.open.failed` с `request_id` и стабильным `failure_stage`. При успехе пишется `project.open.succeeded` со сводкой состояния индекса. `failure_stage` различает канонизацию пути, проверку каталога/CMake, поиск и разбор `compile_commands.json`, миграцию и открытие БД, создание Clang backend, прогрев/обновление индекса и регистрацию проекта. Ответ `project.open` также содержит этап отказа в `message`.
+При неудачном открытии проектного корня JSONL содержит событие `project.open.failed` с `request_id` и стабильным `failure_stage`. При успехе пишется `project.open.succeeded` со сводкой состояния индекса. `failure_stage` различает канонизацию пути, проверку каталога/CMake, поиск и разбор `compile_commands.json`, инициализацию схемы новой БД, проверку схемы существующей БД и открытие БД, создание Clang backend, прогрев/обновление индекса и регистрацию проекта. Ответ `project.open` также содержит этап отказа в `message`.
 
 
 ### Повторяющиеся translation units в compile_commands.json
