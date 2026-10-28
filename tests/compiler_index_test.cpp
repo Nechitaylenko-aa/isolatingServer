@@ -15,7 +15,7 @@
 #include "fcpp-agent/SProject.h"
 #include "index/CClangFactory.h"
 #include "index/CSQLiteIndex.h"
-#include "index/CSchemaMigrator.h"
+#include "index/CSchemaInitializer.h"
 #include "index/CSqlCompilerIndex.h"
 
 namespace
@@ -114,8 +114,7 @@ TEST_CASE("store_inventory дедуплицирует TU из нескольки
         output << "int protocol_server() { return 1; }\\n";
     }
 
-    fcpp::CSchemaMigrator migrator;
-    REQUIRE(migrator.migrate(database.string()));
+    REQUIRE(fcpp::CSchemaInitializer::initialize_or_validate(database));
 
     fcpp::CSQLiteIndex index(database);
     REQUIRE(index.open(project));
