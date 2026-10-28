@@ -114,6 +114,10 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         TClock::now() - started).count();
     result.m_trace.push_back("EXIT:" + result.m_exit_reason);
+    if (result.m_status == "STUB_COMPLETE")
+    {
+        result.m_message += " -> EXIT:" + result.m_exit_reason;
+    }
 
     log_event(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
               "orchestrator.finished",
