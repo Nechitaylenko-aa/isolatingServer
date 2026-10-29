@@ -459,6 +459,18 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
             if (existing.has_value())
             {
                 session_id = existing->m_id;
+                if (existing->m_closed && !m_conversation_store.reopen_session(session_id))
+                {
+                    return make_error(EErrorKind::IoError,
+                                      "cannot reopen persisted project conversation");
+                }
+                if (existing->m_closed
+                    && !m_conversation_store.append_event(session_id, "session.open",
+                                                          nlohmann::json{{"project_id", project_id}}.dump()))
+                {
+                    return make_error(EErrorKind::IoError,
+                                      "cannot record project conversation reopening");
+                }
             }
             else
             {
@@ -659,7 +671,13 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
                                   "projectId does not match the currently opened project");
             }
 
-            const auto session = m_conversation_store.latest_session_for_project(current_project);
+            auto session = m_conversation_store.latest_session_for_project(current_project);
+            if (session.has_value() && session->m_closed)
+            {
+                if (!m_conversation_store.reopen_session(session->m_id))
+                    return make_error(EErrorKind::IoError, "cannot reopen project conversation");
+                session = m_conversation_store.latest_session_for_project(current_project);
+            }
             if (!session.has_value())
             {
                 return make_error(EErrorKind::SymbolNotFound,

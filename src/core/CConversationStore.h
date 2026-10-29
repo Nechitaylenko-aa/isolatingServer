@@ -218,6 +218,9 @@ public:
     std::optional<SConversationSession> latest_session_for_project(
         const std::string& project_id) const;
 
+    /** @brief Reopen the persistent project conversation, retaining its event history. */
+    bool reopen_session(const std::string& session_id);
+
     bool append_event(const std::string& session_id,
                       const std::string& kind,
                       const std::string& payload,

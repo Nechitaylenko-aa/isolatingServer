@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <regex>
 #include <system_error>
 #include <vector>
 
@@ -46,6 +48,20 @@ constexpr const char* k_index_db_name = "index.db";
 
 /** @brief Имя файла CMake-корня, обязательного для проекта. */
 constexpr const char* k_cmake_lists_name = "CMakeLists.txt";
+
+/** @brief Read the project identity from CMakeLists.txt. */
+bool read_cmake_project_name(const std::filesystem::path& cmake_lists, std::string& name)
+{
+    std::ifstream input(cmake_lists);
+    if (!input.is_open()) return false;
+    const std::string content((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    const std::regex pattern(R"((?:^|[\r\n])\s*project\s*\(\s*([A-Za-z0-9_.+-]+))",
+                             std::regex_constants::icase);
+    std::smatch match;
+    if (!std::regex_search(content, match, pattern) || match.size() < 2) return false;
+    name = match[1].str();
+    return !name.empty();
+}
 
 /**
  * @brief Текущее время в unix-секундах.
@@ -213,6 +229,12 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
         return fail("find_cmake_lists");
     }
 
+    std::string project_name;
+    if (!read_cmake_project_name(cmake_lists, project_name))
+    {
+        return fail("read_cmake_project_name");
+    }
+
     const std::filesystem::path compile_commands =
         locate_compile_commands(canonical, error_code);
     if (error_code)
@@ -226,11 +248,12 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
         return fail("parse_compile_commands");
     }
 
-    const std::string canonical_text = canonical.string();
-    const std::string full_hash = CHash::sha256_hex(canonical_text);
+    // The project identity is stable across agent instances and folder moves.
+    const std::string full_hash = CHash::sha256_hex(project_name);
 
+    const std::string path_hash = CHash::sha256_hex(canonical.string());
     const std::filesystem::path db_path =
-        m_config_manager.db_dir() / full_hash.substr(0, k_db_hash_length) / k_index_db_name;
+        m_config_manager.db_dir() / path_hash.substr(0, k_db_hash_length) / k_index_db_name;
 
     std::filesystem::create_directories(db_path.parent_path(), error_code);
     if (error_code)
@@ -242,7 +265,7 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
     project.m_project_id = std::string(k_project_id_prefix) + full_hash.substr(0, k_project_id_hash_length);
     project.m_canonical_path = canonical;
     project.m_db_path = db_path;
-    project.m_name = canonical.filename().string();
+    project.m_name = project_name;
     project.m_last_opened_at = now_unix_seconds();
 
     if (!CSchemaInitializer::initialize_or_validate(db_path))
@@ -548,15 +571,21 @@ bool CProjectManager::restore_session_light()
         return false;
     }
 
-    const std::string full_hash = CHash::sha256_hex(canonical.string());
+    std::string project_name;
+    if (!read_cmake_project_name(canonical / k_cmake_lists_name, project_name))
+    {
+        return false;
+    }
+    const std::string full_hash = CHash::sha256_hex(project_name);
+    const std::string path_hash = CHash::sha256_hex(canonical.string());
     const std::filesystem::path db_path =
-        m_config_manager.db_dir() / full_hash.substr(0, k_db_hash_length) / k_index_db_name;
+        m_config_manager.db_dir() / path_hash.substr(0, k_db_hash_length) / k_index_db_name;
 
     SProject project;
     project.m_project_id = std::string(k_project_id_prefix) + full_hash.substr(0, k_project_id_hash_length);
     project.m_canonical_path = canonical;
     project.m_db_path = db_path;
-    project.m_name = canonical.filename().string();
+    project.m_name = project_name;
 
     // Читаем состояние индекса и паспорт напрямую из БД (без индексации).
     SIndexStatus index_status;

@@ -79,13 +79,13 @@ private:
  * @brief Создать минимальный проект.
  * @return Путь.
  */
-std::filesystem::path make_project()
+std::filesystem::path make_project(const std::string& name = "api")
 {
     const std::filesystem::path project = make_temp_dir("fcpp-api-proj");
     std::filesystem::create_directories(project / "src");
     std::filesystem::create_directories(project / "build");
     std::ofstream(project / "CMakeLists.txt")
-        << "cmake_minimum_required(VERSION 3.20)\nproject(api LANGUAGES CXX)\n";
+        << "cmake_minimum_required(VERSION 3.20)\nproject(" << name << " LANGUAGES CXX)\n";
     std::ofstream(project / "src" / "main.cpp") << "int main() { return 0; }\n";
     std::ofstream commands(project / "build" / "compile_commands.json");
     commands << "[{\"directory\":\"" << project.string() << "\",\"file\":\""
@@ -335,8 +335,8 @@ TEST_CASE("agent API: conversation survives restart and stays bound to its proje
     REQUIRE(config.bootstrap());
     REQUIRE(config.load());
 
-    const std::filesystem::path project_a = make_project();
-    const std::filesystem::path project_b = make_project();
+    const std::filesystem::path project_a = make_project("api_a");
+    const std::filesystem::path project_b = make_project("api_b");
     std::string session_a;
     std::string project_id_a;
     std::string session_b;
@@ -362,6 +362,8 @@ TEST_CASE("agent API: conversation survives restart and stays bound to its proje
         REQUIRE(store.append_event(session_a, "user", R"({"text":"persisted user turn"})"));
         REQUIRE(store.append_event(session_a, "assistant",
                                    R"({"text":"persisted assistant turn","ok":true})"));
+        // Closing an API session must not destroy the project conversation.
+        REQUIRE(store.close_session(session_a));
         store.close();
     }
 
@@ -400,6 +402,8 @@ TEST_CASE("agent API: conversation survives restart and stays bound to its proje
         REQUIRE(turns.size() == 1);
         REQUIRE(turns[0].m_user_text == "persisted user turn");
         REQUIRE(turns[0].m_assistant_text == "persisted assistant turn");
+        REQUIRE(store.get_session(session_a).has_value());
+        REQUIRE_FALSE(store.get_session(session_a)->m_closed);
         REQUIRE(store.get_session(session_b).has_value());
         REQUIRE(store.get_session(session_b)->m_project_id == project_id_b);
     }

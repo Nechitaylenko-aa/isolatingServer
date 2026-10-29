@@ -586,7 +586,7 @@ std::optional<SConversationSession> CConversationStore::latest_session_for_proje
 
     Statement statement(m_db,
         "SELECT session_id, project_id, context_json, created_at, updated_at, closed_at "
-        "FROM conversation_session WHERE project_id=?1 AND closed_at IS NULL "
+        "FROM conversation_session WHERE project_id=?1 "
         "ORDER BY updated_at DESC, session_id DESC LIMIT 1");
     if (!statement.ok() || !statement.bind_text(1, project_id)
         || sqlite3_step(statement.get()) != SQLITE_ROW)
@@ -600,8 +600,18 @@ std::optional<SConversationSession> CConversationStore::latest_session_for_proje
     session.m_context_json = column_text(statement.get(), 2);
     session.m_created_at = sqlite3_column_int64(statement.get(), 3);
     session.m_updated_at = sqlite3_column_int64(statement.get(), 4);
-    session.m_closed = false;
+    session.m_closed = sqlite3_column_type(statement.get(), 5) != SQLITE_NULL;
     return session;
+}
+
+bool CConversationStore::reopen_session(const std::string& session_id)
+{
+    if (m_db == nullptr || session_id.empty()) return false;
+    Statement statement(m_db,
+        "UPDATE conversation_session SET closed_at=NULL, updated_at=?1 WHERE session_id=?2");
+    return statement.ok() && statement.bind_int64(1, now_unix_seconds())
+        && statement.bind_text(2, session_id) && sqlite3_step(statement.get()) == SQLITE_DONE
+        && sqlite3_changes(m_db) == 1;
 }
 
 bool CConversationStore::append_event(const std::string& session_id,
