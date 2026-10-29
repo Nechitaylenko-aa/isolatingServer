@@ -33,8 +33,9 @@ CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historia
 {
 }
 
-void CRequestOrchestrator::generate_and_audit_default_answer(
-    const SOrchestrationRequest& request, SOrchestrationResult& result) const
+void CRequestOrchestrator::generate_and_audit_answer(
+    const SOrchestrationRequest& request, SOrchestrationResult& result,
+    const std::vector<SConversationTurn>& history_context) const
 {
     if (m_llm == nullptr)
     {
@@ -48,8 +49,19 @@ void CRequestOrchestrator::generate_and_audit_default_answer(
         return;
     }
 
+    std::string llm_input = request.m_text;
+    if (!history_context.empty())
+    {
+        llm_input += "\n\nRELEVANT PRIOR CONVERSATION:\n";
+        for (const SConversationTurn& turn : history_context)
+        {
+            llm_input += "USER: " + turn.m_user_text
+                + "\nASSISTANT: " + turn.m_assistant_text + "\n\n";
+        }
+    }
+
     const SLlmExecutionResult generated = m_llm->request_text(
-        ELlmRole::CoderLocal, EPromptType::CppAssistant, request.m_text);
+        ELlmRole::CoderLocal, EPromptType::CppAssistant, llm_input);
     if (!generated.m_ok)
     {
         result.m_ok = false;
@@ -126,8 +138,15 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
         if (!assessed.m_ok)
             failure = EExitReason::HistoryRelevanceFailed;
         else
+        {
             history = assessed.m_history_needed
                 ? EApplicability::Applicable : EApplicability::NotApplicable;
+            for (const std::size_t index : assessed.m_selected_turn_indices)
+            {
+                if (index < request.m_history.size())
+                    result.m_history_context.push_back(request.m_history[index]);
+            }
+        }
     }
 
     if (failure != EExitReason::None)
@@ -201,7 +220,6 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         {
         case EOrchestrationRoute::CursorAndHistoryContextRequired:
         case EOrchestrationRoute::CursorContextRequired:
-        case EOrchestrationRoute::HistoryContextRequired:
             result.m_ok = true;
             result.m_status = ERequestStatus::StubComplete;
             result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
@@ -209,8 +227,12 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
             result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
             break;
 
+        case EOrchestrationRoute::HistoryContextRequired:
+            generate_and_audit_answer(request, result, result.m_history_context);
+            break;
+
         case EOrchestrationRoute::NoApplicableContext:
-            generate_and_audit_default_answer(request, result);
+            generate_and_audit_answer(request, result);
             break;
         }
     }
