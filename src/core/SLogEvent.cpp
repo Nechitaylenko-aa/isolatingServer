@@ -50,9 +50,9 @@ SLogEvent SLogEvent::history_assessed(const std::string& request_id,
 }
 
 SLogEvent SLogEvent::route_selected(const std::string& request_id,
-                                      const std::string& route)
+                                      EOrchestrationRoute route)
 {
-    return {"request.route", {{"request_id", request_id}, {"route", route}}};
+    return {"request.route", {{"request_id", request_id}, {"route", orchestration_route_name(route)}}};
 }
 
 SLogEvent SLogEvent::operation_failed(const std::string& component,
