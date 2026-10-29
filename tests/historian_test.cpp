@@ -60,17 +60,26 @@ private:
 class CContextAwareModel final : public fcpp::IModelApi
 {
 public:
-    explicit CContextAwareModel(fcpp::ELlmRole role) : m_role(role) {}
+    explicit CContextAwareModel(
+        fcpp::ELlmRole role,
+        std::vector<std::vector<fcpp::SModelMessage>>* captured_messages = nullptr,
+        std::string selection_reply = "1")
+        : m_role(role), m_captured_messages(captured_messages),
+          m_selection_reply(std::move(selection_reply)) {}
     bool is_available() const override { return true; }
 
     fcpp::SModelReply complete(
         const std::vector<fcpp::SModelMessage>& messages) override
     {
+        if (m_captured_messages != nullptr)
+            m_captured_messages->push_back(messages);
         if (m_role == fcpp::ELlmRole::CoderSmart)
             return {true, "Combined context answer", {}, "stop", {}};
+        if (m_role == fcpp::ELlmRole::CoderLocal)
+            return {true, "History-only answer", {}, "stop", {}};
         const std::string system = messages.empty() ? std::string{} : messages.front().m_content;
         if (system.find("Select the prior conversation turns") != std::string::npos)
-            return {true, "1", {}, "stop", {}};
+            return {true, m_selection_reply, {}, "stop", {}};
         if (system.find("Decide whether the C++ entity") != std::string::npos)
             return {true, "YES", {}, "stop", {}};
         return {true, "invalid", {}, "stop", {}};
@@ -85,6 +94,8 @@ public:
 
 private:
     fcpp::ELlmRole m_role;
+    std::vector<std::vector<fcpp::SModelMessage>>* m_captured_messages;
+    std::string m_selection_reply;
 };
 
 class CCursorTestClang final : public fcpp::IClang
@@ -245,10 +256,13 @@ TEST_CASE("orchestrator returns only the history pairs selected by the historian
 {
     fcpp::SLlmRoleSet roles;
     fcpp::CLogger logger(log_path("orchestrator"), fcpp::ELogLevel::Trace);
+    std::vector<std::vector<fcpp::SModelMessage>> answer_messages;
     fcpp::CLlmLayer llm(roles, logger,
-        [](fcpp::ELlmRole) -> std::unique_ptr<fcpp::IModelApi>
+        [&answer_messages](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
         {
-            return std::make_unique<CFixedReplyModel>("2");
+            return std::make_unique<CContextAwareModel>(
+                role, role == fcpp::ELlmRole::CoderLocal ? &answer_messages : nullptr,
+                role == fcpp::ELlmRole::ThinkerLocal ? "2" : "1");
         });
     fcpp::CHistorian historian(llm);
     fcpp::CRequestOrchestrator orchestrator(logger, &historian, nullptr, &llm);
@@ -265,7 +279,17 @@ TEST_CASE("orchestrator returns only the history pairs selected by the historian
     REQUIRE(result.m_history_context.size() == 1);
     REQUIRE(result.m_history_context[0].m_user_text == "Remember the red bicycle");
     REQUIRE(result.m_history_context[0].m_assistant_text == "I will keep that in context.");
-    REQUIRE(result.m_exit_reason == fcpp::EExitReason::ScopeClassificationNotImplemented);
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_status == fcpp::ERequestStatus::Completed);
+    REQUIRE(result.m_exit_reason == fcpp::EExitReason::None);
+    REQUIRE(result.m_message == "History-only answer");
+    REQUIRE(answer_messages.size() == 1);
+    REQUIRE(answer_messages.front().size() == 2);
+    REQUIRE(answer_messages.front()[0].m_content.find("conversation-aware assistant") != std::string::npos);
+    REQUIRE(answer_messages.front()[1].m_content.find("Remember the red bicycle") != std::string::npos);
+    REQUIRE(answer_messages.front()[1].m_content.find("I will keep that in context.") != std::string::npos);
+    REQUIRE(answer_messages.front()[1].m_content.find("What did I ask you to remember?") != std::string::npos);
+    REQUIRE(answer_messages.front()[1].m_content.find("Which tests cover parsing?") == std::string::npos);
 }
 
 

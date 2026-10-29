@@ -108,6 +108,79 @@ void CRequestOrchestrator::generate_and_audit_cursor_answer(
     result.m_trace.emplace_back(ETraceEvent::AnswerAudited);
 }
 
+void CRequestOrchestrator::generate_and_audit_history_answer(
+    const SOrchestrationRequest& request, SOrchestrationResult& result) const
+{
+    if (m_llm == nullptr)
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = EExitReason::LlmGenerationFailed;
+        result.m_message = "LLM layer is not configured.";
+        result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+        m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+            {{"request_id", request.m_request_id}, {"reason", result.m_message}});
+        return;
+    }
+
+    if (result.m_history_context.empty())
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = EExitReason::HistoryRelevanceFailed;
+        result.m_message = "History route selected without relevant conversation turns.";
+        result.m_trace.emplace_back(ETraceEvent::ExitHistoryRelevanceFailed);
+        m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+            {{"request_id", request.m_request_id}, {"reason", result.m_message}});
+        return;
+    }
+
+    std::string prompt_input =
+        "RELEVANT CONVERSATION HISTORY (selected by historian):\n";
+    for (const SConversationTurn& turn : result.m_history_context)
+    {
+        prompt_input += "USER: " + turn.m_user_text + "\n";
+        prompt_input += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
+    }
+    prompt_input += "CURRENT USER REQUEST:\n" + request.m_text;
+
+    const std::string system_prompt =
+        "You are a helpful, precise conversation-aware assistant. Answer the current "
+        "user request in the user's language. Use the supplied prior question-answer "
+        "pairs only as relevant context, preserving prior constraints and decisions. "
+        "The current request is the immediate task; do not blindly repeat old answers. "
+        "If history does not establish a fact, say so rather than inventing it. "
+        "Do not claim to inspect files or run tools beyond the supplied context.";
+
+    const SLlmExecutionResult generated = m_llm->request_text(
+        ELlmRole::CoderLocal, system_prompt, prompt_input);
+    if (!generated.m_ok)
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = EExitReason::LlmGenerationFailed;
+        result.m_message = generated.m_error.empty()
+            ? "LLM answer generation failed." : generated.m_error;
+        result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+        m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+            {{"request_id", request.m_request_id}, {"reason", result.m_message},
+             {"role", llm_role_name(generated.m_used_role)},
+             {"escalated", generated.m_escalated}});
+        return;
+    }
+
+    result.m_trace.emplace_back(ETraceEvent::AnswerGenerated);
+    m_logger.log_event(ELogLevel::Info, "answer.audit",
+        {{"request_id", request.m_request_id}, {"accepted", true},
+         {"audit", "non_empty_contract"}, {"answer_bytes", generated.m_text.size()},
+         {"role", llm_role_name(generated.m_used_role)}});
+
+    result.m_ok = true;
+    result.m_status = ERequestStatus::Completed;
+    result.m_exit_reason = EExitReason::None;
+    result.m_message = generated.m_text;
+    result.m_trace.emplace_back(ETraceEvent::AnswerAudited);
+}
 void CRequestOrchestrator::generate_and_audit_default_answer(
     const SOrchestrationRequest& request, SOrchestrationResult& result) const
 {
@@ -294,11 +367,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
             break;
 
         case EOrchestrationRoute::HistoryContextRequired:
-            result.m_ok = true;
-            result.m_status = ERequestStatus::StubComplete;
-            result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
-            result.m_message = "History-only route is not implemented yet.";
-            result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
+            generate_and_audit_history_answer(request, result);
             break;
 
         case EOrchestrationRoute::NoApplicableContext:

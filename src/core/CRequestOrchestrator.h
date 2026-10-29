@@ -80,6 +80,8 @@ private:
                             SOrchestrationResult& result) const;
     void generate_and_audit_default_answer(
         const SOrchestrationRequest& request, SOrchestrationResult& result) const;
+    void generate_and_audit_history_answer(
+        const SOrchestrationRequest& request, SOrchestrationResult& result) const;
     void generate_and_audit_cursor_answer(
         const SOrchestrationRequest& request, SOrchestrationResult& result,
         bool include_history = false) const;
