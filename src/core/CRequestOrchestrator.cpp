@@ -96,10 +96,9 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
     EApplicability history = EApplicability::NotApplicable;
     EExitReason failure = EExitReason::None;
 
-    const bool cursor_position_provided = !request.m_cursor_file.empty()
-        && request.m_cursor_line > 0 && request.m_cursor_column > 0;
-
-    if (cursor_position_provided && m_cursor_analyzer != nullptr)
+    if (!request.m_cursor_file.empty()
+        && request.m_cursor_line > 0 && request.m_cursor_column > 0
+        && m_cursor_analyzer != nullptr)
     {
         const SCursorContextResult assessed = m_cursor_analyzer->assess(
             request.m_text, request.m_cursor_file, request.m_cursor_line,
