@@ -13,6 +13,7 @@
 
 #include "core/CConversationStore.h"
 #include "fcpp-agent/IClang.h"
+#include "fcpp-agent/SOrchestrationTypes.h"
 
 namespace fcpp
 {
@@ -41,10 +42,10 @@ struct SOrchestrationRequest
 struct SOrchestrationResult
 {
     bool m_ok = false;
-    std::string m_status;
-    std::string m_exit_reason;
-    std::string m_route;
-    std::vector<std::string> m_trace;
+    ERequestStatus m_status = ERequestStatus::Failed;
+    EExitReason m_exit_reason = EExitReason::None;
+    EOrchestrationRoute m_route = EOrchestrationRoute::NoApplicableContext;
+    std::vector<ETraceEvent> m_trace;
     std::string m_message;
     std::optional<SClangSymbol> m_cursor_symbol;
 };
