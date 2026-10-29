@@ -6,44 +6,19 @@
 #ifndef FCPP_AGENT_SCONFIG_H
 #define FCPP_AGENT_SCONFIG_H
 
-#include <cstddef>
 #include <filesystem>
 #include <string>
+
 #include "fcpp-agent/SLlmRoleConfig.h"
 
 namespace fcpp
 {
 
 /**
- * @brief Тип удалённого провайдера (ADR-07/§9).
- *
- * Преобразование в текст — статическим массивом в .cpp (Секция 3).
- */
-enum class EModelRemoteType
-{
-    OpenAICompat, ///< OpenAI-совместимый API.
-    Claude,       ///< Anthropic Claude.
-    Count         ///< Маркер количества для инициализации массива.
-};
-
-/**
- * @brief Параметры одной роли модели (§6/§7).
- */
-struct SModelConfig
-{
-    std::string m_url;    ///< Endpoint (пусто — локальный провайдер/дефолт).
-    std::string m_name;   ///< Имя модели.
-    std::string m_type;   ///< Тип провайдера (для remote).
-    std::string m_key;    ///< API-ключ (секрет, не логируется, §61).
-    std::size_t m_context_window_tokens = 0; ///< Окно контекста модели; 0 — неизвестно.
-    std::size_t m_output_reserve_tokens = 0; ///< Резерв ответа; 0 у light означает наследование main.
-};
-
-/**
  * @brief Параметры конфигурации агента (agent.conf).
  *
- * Пустые пути к инструментам означают поиск соответствующего бинаря в PATH.
- * Значения задаются при загрузке конфигурации через CConfigManager.
+ * Модели описаны только логическими ролями (SLlmRoleSet). Отдельной
+ * Lite/Main/Remote-пирамиды нет: выбор роли выполняет вызывающая сущность.
  */
 struct SConfig
 {
@@ -57,34 +32,12 @@ struct SConfig
     bool m_allow_read = true;                ///< Разрешает чтение проекта и индекса (§47).
     bool m_allow_write = true;               ///< Разрешает изменение исходников (§47).
     bool m_allow_exec = true;                ///< Разрешает запуск build/tests/tidy (§47).
-    bool m_allow_subtasks = false;           ///< Разрешает дочерние задачи (§48, v2.0 не обязателен).
-
-    bool m_react_loop = true;                ///< Управление loop'ом моделью (ReAct, ADR-23). Дефолт YES.
-    std::string m_loop_model = "main";       ///< Какая роль ведёт loop: main|light|remote (`same_as_main`).
 
     std::filesystem::path m_db_dir;          ///< Каталог баз данных агента (вне проектов).
     std::string m_default_build = "build";   ///< Имя build-каталога по умолчанию (§2.3).
 
-    SModelConfig m_model_main;               ///< Роль `main` (§6.2).
-    SModelConfig m_model_light;              ///< Роль `lite` (§6.1); пусто/same_as_main — как main.
-    SModelConfig m_model_remote;             ///< Роль `remote` (§6.3, задел).
-    EModelRemoteType m_remote_type = EModelRemoteType::OpenAICompat; ///< Тип remote-провайдера.
-    SLlmRoleSet m_llm_roles; ///< Typed LLM roles.
+    SLlmRoleSet m_llm_roles; ///< Логические роли LLM.
 };
-
-/**
- * @brief Получить машинное имя типа remote-провайдера.
- * @param type Тип.
- * @return Стабильное текстовое имя.
- */
-const char* remote_type_name(EModelRemoteType type);
-
-/**
- * @brief Разобрать тип remote-провайдера из строки конфига.
- * @param name Имя ("openai-compat" / "claude").
- * @return Тип (OpenAICompat по умолчанию/при неизвестном значении).
- */
-EModelRemoteType remote_type_from_name(const std::string& name);
 
 } // namespace fcpp
 

@@ -1,6 +1,8 @@
 #ifndef FCPP_AGENT_CLLMLAYER_H
 #define FCPP_AGENT_CLLMLAYER_H
 
+#include <array>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
@@ -14,12 +16,13 @@ namespace fcpp
 {
 enum class EPromptType
 {
-    CppAssistant,
-    CppExpert,
-    YesNo,
-    CursorRelevance,
-    HistoryRelevance,
-    ScopeClassification
+    CppAssistant,          ///< Общий инженерный ответ.
+    CppExpert,             ///< Ответ по исходному коду.
+    ConversationAssistant, ///< Ответ с опорой на историю диалога.
+    YesNo,                 ///< Бинарное решение.
+    CursorRelevance,       ///< Применимость курсора.
+    HistoryRelevance,      ///< Применимость истории.
+    ScopeClassification    ///< Классификация области.
 };
 
 struct SLlmExecutionResult
@@ -48,6 +51,20 @@ public:
     using TValidator = std::function<bool(const std::string&, std::string&)>;
 
     CLlmLayer(const SLlmRoleSet& roles, ILogger& logger, TModelFactory factory = {});
+
+    /**
+     * @brief Размер контекстного окна роли в токенах.
+     *
+     * Явное значение из конфига имеет приоритет. Если оно не задано (0),
+     * окно определяется у провайдера (llama.cpp GET /props → n_ctx) один раз и
+     * кэшируется на время жизни слоя. Если провайдер не ответил, возвращается
+     * консервативный дефолт, а факт фиксируется в логе. Бесконечным окно не
+     * считается никогда.
+     *
+     * @param role Логическая роль.
+     * @return Окно в токенах; 0 только для некорректной роли.
+     */
+    std::size_t context_window_tokens(ELlmRole role) const;
 
     // The caller chooses the prompt contract; this layer builds the system prompt.
     SLlmExecutionResult request_text(
@@ -100,10 +117,14 @@ private:
 
     std::unique_ptr<IModelApi> make_model(ELlmRole role) const;
     void log_failure(ELlmRole role, const std::string& reason, bool escalated);
+    std::size_t probe_context_window(size_t role_index) const;
 
     const SLlmRoleSet& m_roles;
     ILogger& m_logger;
     TModelFactory m_factory;
+
+    /// Кэш определённых окон по индексу роли; 0 — ещё не определён.
+    mutable std::array<std::size_t, llm_role_count> m_context_windows{};
 };
 } // namespace fcpp
 

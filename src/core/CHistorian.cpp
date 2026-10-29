@@ -8,6 +8,13 @@ namespace fcpp
 {
 namespace
 {
+
+/** @brief Сколько последних пар диалога максимум показывать модели. */
+constexpr std::size_t k_max_history_turns = 20;
+
+/** @brief Бюджет текста истории в байтах. */
+constexpr std::size_t k_max_history_bytes = 6000;
+
 std::string trim_ascii(const std::string& text)
 {
     const std::size_t first = text.find_first_not_of(" \t\r\n");
@@ -118,13 +125,44 @@ SHistoryRelevance CHistorian::assess_relevance(
         return result;
     }
 
+    // Only the tail of the dialogue is offered to the model, and the numbered
+    // list is built from that tail. Truncating a numbered list by bytes in the
+    // LLM layer would leave numbers pointing at removed content, and the model
+    // would answer numbers that no longer match.
+    const std::size_t newest = history.size();
+    const std::size_t oldest_limit = newest > k_max_history_turns
+        ? newest - k_max_history_turns : 0;
+
     std::string history_text;
-    for (std::size_t i = 0; i < history.size(); ++i)
+    std::size_t first_included = newest;
+    for (std::size_t index = newest; index > oldest_limit; --index)
     {
-        history_text += "[" + std::to_string(i + 1) + "]\n"
-            "USER: " + history[i].m_user_text
-            + "\nASSISTANT: " + history[i].m_assistant_text + "\n\n";
+        const SConversationTurn& turn = history[index - 1];
+        const std::string entry =
+            "USER: " + turn.m_user_text
+            + "\nASSISTANT: " + turn.m_assistant_text + "\n\n";
+        if (!history_text.empty()
+            && history_text.size() + entry.size() > k_max_history_bytes)
+        {
+            break;
+        }
+        history_text = entry + history_text;
+        first_included = index - 1;
     }
+
+    result.m_considered_turns = newest - first_included;
+    result.m_dropped_turns = first_included;
+
+    // Numbering is continuous over what is actually sent: 1..N.
+    std::string numbered_text;
+    for (std::size_t offset = 0; offset < result.m_considered_turns; ++offset)
+    {
+        const SConversationTurn& turn = history[first_included + offset];
+        numbered_text += "[" + std::to_string(offset + 1) + "]\n"
+            "USER: " + turn.m_user_text
+            + "\nASSISTANT: " + turn.m_assistant_text + "\n\n";
+    }
+    history_text = std::move(numbered_text);
 
     const std::string prompt =
         "Select the prior conversation turns that may help answer the current user request. "
@@ -138,9 +176,9 @@ SHistoryRelevance CHistorian::assess_relevance(
 
     const auto selection = m_llm.request<std::vector<std::size_t>>(
         ELlmRole::ThinkerLocal, prompt, input,
-        [count = history.size()](const std::string& text,
-                                 std::vector<std::size_t>& value,
-                                 std::string& error)
+        [count = result.m_considered_turns](const std::string& text,
+                                            std::vector<std::size_t>& value,
+                                            std::string& error)
         {
             return decode_relevant_indices(text, count, value, error);
         });
@@ -149,9 +187,21 @@ SHistoryRelevance CHistorian::assess_relevance(
     result.m_escalated = selection.m_escalated;
     result.m_used_role = selection.m_used_role;
     result.m_error = selection.m_error;
-    result.m_relevant_turn_indices = selection.m_ok
-        ? selection.m_value : std::vector<std::size_t>{};
-    result.m_history_needed = selection.m_ok && !selection.m_value.empty();
+    result.m_relevant_turn_indices.clear();
+    if (selection.m_ok)
+    {
+        // Numbers refer to the offered tail (1..N); map them back to positions
+        // in the full history before the caller uses them as indices.
+        for (const std::size_t number : selection.m_value)
+        {
+            const std::size_t position = first_included + number;
+            if (position < history.size())
+            {
+                result.m_relevant_turn_indices.push_back(position);
+            }
+        }
+    }
+    result.m_history_needed = !result.m_relevant_turn_indices.empty();
     return result;
 }
 } // namespace fcpp

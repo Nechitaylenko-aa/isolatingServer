@@ -123,6 +123,7 @@ add_library(fcpp_core STATIC
     src/index/CSqlCompilerIndex.cpp
     src/core/SError.cpp
     src/core/SConfig.cpp
+    src/core/SOrchestrationTypes.cpp
     src/core/SStaleReport.cpp
     src/core/CLogger.cpp
     src/core/SLogEvent.cpp
@@ -131,37 +132,19 @@ add_library(fcpp_core STATIC
     src/core/CPatchValidator.cpp
     src/core/CPatchApplier.cpp
     src/core/CAgentApi.cpp
-    # Conversation persistence and prompt context budgeting implementations.
+    # Conversation persistence.
     src/core/CConversationStore.cpp
-    src/core/CContextManager.cpp
-    src/core/CChatContextSource.cpp
-    src/core/CProjectProfileContextSource.cpp
-    src/core/CCodeContextSource.cpp
-    src/core/SIntent.cpp
-    src/core/SSubtasks.cpp
-    src/core/SRequestOutcome.cpp
-    src/core/CRequestPipeline.cpp
     src/core/CRequestOrchestrator.cpp
+    src/core/CIndexFactProvider.cpp
     src/core/CCursorContextAnalyzer.cpp
     src/core/CHistorian.cpp
     src/core/SLlmRoleConfig.cpp
     src/llm/CLlmLayer.cpp
-    src/core/CIntentAnalyzer.cpp
-    src/core/CAnswerService.cpp
-    src/core/CAnswerQuality.cpp
     src/core/SEvidence.cpp
-    src/core/CEvidenceCollector.cpp
-    src/core/SCascade.cpp
-    src/core/CModelCascade.cpp
-    src/core/CModelLevels.cpp
-    src/core/CEscalatingIntentAnalyzer.cpp
-    src/core/CSubtaskComposer.cpp
-    src/core/CReActAgent.cpp
     src/llm/CEndpointUtil.cpp
     src/llm/CUrlTransport.cpp
     src/llm/CModelOpenAICompat.cpp
     src/llm/CModelClaude.cpp
-    src/llm/CModelFactory.cpp
     src/tools/CToolContext.cpp
     src/tools/CIndexTool.cpp
     src/tools/CToolRegistry.cpp
@@ -210,18 +193,13 @@ add_executable(fcpp_tests
     tests/protocol_test.cpp
     src/cli/CProtocolServer.cpp
     tests/conversation_store_test.cpp
-    tests/context_manager_test.cpp
-    tests/chat_context_source_test.cpp
-    tests/context_sources_test.cpp
-    tests/pipeline_test.cpp
-    tests/model_test.cpp
     tests/project_profile_test.cpp
-    tests/evidence_test.cpp
-    tests/cascade_test.cpp
-    tests/subtask_test.cpp
     tests/streaming_test.cpp
     tests/request_orchestrator_test.cpp
     tests/historian_test.cpp
+    tests/cursor_context_test.cpp
+    tests/llm_budget_test.cpp
+    tests/file_route_test.cpp
 )
 target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 

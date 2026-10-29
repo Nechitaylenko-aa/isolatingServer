@@ -1,3 +1,8 @@
+/**
+ * @file SLlmRoleConfig.cpp
+ * @brief Имена ролей LLM и разрешение alias-ссылок (Секция 3 rules.md).
+ */
+
 #include "fcpp-agent/SLlmRoleConfig.h"
 
 #include <array>
@@ -8,32 +13,37 @@ namespace fcpp
 {
 namespace
 {
-constexpr std::array<const char*, llm_role_count> k_role_names{
+/** @brief Имена ролей, индексированные по ELlmRole. */
+static const char* const m_role_names[llm_role_count]
+{
     "CODER_SMART",
     "CODER_LOCAL",
     "THINKER_SMART",
     "THINKER_LOCAL"
 };
 
+/**
+ * @brief Состояние обхода роли при разрешении alias-графа.
+ */
 enum class EVisit
 {
-    Unseen,
-    Visiting,
-    Done
+    Unseen,   ///< Роль ещё не посещена.
+    Visiting, ///< Роль в текущем стеке обхода (цикл).
+    Done      ///< Роль разрешена.
 };
 } // namespace
 
 const char* llm_role_name(ELlmRole role)
 {
     const auto index = static_cast<std::size_t>(role);
-    return index < k_role_names.size() ? k_role_names[index] : "UNKNOWN";
+    return index < llm_role_count ? m_role_names[index] : "UNKNOWN";
 }
 
 bool llm_role_from_name(const std::string& name, ELlmRole& role)
 {
-    for (std::size_t index = 0; index < k_role_names.size(); ++index)
+    for (std::size_t index = 0; index < llm_role_count; ++index)
     {
-        if (name == k_role_names[index])
+        if (name == m_role_names[index])
         {
             role = static_cast<ELlmRole>(index);
             return true;
@@ -59,35 +69,42 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
         role.m_resolved_api.clear();
         role.m_resolved_model.clear();
         role.m_resolved_key.clear();
+        role.m_resolved_type.clear();
+        role.m_resolved_context_window_tokens = 0;
+        role.m_resolved_output_reserve_tokens = 0;
         role.m_resolved_role = ELlmRole::Count;
         role.m_configured = false;
 
-        const bool has_endpoint = !role.m_api.empty()
+        const bool has_parameters = !role.m_api.empty()
             || !role.m_model.empty() || !role.m_key.empty();
-        if (!role.m_alias.empty() && has_endpoint)
-        {
-            error = std::string("role ") + k_role_names[index]
-                + " cannot define both endpoint and alias";
-            return false;
-        }
 
+        // Alias has priority over api/model/key/type. With an alias present the
+        // remaining fields are ignored rather than treated as a conflict.
         if (!role.m_alias.empty())
         {
             configured[index] = true;
         }
-        else if (has_endpoint)
+        else if (has_parameters)
         {
-            if (role.m_api.empty() || role.m_model.empty())
+            // Only the endpoint is mandatory. A model name may be omitted for
+            // OpenAI-compatible local servers, which substitute the loaded model.
+            if (role.m_api.empty())
             {
-                error = std::string("role ") + k_role_names[index]
-                    + " requires both api and model";
+                error = std::string("role ") + m_role_names[index]
+                    + " requires api when alias is empty";
+                return false;
+            }
+            if (role.m_type == "claude" && role.m_model.empty())
+            {
+                error = std::string("role ") + m_role_names[index]
+                    + " requires model for the claude provider";
                 return false;
             }
             configured[index] = true;
         }
     }
 
-    std::function<bool(std::size_t)> resolve = [&](std::size_t index)
+    std::function<bool(std::size_t)> resolve = [&](std::size_t index) -> bool
     {
         if (!configured[index])
         {
@@ -95,7 +112,7 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
         }
         if (visits[index] == EVisit::Visiting)
         {
-            error = std::string("LLM role alias cycle at ") + k_role_names[index];
+            error = std::string("LLM role alias cycle at ") + m_role_names[index];
             return false;
         }
         if (visits[index] == EVisit::Done)
@@ -110,6 +127,9 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
             role.m_resolved_api = role.m_api;
             role.m_resolved_model = role.m_model;
             role.m_resolved_key = role.m_key;
+            role.m_resolved_type = role.m_type;
+            role.m_resolved_context_window_tokens = role.m_context_window_tokens;
+            role.m_resolved_output_reserve_tokens = role.m_output_reserve_tokens;
             role.m_resolved_role = static_cast<ELlmRole>(index);
             role.m_configured = true;
         }
@@ -119,7 +139,7 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
             if (!llm_role_from_name(role.m_alias, target_role))
             {
                 error = std::string("unknown alias target '") + role.m_alias
-                    + "' for " + k_role_names[index];
+                    + "' for " + m_role_names[index];
                 return false;
             }
 
@@ -134,15 +154,12 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
             }
 
             const SLlmModelRole& target = roles.m_roles[target_index];
-            if (!target.m_configured)
-            {
-                error = std::string("alias target is not configured: ") + role.m_alias;
-                return false;
-            }
-
             role.m_resolved_api = target.m_resolved_api;
             role.m_resolved_model = target.m_resolved_model;
             role.m_resolved_key = target.m_resolved_key;
+            role.m_resolved_type = target.m_resolved_type;
+            role.m_resolved_context_window_tokens = target.m_resolved_context_window_tokens;
+            role.m_resolved_output_reserve_tokens = target.m_resolved_output_reserve_tokens;
             role.m_resolved_role = target.m_resolved_role;
             role.m_configured = true;
         }

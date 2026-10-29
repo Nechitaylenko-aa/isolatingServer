@@ -212,17 +212,9 @@ bool CConfigManager::bootstrap()
     // Каноническая схема конфига: порядок и значения по умолчанию.
     std::vector<std::pair<std::string, std::string>> defaults =
     {
-        {"model_main", "http://127.0.0.1:8080/v1"},
-        {"model_main_name", ""},
-        {"model_light", "same_as_main"},
-        {"model_light_name", ""},
-        {"model_remote_url", "https://routerai.ru/api/v1"},
-        {"model_remote_type", "openai-compat"},
-        {"model_remote_name", ""},
-        {"model_remote_key", ""},
+        {"registry_path", registry_path.string()},
         {"db_dir", m_db_dir.string()},
         {"default_build", "build"},
-        {"registry_path", registry_path.string()},
         {"compile_commands_path", ""},
         {"tool_clang_path", ""},
         {"tool_cmake_path", ""},
@@ -232,19 +224,19 @@ bool CConfigManager::bootstrap()
         {"allow_read", "YES"},
         {"allow_write", "YES"},
         {"allow_exec", "YES"},
-        {"allow_subtasks", "NO"},
-        {"react_loop", "YES"},
-        {"loop_model", "main"},
-        {"model_main_context_window_tokens", "0"},
-        {"model_main_output_reserve_tokens", "4096"},
-        {"model_light_context_window_tokens", "0"},
-        {"model_light_output_reserve_tokens", "0"},
-        {"model_remote_context_window_tokens", "0"},
-        {"model_remote_output_reserve_tokens", "4096"},
-        {"llm_coder_remote_api", ""}, {"llm_coder_remote_model", ""}, {"llm_coder_remote_key", ""}, {"llm_coder_remote_alias", ""},
-        {"llm_coder_local_api", ""}, {"llm_coder_local_model", ""}, {"llm_coder_local_key", ""}, {"llm_coder_local_alias", ""},
-        {"llm_thinker_remote_api", ""}, {"llm_thinker_remote_model", ""}, {"llm_thinker_remote_key", ""}, {"llm_thinker_remote_alias", ""},
-        {"llm_thinker_local_api", ""}, {"llm_thinker_local_model", ""}, {"llm_thinker_local_key", ""}, {"llm_thinker_local_alias", ""}
+        {"llm_coder_alias", ""}, {"llm_thinker_alias", ""},
+        {"llm_coder_smart_api", ""}, {"llm_coder_smart_model", ""}, {"llm_coder_smart_key", ""},
+        {"llm_coder_smart_type", "openai-compat"}, {"llm_coder_smart_alias", ""},
+        {"llm_coder_smart_context_window_tokens", "0"}, {"llm_coder_smart_output_reserve_tokens", "4096"},
+        {"llm_coder_local_api", ""}, {"llm_coder_local_model", ""}, {"llm_coder_local_key", ""},
+        {"llm_coder_local_type", "openai-compat"}, {"llm_coder_local_alias", ""},
+        {"llm_coder_local_context_window_tokens", "0"}, {"llm_coder_local_output_reserve_tokens", "4096"},
+        {"llm_thinker_smart_api", ""}, {"llm_thinker_smart_model", ""}, {"llm_thinker_smart_key", ""},
+        {"llm_thinker_smart_type", "openai-compat"}, {"llm_thinker_smart_alias", ""},
+        {"llm_thinker_smart_context_window_tokens", "0"}, {"llm_thinker_smart_output_reserve_tokens", "4096"},
+        {"llm_thinker_local_api", ""}, {"llm_thinker_local_model", ""}, {"llm_thinker_local_key", ""},
+        {"llm_thinker_local_type", "openai-compat"}, {"llm_thinker_local_alias", ""},
+        {"llm_thinker_local_context_window_tokens", "0"}, {"llm_thinker_local_output_reserve_tokens", "4096"}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -252,46 +244,54 @@ bool CConfigManager::bootstrap()
     {
         std::ostringstream content;
         content << "# fcpp-agent configuration\n\n";
-        content << "# --- Models (§6/§7) ---\n";
-        content << "model_main=\"" << defaults[0].second << "\"\n";
-        content << "model_main_name=\"" << defaults[1].second << "\"\n";
-        content << "model_light=\"" << defaults[2].second << "\"\n";
-        content << "model_light_name=\"" << defaults[3].second << "\"\n\n";
-        content << "# remote — удалённая модель (задел, пока не используется)\n";
-        content << "model_remote_url=\"" << defaults[4].second << "\"\n";
-        content << "model_remote_type=\"" << defaults[5].second << "\"\n";
-        content << "model_remote_name=\"" << defaults[6].second << "\"\n";
-        content << "model_remote_key=\"" << defaults[7].second << "\"\n\n";
         content << "# --- Paths ---\n";
-        content << "db_dir=\"" << defaults[8].second << "\"\n";
-        content << "default_build=\"" << defaults[9].second << "\"\n";
-        content << "registry_path=\"" << defaults[10].second << "\"\n";
-        content << "compile_commands_path=\"" << defaults[11].second << "\"\n\n";
+        content << "registry_path=\"" << defaults[0].second << "\"\n";
+        content << "db_dir=\"" << defaults[1].second << "\"\n";
+        content << "default_build=\"" << defaults[2].second << "\"\n";
+        content << "compile_commands_path=\"" << defaults[3].second << "\"\n\n";
         content << "# --- Tools (empty path = search in PATH) ---\n";
-        content << "tool_clang_path=\"" << defaults[12].second << "\"\n";
-        content << "tool_cmake_path=\"" << defaults[13].second << "\"\n";
-        content << "tool_ninja_path=\"" << defaults[14].second << "\"\n";
-        content << "tool_clang_tidy_path=\"" << defaults[15].second << "\"\n";
-        content << "enable_tidy=\"" << defaults[16].second << "\"\n\n";
+        content << "tool_clang_path=\"" << defaults[4].second << "\"\n";
+        content << "tool_cmake_path=\"" << defaults[5].second << "\"\n";
+        content << "tool_ninja_path=\"" << defaults[6].second << "\"\n";
+        content << "tool_clang_tidy_path=\"" << defaults[7].second << "\"\n";
+        content << "enable_tidy=\"" << defaults[8].second << "\"\n\n";
         content << "# --- Permissions (closed security model, §47) ---\n";
-        content << "allow_read=\"" << defaults[17].second << "\"\n";
-        content << "allow_write=\"" << defaults[18].second << "\"\n";
-        content << "allow_exec=\"" << defaults[19].second << "\"\n";
-        content << "allow_subtasks=\"" << defaults[20].second << "\"\n\n";
-        content << "# --- ReAct loop (ADR-23): LLM управляет вызовом tools ---\n";
-        content << "react_loop=\"" << defaults[21].second << "\"\n";
-        content << "# Which model role drives the loop: main | light | remote\n";
-        content << "loop_model=\"" << defaults[22].second << "\"\n";
-        content << "model_main_context_window_tokens=\"" << defaults[23].second << "\"\n";
-        content << "model_main_output_reserve_tokens=\"" << defaults[24].second << "\"\n";
-        content << "model_light_context_window_tokens=\"" << defaults[25].second << "\"\n";
-        content << "model_light_output_reserve_tokens=\"" << defaults[26].second << "\"\n";
-        content << "model_remote_context_window_tokens=\"" << defaults[27].second << "\"\n";
-        content << "model_remote_output_reserve_tokens=\"" << defaults[28].second << "\"\n";
-        content << "llm_coder_remote_api=\"\"\nllm_coder_remote_model=\"\"\nllm_coder_remote_key=\"\"\nllm_coder_remote_alias=\"\"\n";
-        content << "llm_coder_local_api=\"\"\nllm_coder_local_model=\"\"\nllm_coder_local_key=\"\"\nllm_coder_local_alias=\"\"\n";
-        content << "llm_thinker_remote_api=\"\"\nllm_thinker_remote_model=\"\"\nllm_thinker_remote_key=\"\"\nllm_thinker_remote_alias=\"\"\n";
-        content << "llm_thinker_local_api=\"\"\nllm_thinker_local_model=\"\"\nllm_thinker_local_key=\"\"\nllm_thinker_local_alias=\"\"\n";
+        content << "allow_read=\"" << defaults[9].second << "\"\n";
+        content << "allow_write=\"" << defaults[10].second << "\"\n";
+        content << "allow_exec=\"" << defaults[11].second << "\"\n\n";
+        content << "# --- LLM roles ---\n";
+        content << "# alias takes priority: when non-empty, api/model/key/type are ignored.\n";
+        content << "# Without alias, api is mandatory (model is optional for local servers).\n";
+        content << "# llm_coder_alias / llm_thinker_alias apply to both roles of the group.\n";
+        content << "# type: openai-compat | claude\n\n";
+        content << "llm_coder_smart_api=\"\"\n";
+        content << "llm_coder_smart_model=\"\"\n";
+        content << "llm_coder_smart_key=\"\"\n";
+        content << "llm_coder_smart_type=\"openai-compat\"\n";
+        content << "llm_coder_smart_alias=\"\"\n";
+        content << "llm_coder_smart_context_window_tokens=\"0\"\n";
+        content << "llm_coder_smart_output_reserve_tokens=\"4096\"\n\n";
+        content << "llm_coder_local_api=\"\"\n";
+        content << "llm_coder_local_model=\"\"\n";
+        content << "llm_coder_local_key=\"\"\n";
+        content << "llm_coder_local_type=\"openai-compat\"\n";
+        content << "llm_coder_local_alias=\"\"\n";
+        content << "llm_coder_local_context_window_tokens=\"0\"\n";
+        content << "llm_coder_local_output_reserve_tokens=\"4096\"\n\n";
+        content << "llm_thinker_smart_api=\"\"\n";
+        content << "llm_thinker_smart_model=\"\"\n";
+        content << "llm_thinker_smart_key=\"\"\n";
+        content << "llm_thinker_smart_type=\"openai-compat\"\n";
+        content << "llm_thinker_smart_alias=\"\"\n";
+        content << "llm_thinker_smart_context_window_tokens=\"0\"\n";
+        content << "llm_thinker_smart_output_reserve_tokens=\"4096\"\n\n";
+        content << "llm_thinker_local_api=\"\"\n";
+        content << "llm_thinker_local_model=\"\"\n";
+        content << "llm_thinker_local_key=\"\"\n";
+        content << "llm_thinker_local_type=\"openai-compat\"\n";
+        content << "llm_thinker_local_alias=\"\"\n";
+        content << "llm_thinker_local_context_window_tokens=\"0\"\n";
+        content << "llm_thinker_local_output_reserve_tokens=\"4096\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -422,11 +422,6 @@ bool CConfigManager::load() const
     m_config.m_allow_read = read_bool("allow_read", true);
     m_config.m_allow_write = read_bool("allow_write", true);
     m_config.m_allow_exec = read_bool("allow_exec", true);
-    m_config.m_allow_subtasks = read_bool("allow_subtasks", false);
-    m_config.m_react_loop = read_bool("react_loop", true);
-
-    const std::string loop_model = value_or_empty(entries, "loop_model");
-    m_config.m_loop_model = loop_model.empty() ? "main" : loop_model;
 
     // Пути/сборка.
     const std::string db_dir_value = value_or_empty(entries, "db_dir");
@@ -434,29 +429,7 @@ bool CConfigManager::load() const
     const std::string build_value = value_or_empty(entries, "default_build");
     m_config.m_default_build = build_value.empty() ? "build" : build_value;
 
-    // Модели (§6/§7).
-    m_config.m_model_main.m_url = value_or_empty(entries, "model_main");
-    m_config.m_model_main.m_name = value_or_empty(entries, "model_main_name");
-    m_config.m_model_light.m_url = value_or_empty(entries, "model_light");
-    m_config.m_model_light.m_name = value_or_empty(entries, "model_light_name");
-    m_config.m_model_remote.m_url = value_or_empty(entries, "model_remote_url");
-    m_config.m_model_remote.m_type = value_or_empty(entries, "model_remote_type");
-    m_config.m_model_remote.m_name = value_or_empty(entries, "model_remote_name");
-    m_config.m_model_remote.m_key = value_or_empty(entries, "model_remote_key");
-    m_config.m_remote_type = remote_type_from_name(m_config.m_model_remote.m_type);
-    auto load_llm_role = [&entries](SLlmModelRole& role, const std::string& prefix) {
-        role.m_api = value_or_empty(entries, prefix + "_api");
-        role.m_model = value_or_empty(entries, prefix + "_model");
-        role.m_key = value_or_empty(entries, prefix + "_key");
-        role.m_alias = value_or_empty(entries, prefix + "_alias");
-    };
-    load_llm_role(m_config.m_llm_roles.at(ELlmRole::CoderSmart), "llm_coder_remote");
-    load_llm_role(m_config.m_llm_roles.at(ELlmRole::CoderLocal), "llm_coder_local");
-    load_llm_role(m_config.m_llm_roles.at(ELlmRole::ThinkerSmart), "llm_thinker_remote");
-    load_llm_role(m_config.m_llm_roles.at(ELlmRole::ThinkerLocal), "llm_thinker_local");
-    std::string alias_error;
-    if (!resolve_llm_role_aliases(m_config.m_llm_roles, alias_error)) return false;
-
+    // Логические роли LLM: api/model/key/type либо alias (alias приоритетнее).
     auto read_size = [&entries](const std::string& key, std::size_t fallback,
                                 std::size_t& output) -> bool
     {
@@ -468,51 +441,56 @@ bool CConfigManager::load() const
         }
         return parse_size_value(iterator->second, output);
     };
-    if (!read_size("model_main_context_window_tokens", 0,
-                   m_config.m_model_main.m_context_window_tokens)
-        || !read_size("model_main_output_reserve_tokens", 4096,
-                      m_config.m_model_main.m_output_reserve_tokens)
-        || !read_size("model_light_context_window_tokens", 0,
-                      m_config.m_model_light.m_context_window_tokens)
-        || !read_size("model_light_output_reserve_tokens", 0,
-                      m_config.m_model_light.m_output_reserve_tokens)
-        || !read_size("model_remote_context_window_tokens", 0,
-                      m_config.m_model_remote.m_context_window_tokens)
-        || !read_size("model_remote_output_reserve_tokens", 4096,
-                      m_config.m_model_remote.m_output_reserve_tokens))
+    // Group aliases (llm_coder_alias / llm_thinker_alias) apply to both roles of
+    // the group; a per-role alias always wins over the group alias.
+    const std::string coder_group_alias = value_or_empty(entries, "llm_coder_alias");
+    const std::string thinker_group_alias = value_or_empty(entries, "llm_thinker_alias");
+
+    auto load_llm_role = [&entries, &read_size](SLlmModelRole& role,
+                                                const std::string& prefix,
+                                                const std::string& group_alias) -> bool
+    {
+        role.m_api = value_or_empty(entries, prefix + "_api");
+        role.m_model = value_or_empty(entries, prefix + "_model");
+        role.m_key = value_or_empty(entries, prefix + "_key");
+        role.m_type = value_or_empty(entries, prefix + "_type");
+        role.m_alias = value_or_empty(entries, prefix + "_alias");
+        if (role.m_alias.empty())
+        {
+            role.m_alias = group_alias;
+        }
+        if (role.m_type.empty())
+        {
+            role.m_type = "openai-compat";
+        }
+        if (!read_size(prefix + "_context_window_tokens", 0, role.m_context_window_tokens)
+            || !read_size(prefix + "_output_reserve_tokens", 4096, role.m_output_reserve_tokens))
+        {
+            return false;
+        }
+        if (role.m_output_reserve_tokens == 0)
+        {
+            role.m_output_reserve_tokens = 4096;
+        }
+        return true;
+    };
+
+    if (!load_llm_role(m_config.m_llm_roles.at(ELlmRole::CoderSmart),
+                       "llm_coder_smart", coder_group_alias)
+        || !load_llm_role(m_config.m_llm_roles.at(ELlmRole::CoderLocal),
+                          "llm_coder_local", coder_group_alias)
+        || !load_llm_role(m_config.m_llm_roles.at(ELlmRole::ThinkerSmart),
+                          "llm_thinker_smart", thinker_group_alias)
+        || !load_llm_role(m_config.m_llm_roles.at(ELlmRole::ThinkerLocal),
+                          "llm_thinker_local", thinker_group_alias))
     {
         return false;
     }
 
-    // Output reserve must match the provider max_tokens default even when set to zero.
-    if (m_config.m_model_main.m_output_reserve_tokens == 0)
+    std::string alias_error;
+    if (!resolve_llm_role_aliases(m_config.m_llm_roles, alias_error))
     {
-        m_config.m_model_main.m_output_reserve_tokens = 4096;
-    }
-    if (m_config.m_model_remote.m_output_reserve_tokens == 0)
-    {
-        m_config.m_model_remote.m_output_reserve_tokens = 4096;
-    }
-
-    // A light role sharing the main endpoint inherits its model context settings.
-    const bool light_shares_main = m_config.m_model_light.m_url.empty()
-        || m_config.m_model_light.m_url == "same_as_main";
-    if (light_shares_main)
-    {
-        if (m_config.m_model_light.m_context_window_tokens == 0)
-        {
-            m_config.m_model_light.m_context_window_tokens =
-                m_config.m_model_main.m_context_window_tokens;
-        }
-        if (m_config.m_model_light.m_output_reserve_tokens == 0)
-        {
-            m_config.m_model_light.m_output_reserve_tokens =
-                m_config.m_model_main.m_output_reserve_tokens;
-        }
-    }
-    else if (m_config.m_model_light.m_output_reserve_tokens == 0)
-    {
-        m_config.m_model_light.m_output_reserve_tokens = 4096;
+        return false;
     }
 
     return true;

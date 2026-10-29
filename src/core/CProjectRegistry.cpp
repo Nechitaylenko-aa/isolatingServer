@@ -142,6 +142,8 @@ bool CProjectRegistry::upsert(const SProject& project)
         return false;
     }
 
+    // project_id is the identity; canonical_path is unique as a safety net.
+    // The registry is a fresh-format database with no legacy rows to reconcile.
     const char* sql =
         "INSERT INTO registry_project (project_id, canonical_path, db_path, last_opened_at, created_at) "
         "VALUES (?1, ?2, ?3, ?4, ?4) "

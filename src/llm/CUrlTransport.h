@@ -56,6 +56,20 @@ public:
                           const std::string& json_body,
                           long timeout_seconds,
                           const std::function<bool(const std::string&)>& on_chunk) const;
+
+    /**
+     * @brief Выполнить GET без тела и без стриминга.
+     *
+     * Используется для служебных запросов провайдера (например, /props у
+     * llama.cpp). Тело ответа помещается в SHttpResult::m_body.
+     * @param url URL.
+     * @param headers Заголовки.
+     * @param timeout_seconds Таймаут.
+     * @return Результат.
+     */
+    SHttpResult get(const std::string& url,
+                    const std::vector<std::string>& headers,
+                    long timeout_seconds) const;
 };
 
 } // namespace fcpp

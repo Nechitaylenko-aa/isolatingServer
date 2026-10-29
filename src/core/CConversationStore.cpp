@@ -356,8 +356,7 @@ bool CConversationStore::open(const std::filesystem::path& database_path)
         "  project_id TEXT NOT NULL DEFAULT '',"
         "  context_json TEXT NOT NULL DEFAULT '{}',"
         "  created_at INTEGER NOT NULL,"
-        "  updated_at INTEGER NOT NULL,"
-        "  closed_at INTEGER"
+        "  updated_at INTEGER NOT NULL"
         ");"
         "CREATE TABLE IF NOT EXISTS conversation_event ("
         "  event_id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -449,7 +448,7 @@ bool CConversationStore::bind_project(const std::string& session_id,
     // смена проекта у существующей сессии запрещена.
     Statement statement(m_db,
         "UPDATE conversation_session SET project_id=?1, updated_at=?2 "
-        "WHERE session_id=?3 AND closed_at IS NULL AND project_id=''");
+        "WHERE session_id=?3 AND project_id=''");
     if (!statement.ok()
         || !statement.bind_text(1, project_id)
         || !statement.bind_int64(2, now_unix_seconds())
@@ -468,45 +467,44 @@ bool CConversationStore::bind_project(const std::string& session_id,
 
     // Уже привязана: успех только при совпадении проекта.
     const auto existing = get_session(session_id);
-    return existing.has_value() && !existing->m_closed
-        && existing->m_project_id == project_id;
+    return existing.has_value() && existing->m_project_id == project_id;
 }
 
-bool CConversationStore::close_session_with_event(
-    const std::string& session_id,
-    const std::string& event_kind,
-    const std::string& event_payload)
-{
-    if (m_db == nullptr)
-    {
-        return false;
-    }
-
-    Transaction transaction(m_db);
-    if (!transaction.ok()
-        || !append_event(session_id, event_kind, event_payload)
-        || !close_session(session_id))
-    {
-        return false;
-    }
-    return transaction.commit();
-}
-
-bool CConversationStore::close_session(const std::string& session_id)
+bool CConversationStore::delete_session(const std::string& session_id)
 {
     if (m_db == nullptr || session_id.empty())
     {
         return false;
     }
 
-    Statement statement(m_db,
-        "UPDATE conversation_session SET closed_at=?1, updated_at=?1 "
-        "WHERE session_id=?2 AND closed_at IS NULL");
-    return statement.ok()
-        && statement.bind_int64(1, now_unix_seconds())
-        && statement.bind_text(2, session_id)
-        && sqlite3_step(statement.get()) == SQLITE_DONE
-        && sqlite3_changes(m_db) == 1;
+    Transaction transaction(m_db);
+    if (!transaction.ok())
+    {
+        return false;
+    }
+
+    // Events first: the foreign key references the session row.
+    Statement remove_events(m_db,
+        "DELETE FROM conversation_event WHERE session_id=?1");
+    if (!remove_events.ok() || !remove_events.bind_text(1, session_id)
+        || sqlite3_step(remove_events.get()) != SQLITE_DONE)
+    {
+        return false;
+    }
+
+    Statement remove_session(m_db,
+        "DELETE FROM conversation_session WHERE session_id=?1");
+    if (!remove_session.ok() || !remove_session.bind_text(1, session_id)
+        || sqlite3_step(remove_session.get()) != SQLITE_DONE)
+    {
+        return false;
+    }
+
+    if (sqlite3_changes(m_db) != 1)
+    {
+        return false;
+    }
+    return transaction.commit();
 }
 
 bool CConversationStore::update_context_with_event(
@@ -540,7 +538,7 @@ bool CConversationStore::update_context(const std::string& session_id,
 
     Statement statement(m_db,
         "UPDATE conversation_session SET context_json=?1, updated_at=?2 "
-        "WHERE session_id=?3 AND closed_at IS NULL");
+        "WHERE session_id=?3");
     return statement.ok()
         && statement.bind_text(1, context_json)
         && statement.bind_int64(2, now_unix_seconds())
@@ -558,7 +556,7 @@ std::optional<SConversationSession> CConversationStore::get_session(
     }
 
     Statement statement(m_db,
-        "SELECT session_id, project_id, context_json, created_at, updated_at, closed_at "
+        "SELECT session_id, project_id, context_json, created_at, updated_at "
         "FROM conversation_session WHERE session_id=?1");
     if (!statement.ok() || !statement.bind_text(1, session_id)
         || sqlite3_step(statement.get()) != SQLITE_ROW)
@@ -572,7 +570,6 @@ std::optional<SConversationSession> CConversationStore::get_session(
     session.m_context_json = column_text(statement.get(), 2);
     session.m_created_at = sqlite3_column_int64(statement.get(), 3);
     session.m_updated_at = sqlite3_column_int64(statement.get(), 4);
-    session.m_closed = sqlite3_column_type(statement.get(), 5) != SQLITE_NULL;
     return session;
 }
 
@@ -585,7 +582,7 @@ std::optional<SConversationSession> CConversationStore::latest_session_for_proje
     }
 
     Statement statement(m_db,
-        "SELECT session_id, project_id, context_json, created_at, updated_at, closed_at "
+        "SELECT session_id, project_id, context_json, created_at, updated_at "
         "FROM conversation_session WHERE project_id=?1 "
         "ORDER BY updated_at DESC, session_id DESC LIMIT 1");
     if (!statement.ok() || !statement.bind_text(1, project_id)
@@ -600,18 +597,7 @@ std::optional<SConversationSession> CConversationStore::latest_session_for_proje
     session.m_context_json = column_text(statement.get(), 2);
     session.m_created_at = sqlite3_column_int64(statement.get(), 3);
     session.m_updated_at = sqlite3_column_int64(statement.get(), 4);
-    session.m_closed = sqlite3_column_type(statement.get(), 5) != SQLITE_NULL;
     return session;
-}
-
-bool CConversationStore::reopen_session(const std::string& session_id)
-{
-    if (m_db == nullptr || session_id.empty()) return false;
-    Statement statement(m_db,
-        "UPDATE conversation_session SET closed_at=NULL, updated_at=?1 WHERE session_id=?2");
-    return statement.ok() && statement.bind_int64(1, now_unix_seconds())
-        && statement.bind_text(2, session_id) && sqlite3_step(statement.get()) == SQLITE_DONE
-        && sqlite3_changes(m_db) == 1;
 }
 
 bool CConversationStore::append_event(const std::string& session_id,
@@ -627,7 +613,7 @@ bool CConversationStore::append_event(const std::string& session_id,
     Statement statement(m_db,
         "INSERT INTO conversation_event(session_id, kind, payload, created_at) "
         "SELECT ?1, ?2, ?3, ?4 WHERE EXISTS ("
-        "SELECT 1 FROM conversation_session WHERE session_id=?1 AND closed_at IS NULL)");
+        "SELECT 1 FROM conversation_session WHERE session_id=?1)");
     if (!statement.ok()
         || !statement.bind_text(1, session_id)
         || !statement.bind_text(2, kind)

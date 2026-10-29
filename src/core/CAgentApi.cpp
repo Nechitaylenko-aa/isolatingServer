@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/CRequestOrchestrator.h"
+#include "core/CIndexFactProvider.h"
 #include "core/CHistorian.h"
 #include "core/CCursorContextAnalyzer.h"
 #include "llm/CLlmLayer.h"
@@ -30,6 +31,7 @@
 #include "core/CExecutor.h"
 #include "fcpp-agent/IClang.h"
 #include "index/CClangFactory.h"
+#include "index/CSQLiteIndex.h"
 #include "tools/CToolContext.h"
 #include "tools/CToolRegistry.h"
 
@@ -432,10 +434,14 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
                 {
                     failure_stage = "project_open_failed";
                 }
+                // Directory name only: the journal must not contain absolute
+                // paths (plugin_api.md). The stage locates the failure.
                 m_logger.log_event(ELogLevel::Warn, "project.open.failed", {
                     {"request_id", request.m_request_id},
                     {"failure_stage", failure_stage},
-                    {"project_root", target},
+                    {"project_dir", target.empty()
+                        ? std::string()
+                        : std::filesystem::path(target).filename().string()},
                     {"root_provided", !target.empty()}
                 });
                 return make_error(EErrorKind::InvalidRequest,
@@ -459,18 +465,6 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
             if (existing.has_value())
             {
                 session_id = existing->m_id;
-                if (existing->m_closed && !m_conversation_store.reopen_session(session_id))
-                {
-                    return make_error(EErrorKind::IoError,
-                                      "cannot reopen persisted project conversation");
-                }
-                if (existing->m_closed
-                    && !m_conversation_store.append_event(session_id, "session.open",
-                                                          nlohmann::json{{"project_id", project_id}}.dump()))
-                {
-                    return make_error(EErrorKind::IoError,
-                                      "cannot record project conversation reopening");
-                }
             }
             else
             {
@@ -671,13 +665,7 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
                                   "projectId does not match the currently opened project");
             }
 
-            auto session = m_conversation_store.latest_session_for_project(current_project);
-            if (session.has_value() && session->m_closed)
-            {
-                if (!m_conversation_store.reopen_session(session->m_id))
-                    return make_error(EErrorKind::IoError, "cannot reopen project conversation");
-                session = m_conversation_store.latest_session_for_project(current_project);
-            }
+            const auto session = m_conversation_store.latest_session_for_project(current_project);
             if (!session.has_value())
             {
                 return make_error(EErrorKind::SymbolNotFound,
@@ -695,10 +683,10 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
             {
                 return make_error(EErrorKind::InvalidRequest, "missing session_id");
             }
-            if (!m_conversation_store.close_session_with_event(
-                    request.m_session_id, "session.close", "{}"))
+            // Closing a conversation removes it: a session either exists or not.
+            if (!m_conversation_store.delete_session(request.m_session_id))
             {
-                return make_error(EErrorKind::InvalidRequest, "unknown, closed, or uncloseable session");
+                return make_error(EErrorKind::InvalidRequest, "unknown session");
             }
             response.m_ok = true;
             response.m_session_id = request.m_session_id;
@@ -712,9 +700,9 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
                                   "session_id and non-zero question_id are required");
             }
             const auto session = m_conversation_store.get_session(request.m_session_id);
-            if (!session.has_value() || session->m_closed)
+            if (!session.has_value())
             {
-                return make_error(EErrorKind::InvalidRequest, "unknown or closed conversation session");
+                return make_error(EErrorKind::InvalidRequest, "unknown conversation session");
             }
             response.m_ok = true;
             response.m_state = "COMPLETED";
@@ -808,14 +796,84 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
                           "project context is known but full project open failed");
     }
 
+    // Environment preflight. Everything the tree needs is checked and reported
+    // here, with the failing stage and the path: a missing resource is a debug
+    // event, not a silent "no context".
+    if (!m_project_manager.has_current())
+    {
+        m_logger.log_event(ELogLevel::Error, "environment.preflight", {
+            {"request_id", request.m_request_id},
+            {"stage", "project"},
+            {"fault", "project_not_open"}
+        });
+        return make_error(EErrorKind::ProjectNotOpen, "project is not open");
+    }
+
+    {
+        const SProjectContext& context = m_project_manager.current();
+        std::error_code db_error;
+        const bool db_exists =
+            std::filesystem::exists(context.m_project.m_db_path, db_error);
+        if (!db_exists)
+        {
+            // No absolute paths in the journal (plugin_api.md): the log is
+            // shipped in bug reports. The stage and the project id are enough
+            // to locate the resource; filesystem detail goes to the message only.
+            m_logger.log_event(ELogLevel::Error, "environment.preflight", {
+                {"request_id", request.m_request_id},
+                {"project_id", context.m_project.m_project_id},
+                {"stage", "index_database"},
+                {"fault", db_error ? "stat_failed" : "missing"},
+                {"stat_error", db_error ? db_error.message() : std::string()}
+            });
+            return make_error(EErrorKind::IndexNotReady,
+                              "project index database is missing: "
+                              + context.m_project.m_db_path.string());
+        }
+
+        // The file exists, but it must actually open and pass the schema gate.
+        CSQLiteIndex probe(context.m_project.m_db_path);
+        if (!probe.open_db())
+        {
+            m_logger.log_event(ELogLevel::Error, "environment.preflight", {
+                {"request_id", request.m_request_id},
+                {"project_id", context.m_project.m_project_id},
+                {"stage", "index_database"},
+                {"fault", "open_failed"}
+            });
+            return make_error(EErrorKind::IndexNotReady,
+                              "project index database cannot be opened: "
+                              + context.m_project.m_db_path.string());
+        }
+        probe.close_db();
+    }
+
+    {
+        const SIndexStatus status = m_project_manager.current().m_index_status;
+        if (status.m_state != EIndexState::Ready)
+        {
+            m_logger.log_event(ELogLevel::Error, "environment.preflight", {
+                {"request_id", request.m_request_id},
+                {"stage", "index_state"},
+                {"fault", "not_ready"},
+                {"state", static_cast<int>(status.m_state)},
+                {"files", status.m_file_count},
+                {"symbols", status.m_symbol_count}
+            });
+            return make_error(EErrorKind::IndexNotReady,
+                              "project index is not ready (state "
+                              + std::to_string(static_cast<int>(status.m_state)) + ")");
+        }
+    }
+
     std::string session_context_json = "{}";
     std::vector<SConversationTurn> conversation_history;
     std::vector<SConversationEvent> stored_events;
     {
         const auto session = m_conversation_store.get_session(request.m_session_id);
-        if (!session.has_value() || session->m_closed)
+        if (!session.has_value())
         {
-            return make_error(EErrorKind::InvalidRequest, "unknown or closed conversation session");
+            return make_error(EErrorKind::InvalidRequest, "unknown conversation session");
         }
         if (m_project_manager.has_current())
         {
@@ -890,23 +948,66 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
     orchestration_request.m_request_id = request.m_request_id;
     orchestration_request.m_text = effective_text;
     orchestration_request.m_session_id = request.m_session_id;
-    orchestration_request.m_cursor_file = request.m_editor_file;
     orchestration_request.m_cursor_line = request.m_editor_line;
     orchestration_request.m_cursor_column = request.m_editor_column;
-    orchestration_request.m_context_json = session_context_json;
     orchestration_request.m_history = conversation_history;
-    orchestration_request.m_project_open = m_project_manager.is_opened();
+
+    // The editor may send a project-relative path; libclang needs an absolute one.
+    if (!request.m_editor_file.empty())
+    {
+        const std::filesystem::path resolved =
+            m_project_manager.resolve_path(request.m_editor_file);
+        orchestration_request.m_cursor_file =
+            resolved.empty() ? request.m_editor_file : resolved.string();
+    }
+
+    // libclang needs the translation unit's own flags (-I/-D/-std), otherwise a
+    // file that depends on the project layout resolves to no semantic entity.
+    if (!orchestration_request.m_cursor_file.empty())
+    {
+        orchestration_request.m_cursor_compile_arguments =
+            m_project_manager.compile_arguments_for(orchestration_request.m_cursor_file);
+        // The file name is enough for correlation; the absolute path stays out
+        // of the journal.
+        m_logger.log_event(ELogLevel::Info, "cursor.compile_arguments", {
+            {"request_id", request.m_request_id},
+            {"file_name", std::filesystem::path(
+                orchestration_request.m_cursor_file).filename().string()},
+            {"arguments", orchestration_request.m_cursor_compile_arguments.size()}
+        });
+    }
 
     CLlmLayer llm(m_config_manager.config().m_llm_roles, m_logger);
     CHistorian historian(llm);
-    std::unique_ptr<IClang> clang = create_clang_backend({});
+    std::unique_ptr<IClang> clang =
+        create_clang_backend(m_config_manager.config().m_clang_path);
     std::unique_ptr<CCursorContextAnalyzer> cursor_analyzer;
     if (clang)
     {
         cursor_analyzer = std::make_unique<CCursorContextAnalyzer>(*clang, llm);
     }
+    else
+    {
+        // A missing Clang backend is a visible failure, not "no cursor context":
+        // otherwise the agent silently answers without source evidence.
+        m_logger.log_event(ELogLevel::Error, "cursor.backend_unavailable", {
+            {"request_id", request.m_request_id},
+            {"configured", !m_config_manager.config().m_clang_path.empty()}
+        });
+        return make_error(EErrorKind::IndexNotReady,
+                          "clang backend is unavailable; cursor context cannot be resolved");
+    }
+
+    std::unique_ptr<CIndexFactProvider> facts;
+    if (m_project_manager.has_current())
+    {
+        facts = std::make_unique<CIndexFactProvider>(
+            m_project_manager.current().m_project.m_db_path,
+            m_project_manager.current().m_project.m_canonical_path,
+            clang.get());
+    }
     CRequestOrchestrator orchestrator(m_logger, &historian,
-        cursor_analyzer.get(), &llm);
+        cursor_analyzer.get(), &llm, facts.get());
     const SOrchestrationResult orchestration_result = orchestrator.run(orchestration_request);
 
     SApiResponse response;

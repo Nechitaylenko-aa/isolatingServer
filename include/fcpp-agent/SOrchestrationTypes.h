@@ -1,13 +1,110 @@
+/**
+ * @file SOrchestrationTypes.h
+ * @brief Типы состояния дерева обработки запроса.
+ *
+ * Только объявления: имена значений и их текстовые представления живут в
+ * статических массивах в .cpp (Секция 3 rules.md).
+ */
+
 #ifndef FCPP_AGENT_SORCHESTRATIONTYPES_H
 #define FCPP_AGENT_SORCHESTRATIONTYPES_H
-namespace fcpp {
-enum class ERequestStatus { Rejected, Failed, StubComplete, Completed };
-enum class EExitReason { None, EmptyRequest, CursorRelevanceFailed, HistoryRelevanceFailed, ScopeClassificationNotImplemented, LlmGenerationFailed };
-enum class EOrchestrationRoute { NoApplicableContext, CursorContextRequired, HistoryContextRequired, CursorAndHistoryContextRequired };
-enum class ETraceEvent { ValidationOk, ValidationFailed, ApplicabilityFailed, ApplicabilityAssessed, RouteSelected, ScopeNotImplemented, AnswerGenerated, AnswerAudited, ExitLlmGenerationFailed, ExitRejected, ExitFailed, ExitCompleted, ExitEmptyRequest, ExitCursorRelevanceFailed, ExitHistoryRelevanceFailed, ExitScopeClassificationNotImplemented };
-inline const char* request_status_name(ERequestStatus v) { switch(v) { case ERequestStatus::Rejected:return "REJECTED"; case ERequestStatus::Failed:return "FAILED"; case ERequestStatus::StubComplete:return "STUB_COMPLETE"; case ERequestStatus::Completed:return "COMPLETED"; } return "UNKNOWN"; }
-inline const char* exit_reason_name(EExitReason v) { switch(v) { case EExitReason::None:return "NONE"; case EExitReason::EmptyRequest:return "EMPTY_REQUEST"; case EExitReason::CursorRelevanceFailed:return "CURSOR_RELEVANCE_FAILED"; case EExitReason::HistoryRelevanceFailed:return "HISTORY_RELEVANCE_FAILED"; case EExitReason::ScopeClassificationNotImplemented:return "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED"; case EExitReason::LlmGenerationFailed:return "LLM_GENERATION_FAILED"; } return "UNKNOWN"; }
-inline const char* orchestration_route_name(EOrchestrationRoute v) { switch(v) { case EOrchestrationRoute::NoApplicableContext:return "NO_APPLICABLE_CONTEXT"; case EOrchestrationRoute::CursorContextRequired:return "CURSOR_CONTEXT_REQUIRED"; case EOrchestrationRoute::HistoryContextRequired:return "HISTORY_CONTEXT_REQUIRED"; case EOrchestrationRoute::CursorAndHistoryContextRequired:return "CURSOR_AND_HISTORY_CONTEXT_REQUIRED"; } return "UNKNOWN"; }
-inline const char* trace_event_name(ETraceEvent v) { switch(v) { case ETraceEvent::ValidationOk:return "VALIDATION:OK"; case ETraceEvent::ValidationFailed:return "VALIDATION:FAILED"; case ETraceEvent::ApplicabilityFailed:return "APPLICABILITY:FAILED"; case ETraceEvent::ApplicabilityAssessed:return "APPLICABILITY:ASSESSED"; case ETraceEvent::RouteSelected:return "ROUTE:SELECTED"; case ETraceEvent::ScopeNotImplemented:return "SCOPE:NOT_IMPLEMENTED"; case ETraceEvent::AnswerGenerated:return "ANSWER:GENERATED"; case ETraceEvent::AnswerAudited:return "ANSWER:AUDITED"; case ETraceEvent::ExitLlmGenerationFailed:return "EXIT:LLM_GENERATION_FAILED"; case ETraceEvent::ExitRejected:return "EXIT:REJECTED"; case ETraceEvent::ExitFailed:return "EXIT:FAILED"; case ETraceEvent::ExitCompleted:return "EXIT:COMPLETED"; case ETraceEvent::ExitEmptyRequest:return "EXIT:EMPTY_REQUEST"; case ETraceEvent::ExitCursorRelevanceFailed:return "EXIT:CURSOR_RELEVANCE_FAILED"; case ETraceEvent::ExitHistoryRelevanceFailed:return "EXIT:HISTORY_RELEVANCE_FAILED"; case ETraceEvent::ExitScopeClassificationNotImplemented:return "EXIT:SCOPE_CLASSIFICATION_NOT_IMPLEMENTED"; } return "UNKNOWN"; }
-}
-#endif
+
+namespace fcpp
+{
+
+/**
+ * @brief Итоговый статус обработки запроса.
+ */
+enum class ERequestStatus
+{
+    Rejected,  ///< Запрос отклонён до выполнения.
+    Failed,    ///< Обработка завершилась сбоем.
+    Completed, ///< Ответ сформирован.
+    Count      ///< Маркер количества.
+};
+
+/**
+ * @brief Причина терминального исхода.
+ */
+enum class EExitReason
+{
+    None,                    ///< Штатное завершение.
+    EmptyRequest,            ///< Запрос пуст после нормализации.
+    CursorRelevanceFailed,   ///< Оценка курсора завершилась сбоем.
+    HistoryRelevanceFailed,  ///< Оценка истории завершилась сбоем.
+    FileRelevanceFailed,     ///< Оценка файла без курсора завершилась сбоем.
+    FileNotRelevant,         ///< Вопрос не относится к открытому файлу.
+    LlmGenerationFailed,     ///< Модель не дала пригодный ответ.
+    IndexUnavailable,        ///< База индекса проекта недоступна.
+    Count                    ///< Маркер количества.
+};
+
+/**
+ * @brief Выбранный маршрут обработки.
+ */
+enum class EOrchestrationRoute
+{
+    Unselected,                     ///< Маршрут не выбран (сбой до выбора).
+    NoApplicableContext,            ///< Ни истории, ни курсора, ни файла.
+    CursorContextRequired,          ///< Только курсор.
+    HistoryContextRequired,         ///< Только история.
+    CursorAndHistoryContextRequired,///< Курсор и история.
+    FileContextRequired,            ///< Файл без позиции курсора.
+    FileAndHistoryContextRequired,  ///< Файл без позиции курсора и история.
+    Count                           ///< Маркер количества.
+};
+
+/**
+ * @brief Событие прохождения дерева.
+ */
+enum class ETraceEvent
+{
+    ValidationOk,                 ///< Вход прошёл нормализацию.
+    ValidationFailed,             ///< Вход отклонён.
+    ApplicabilityFailed,          ///< Оценка применимости завершилась сбоем.
+    ApplicabilityAssessed,        ///< Применимость оценена.
+    RouteSelected,                ///< Маршрут выбран.
+    AnswerGenerated,              ///< Модель вернула текст.
+    AnswerAudited,                ///< Ответ принят.
+    ExitLlmGenerationFailed,      ///< Терминальный выход: модель.
+    ExitCompleted,                ///< Терминальный выход: успех.
+    ExitEmptyRequest,             ///< Терминальный выход: пустой запрос.
+    ExitCursorRelevanceFailed,    ///< Терминальный выход: курсор.
+    ExitHistoryRelevanceFailed,   ///< Терминальный выход: история.
+    ExitFileRelevanceFailed,      ///< Терминальный выход: оценка файла.
+    ExitFileNotRelevant,          ///< Терминальный выход: файл не про запрос.
+    ExitIndexUnavailable,         ///< Терминальный выход: индекс.
+    Count                         ///< Маркер количества.
+};
+
+/**
+ * @brief Текстовое имя статуса.
+ * @param value Статус.
+ * @return Стабильное имя.
+ */
+const char* request_status_name(ERequestStatus value);
+
+/**
+ * @brief Текстовое имя причины выхода.
+ * @param value Причина.
+ * @return Стабильное имя.
+ */
+const char* exit_reason_name(EExitReason value);
+
+/**
+ * @brief Текстовое имя маршрута.
+ * @param value Маршрут.
+ * @return Стабильное имя.
+ */
+const char* orchestration_route_name(EOrchestrationRoute value);
+
+/**
+ * @brief Текстовое имя события дерева.
+ * @param value Событие.
+ * @return Стабильное имя.
+ */
+const char* trace_event_name(ETraceEvent value);
+
+} // namespace fcpp
+
+#endif // FCPP_AGENT_SORCHESTRATIONTYPES_H

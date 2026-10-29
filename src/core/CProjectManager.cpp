@@ -20,6 +20,8 @@
 
 #include <sqlite3.h>
 
+#include "core/CConfigManager.h"
+#include "core/CExecutor.h"
 #include "core/CHash.h"
 #include "core/CProjectPaths.h"
 #include "core/CCompileCommandsLocator.h"
@@ -48,6 +50,63 @@ constexpr const char* k_index_db_name = "index.db";
 
 /** @brief Имя файла CMake-корня, обязательного для проекта. */
 constexpr const char* k_cmake_lists_name = "CMakeLists.txt";
+
+/** @brief Таймаут конфигурации CMake при первом открытии проекта (сек). */
+constexpr std::uint32_t k_configure_timeout_seconds = 900;
+
+/**
+ * @brief Сконфигурировать проект, чтобы получить compile_commands.json.
+ *
+ * Выполняется только когда файла нет ни в одном разрешённом месте. Команда
+ * детерминирована: `cmake -S <root> -B <build> -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`.
+ * Запуск идёт через CExecutor, то есть под закрытой моделью безопасности.
+ *
+ * @param project_root Канонический корень проекта.
+ * @param build_dir Имя каталога сборки.
+ * @param cmake_path Путь к cmake (пусто — из PATH).
+ * @param out_error Причина сбоя.
+ * @return true если CMake завершился успешно.
+ */
+bool configure_compile_commands(const std::filesystem::path& project_root,
+                                const std::string& build_dir,
+                                const std::filesystem::path& cmake_path,
+                                std::string& out_error)
+{
+    const std::filesystem::path build_path = project_root / build_dir;
+    std::error_code error_code;
+    std::filesystem::create_directories(build_path, error_code);
+    if (error_code)
+    {
+        out_error = "cannot create build directory: " + build_path.string();
+        return false;
+    }
+
+    CExecutor executor;
+    SCommandArgs args;
+    args.m_tool = cmake_path.empty() ? "cmake" : cmake_path.string();
+    args.m_arguments = {
+        "-S", project_root.string(),
+        "-B", build_path.string(),
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    };
+    args.m_working_dir = project_root;
+    args.m_effect = EFFECT_WRITE_BUILD;
+    args.m_timeout_seconds = k_configure_timeout_seconds;
+
+    const SExecutionResult result = executor.execute(args, nullptr);
+    if (!result.m_allowed)
+    {
+        out_error = "cmake configure denied by policy: " + result.m_stderr;
+        return false;
+    }
+    if (result.m_exit_code != 0)
+    {
+        out_error = "cmake configure failed (exit "
+            + std::to_string(result.m_exit_code) + "): " + result.m_stderr;
+        return false;
+    }
+    return true;
+}
 
 /** @brief Read the project identity from CMakeLists.txt. */
 bool read_cmake_project_name(const std::filesystem::path& cmake_lists, std::string& name)
@@ -235,11 +294,26 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
         return fail("read_cmake_project_name");
     }
 
-    const std::filesystem::path compile_commands =
+    // Preflight: a freshly cloned project has no compile database. Generate it
+    // deterministically once, instead of refusing to open the project.
+    std::filesystem::path compile_commands =
         locate_compile_commands(canonical, error_code);
     if (error_code)
     {
-        return fail("locate_compile_commands");
+        std::string configure_error;
+        if (!configure_compile_commands(canonical, m_config_manager.config().m_default_build,
+                                        m_config_manager.config().m_cmake_path,
+                                        configure_error))
+        {
+            return fail("configure_compile_commands");
+        }
+
+        error_code.clear();
+        compile_commands = locate_compile_commands(canonical, error_code);
+        if (error_code || compile_commands.empty())
+        {
+            return fail("locate_compile_commands_after_configure");
+        }
     }
 
     std::vector<SCompileCommand> commands;
@@ -345,6 +419,100 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
     m_has_current = true;
     m_current_opened = true;
     return true;
+}
+
+std::vector<std::string> CProjectManager::compile_arguments_for(
+    const std::filesystem::path& file) const
+{
+    if (!m_current_opened)
+    {
+        return {};
+    }
+
+    std::error_code error_code;
+    const std::filesystem::path database =
+        locate_compile_commands(m_current.m_project.m_canonical_path, error_code);
+    if (error_code)
+    {
+        return {};
+    }
+
+    std::vector<SCompileCommand> commands;
+    if (!CCompileCommandsParser::parse(database, commands) || commands.empty())
+    {
+        return {};
+    }
+
+    const std::string target = file.string();
+    const SCompileCommand* selected = nullptr;
+    for (const SCompileCommand& command : commands)
+    {
+        if (command.m_file.string() == target)
+        {
+            selected = &command;
+            break;
+        }
+    }
+
+    // A header has no entry of its own: it is compiled inside some TU, so the
+    // project flags (-I/-D/-std) of any entry apply to it as well.
+    if (selected == nullptr)
+    {
+        selected = &commands.front();
+    }
+
+    std::vector<std::string> arguments = selected->m_arguments;
+    if (arguments.empty() && !selected->m_command.empty())
+    {
+        std::string current;
+        bool in_quotes = false;
+        for (const char character : selected->m_command)
+        {
+            if (character == '"')
+            {
+                in_quotes = !in_quotes;
+                continue;
+            }
+            if (!in_quotes && (character == ' ' || character == '\t'))
+            {
+                if (!current.empty())
+                {
+                    arguments.push_back(current);
+                    current.clear();
+                }
+                continue;
+            }
+            current.push_back(character);
+        }
+        if (!current.empty())
+        {
+            arguments.push_back(current);
+        }
+    }
+
+    // Drop the compiler binary, output flags and the source file itself:
+    // libclang takes the file separately and needs only the flag set.
+    std::vector<std::string> filtered;
+    filtered.reserve(arguments.size());
+    for (std::size_t index = 0; index < arguments.size(); ++index)
+    {
+        const std::string& argument = arguments[index];
+        if (index == 0 && argument.rfind("-", 0) != 0)
+        {
+            continue;
+        }
+        if (argument == "-o" || argument == "-MF" || argument == "-MT" || argument == "-MQ")
+        {
+            ++index;
+            continue;
+        }
+        if (argument == "-c" || argument == target)
+        {
+            continue;
+        }
+        filtered.push_back(argument);
+    }
+    return filtered;
 }
 
 std::filesystem::path CProjectManager::locate_compile_commands(const std::filesystem::path& project_root,

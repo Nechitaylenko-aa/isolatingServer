@@ -165,6 +165,19 @@ public:
      */
     std::vector<SSymbol> find_symbols(const std::string& name) const;
 
+    /**
+     * @brief Получить аргументы компиляции для файла из compile database.
+     *
+     * Для заголовка, у которого нет собственной записи, берутся аргументы
+     * первой записи проекта: заголовок включается в TU, поэтому флаги проекта
+     * (-I/-D/-std) нужны те же. Пустой результат означает, что база недоступна
+     * или не содержит записей.
+     *
+     * @param file Абсолютный путь к файлу.
+     * @return Аргументы компиляции без самого файла и output-флагов.
+     */
+    std::vector<std::string> compile_arguments_for(const std::filesystem::path& file) const;
+
 private:
     /**
      * @brief Найти compile_commands.json по разрешённым источникам (ADR-04).

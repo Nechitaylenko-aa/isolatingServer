@@ -9,7 +9,7 @@ CTest: число тестов отслеживается в последнем 
 > отчёт эксперимента: [`plans/local-model-loop-test.md`](../plans/local-model-loop-test.md).
 
 ## [x] Этап 0: Архитектурное проектирование и устранение неопределенностей
-* [x] ADR Блоки 1–3 в `decisions.md`; ADR-11 (IClang/API libclang); ADR-12 (политика схемы и порядок).
+* [x] Архитектурные решения приняты в ходе проектирования (журнал ADR удалён как устаревший).
 * [x] Базовые абстракции: `IIndex`, `ILLMClient`, `IExecutor`, `IClang`, `ITool`, `IModelApi`, `IAgentApi`.
 
 ## [x] Этап 1: Скелет проекта и CLI Инфраструктура
@@ -117,8 +117,6 @@ CTest: число тестов отслеживается в последнем 
 * [ ] Авто-выбор remote-модели вне эскалации — задел.
 
 ## Следующий этап: Conversation Context → Context Budget → Planner/Worker
-
-Архитектурное решение зафиксировано в [ADR-28](decisions.md#adr-28-conversation-context-и-context-budget-manager).
 
 Порядок реализации:
 1. [x] Базовая инфраструктура и replay Conversation Context: `session_id`, lifecycle API, отдельное хранилище, восстановление turns и передача `context_json` в ask (§49/§50; ADR-27/28). State projection с provenance и транзакционность lifecycle/context событий реализованы; остаются protocol/integration tests.

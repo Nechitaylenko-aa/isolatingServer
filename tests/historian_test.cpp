@@ -293,6 +293,50 @@ TEST_CASE("orchestrator returns only the history pairs selected by the historian
 }
 
 
+TEST_CASE("historian limits offered history and maps numbers back to full history",
+          "[historian][limits]")
+{
+    fcpp::SLlmRoleSet roles;
+    fcpp::CLogger logger(log_path("historian-limits"), fcpp::ELogLevel::Trace);
+    std::vector<std::vector<fcpp::SModelMessage>> captured;
+    fcpp::CLlmLayer llm(roles, logger,
+        [&captured](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            // The tail numbering is 1..N; pick the first offered pair.
+            return std::make_unique<CContextAwareModel>(role, &captured, "1");
+        });
+    fcpp::CHistorian historian(llm);
+
+    // 30 turns: only the tail may be offered, never the whole dialogue.
+    std::vector<fcpp::SConversationTurn> history;
+    for (std::size_t index = 0; index < 30; ++index)
+    {
+        history.push_back(fcpp::SConversationTurn{
+            static_cast<std::int64_t>(index + 1),
+            "question " + std::to_string(index + 1),
+            "answer " + std::to_string(index + 1)});
+    }
+
+    const fcpp::SHistoryRelevance result =
+        historian.assess_relevance("What did I ask last?", history);
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_dropped_turns > 0);
+    REQUIRE(result.m_considered_turns <= 30);
+    REQUIRE(result.m_considered_turns + result.m_dropped_turns == 30);
+
+    // The selected number 1 refers to the first offered (newest tail) pair and
+    // must be mapped back to its position in the full history.
+    REQUIRE(result.m_relevant_turn_indices.size() == 1);
+    REQUIRE(result.m_relevant_turn_indices.front() == result.m_dropped_turns);
+
+    // The prompt must not contain turns that were dropped by the limit.
+    REQUIRE_FALSE(captured.empty());
+    const std::string& body = captured.front().back().m_content;
+    REQUIRE(body.find("question 1\n") == std::string::npos);
+    REQUIRE(body.find("question 30") != std::string::npos);
+}
+
 TEST_CASE("combined cursor and history route sends both selected contexts to smart C++ coder",
           "[orchestrator][cursor][historian]")
 {

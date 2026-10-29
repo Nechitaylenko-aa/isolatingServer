@@ -130,52 +130,93 @@
 
 Детальные условия переходов, повторные вызовы и политика уточнения определяются до реализации.
 
+## Фактическая реализация дерева
+
+Диаграмма отражает текущий код, а не проектный замысел.
+
 ```mermaid
 flowchart TD
-    A["CRequestOrchestrator::run()"] --> B{"Текст запроса пуст?"}
+    A["CRequestOrchestrator::run()"] --> B{"Текст пуст после trim?"}
 
-    B -- Да --> C["Rejected"]
-    C --> D["EmptyRequest"]
-    D --> E["Логирование"]
+    B -- Да --> C["Rejected / EmptyRequest"]
+    C --> E["Логирование"]
     E --> Z(("Выход"))
 
     B -- Нет --> F["ValidationOk"]
-    F --> G["Анализ контекста курсора"]
 
-    G --> H{"Анализ завершился ошибкой?"}
-    H -- Да --> I["CursorRelevanceFailed"]
-    H -- Нет --> J["cursor_applicable"]
+    F --> FP{"Файл есть, позиции нет?"}
+    FP -- Да --> FA["assess_file: ThinkerLocal YES/NO"]
+    FP -- Нет --> GP{"Файл есть, позиция есть?"}
+    FA --> GP
+    GP -- Да --> GA["assess: symbol + срез вокруг стоки"]
+    GP -- Нет --> KP
 
-    I --> N{"Есть ошибка?"}
-    J --> K["Анализ контекста истории"]
-    K --> L{"Анализ завершился ошибкой?"}
-    L -- Да --> M["HistoryRelevanceFailed"]
-    L -- Нет --> O["history_applicable"]
+    GA --> KP{"История непуста?"}
+    KP -- Да --> KA["assess_relevance: ThinkerLocal"]
 
-    M --> N
-    O --> N
+    KA --> N{"first_failure задан?"}
+    FA --> N
+    GA --> N
 
     N -- Да --> P["status = Failed"]
     P --> Q["ApplicabilityFailed"]
-    Q --> R["Логирование результата"]
+    Q --> R["Единая точка выхода: логирование"]
     R --> Z
 
-    N -- Нет --> S{"Выбор маршрута"}
+    N -- Нет --> S{"Выбор маршрута: 6 взаимоисключающих условий"}
 
-    S -- "Курсор + история" --> T["CursorAndHistoryContextRequired"]
-    S -- "Только курсор" --> U["CursorContextRequired"]
-    S -- "Только история" --> V["HistoryContextRequired"]
-    S -- "Нет контекста" --> W["NoApplicableContext"]
+    S -- "is_cursor & is_history" --> T["CursorAndHistoryContextRequired"]
+    S -- "is_cursor & !is_history" --> U["CursorContextRequired"]
+    S -- "!is_cursor & is_file & is_history" --> FH["FileAndHistoryContextRequired"]
+    S -- "!is_cursor & is_file & !is_history" --> FL["FileContextRequired"]
+    S -- "!is_cursor & !is_file & is_history" --> V["HistoryContextRequired"]
+    S -- "ни одного" --> W["NoApplicableContext"]
 
-    T --> X["ScopeClassificationNotImplemented"]
-    U --> X
-    V --> X
-    W --> X
+    T --> TF["collect_facts"]
+    U --> UF["collect_facts"]
+    V --> VG["генерация: ConversationAssistant / CoderLocal"]
+    W --> WG["генерация: CppAssistant / CoderLocal"]
+    TF --> TG["генерация: CppExpert / CoderSmart"]
+    UF --> UG["генерация: CppExpert / CoderSmart"]
+    FH --> FG["генерация: содержимое файла + история / CppExpert / CoderSmart"]
+    FL --> LG["генерация: содержимое файла / CppExpert / CoderSmart"]
 
-    X --> Y["StubComplete"]
-    Y --> AA["Логирование маршрута и результата"]
+    TG --> AA["Единая точка выхода: логирование"]
+    UG --> AA
+    VG --> AA
+    WG --> AA
+    FG --> AA
+    LG --> AA
     AA --> Z
 ```
+
+Флаги выбора маршрута: `is_cursor`, `is_file`, `is_history`. Условия
+взаимоисключающие, порядок проверок ни на что не влияет.
+
+Ключевые отличия от первоначального замысла:
+
+- **Шесть маршрутов.** Добавлен `FileContextRequired` (файл без позиции курсора)
+  и `FileAndHistoryContextRequired` (файл без позиции и история). Условия
+  выбора взаимоисключающие: `is_cursor`, `is_file`, `is_history`.
+- **Файл без курсора — не «нет контекста».** Если редактор прислал файл, но не
+  прислал позицию, это отдельный случай: модель-мыслитель строго YES/NO решает,
+  относится ли вопрос к этому файлу. При YES в промпт уходит содержимое файла
+  (любой тип: `.cpp`, `.h`, `.md`, `.txt`), при NO запрос завершается видимой
+  причиной `FileNotRelevant` с записью в лог, а не молчаливым общим ответом.
+- **Оценки независимы.** Курсор и история оцениваются всегда; ошибка одного
+  фиксируется в `first_failure`, но не прерывает второй анализ. Сбой `clang`
+  не лишает запрос применимой истории.
+- **Факты заказывает оркестратор.** На курсорных маршрутах перед генерацией
+  выполняется `collect_facts` по сущности под курсором. Недоступность индекса —
+  `IndexUnavailable`, а не «нет контекста».
+- **Заглушек нет.** `ScopeClassificationNotImplemented` и `StubComplete` удалены
+  как мёртвый код: значения не выставлялись ни на одном пути. Все четыре
+  маршрута формируют реальный ответ.
+- **`route` не врёт при сбое.** До выбора маршрута значение —
+  `Unselected`; при сбое оно таковым и остаётся, а не маскируется под
+  `NoApplicableContext`.
+- **Единая точка выхода.** `request.finished` пишется на всех путях, включая
+  ранние отказы и сбои инструментов.
 
 ## План работ
 

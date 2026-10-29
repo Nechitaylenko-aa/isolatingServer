@@ -5,6 +5,8 @@
 
 #include "index/CClang22.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -562,6 +564,80 @@ std::vector<std::string> sanitize_arguments(const std::vector<std::string>& argu
 }
 
 /**
+ * @brief Проверить, задаёт ли язык хотя бы один из аргументов.
+ *
+ * libclang уважает явный `-x`, поэтому автоматическое определение языка не
+ * должно его перекрывать.
+ * @param arguments Аргументы компиляции.
+ * @return true если `-x <lang>` уже присутствует.
+ */
+bool has_explicit_language(const std::vector<std::string>& arguments)
+{
+    for (const std::string& argument : arguments)
+    {
+        if (argument == "-x")
+        {
+            return true;
+        }
+        if (argument.rfind("-x", 0) == 0 && argument.size() > 2)
+        {
+            return true;
+        }
+        if (argument.rfind("--language", 0) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Определить язык разбора по расширению файла.
+ *
+ * libclang выбирает язык по расширению, и для `.h` это C — в нём нет классов
+ * и пространств имён, поэтому AST заголовка C++ оказывается пустым и курсор
+ * не разрешается. Заголовки разбираются как C++-заголовки: поддерживаемый
+ * стек проекта — C++20 (ADR-06).
+ *
+ * @param source_file Разбираемый файл.
+ * @return Значение для `-x` либо пустая строка, если вмешиваться не нужно.
+ */
+std::string language_for_file(const std::filesystem::path& source_file)
+{
+    std::string extension = source_file.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char character)
+                   {
+                       return static_cast<char>(std::tolower(character));
+                   });
+
+    if (extension == ".h" || extension == ".hpp" || extension == ".hh"
+        || extension == ".hxx" || extension == ".h++" || extension == ".ipp")
+    {
+        return "c++-header";
+    }
+    if (extension == ".c")
+    {
+        return "c";
+    }
+    if (extension == ".cpp" || extension == ".cc" || extension == ".cxx"
+        || extension == ".c++")
+    {
+        return "c++";
+    }
+    if (extension == ".m")
+    {
+        return "objective-c";
+    }
+    if (extension == ".mm")
+    {
+        return "objective-c++";
+    }
+    // Unknown extension: libclang decides on its own.
+    return {};
+}
+
+/**
  * @brief Разобрать TU с заданными аргументами.
  * @param source_file Исходный файл.
  * @param arguments Аргументы компиляции.
@@ -581,6 +657,17 @@ bool parse_translation_unit(const std::filesystem::path& source_file,
     }
 
     std::vector<std::string> storage = sanitize_arguments(arguments, source_file);
+
+    // Never override an explicit language provided by the compile database.
+    if (!has_explicit_language(storage))
+    {
+        const std::string language = language_for_file(source_file);
+        if (!language.empty())
+        {
+            storage.push_back("-x");
+            storage.push_back(language);
+        }
+    }
 
     std::vector<const char*> argv;
     argv.reserve(storage.size());

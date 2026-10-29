@@ -46,6 +46,64 @@ std::size_t write_callback(char* contents, std::size_t size, std::size_t nmemb, 
 
 } // namespace
 
+SHttpResult CUrlTransport::get(const std::string& url,
+                               const std::vector<std::string>& headers,
+                               long timeout_seconds) const
+{
+    SHttpResult result;
+
+    CURL* handle = curl_easy_init();
+    if (handle == nullptr)
+    {
+        result.m_error = "curl init failed";
+        return result;
+    }
+
+    curl_slist* header_list = nullptr;
+    for (const std::string& header : headers)
+    {
+        header_list = curl_slist_append(header_list, header.c_str());
+    }
+
+    const std::function<bool(const std::string&)> no_stream;
+    std::pair<SHttpResult*, const std::function<bool(const std::string&)>*> payload(&result, &no_stream);
+
+    curl_easy_setopt(handle, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(handle, CURLOPT_HTTPGET, 1L);
+    if (header_list != nullptr)
+    {
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, header_list);
+    }
+    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &payload);
+    curl_easy_setopt(handle, CURLOPT_TIMEOUT, timeout_seconds);
+    curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT, timeout_seconds);
+    curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
+
+    const CURLcode code = curl_easy_perform(handle);
+    if (code == CURLE_OK)
+    {
+        curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &result.m_status);
+        result.m_ok = (result.m_status >= 200 && result.m_status < 300);
+        if (!result.m_ok)
+        {
+            result.m_error = "http status " + std::to_string(result.m_status);
+        }
+    }
+    else
+    {
+        result.m_error = std::string("curl error: ") + curl_easy_strerror(code);
+    }
+
+    if (header_list != nullptr)
+    {
+        curl_slist_free_all(header_list);
+    }
+    curl_easy_cleanup(handle);
+
+    return result;
+}
+
 SHttpResult CUrlTransport::post_json(const std::string& url,
                                      const std::vector<std::string>& headers,
                                      const std::string& json_body,

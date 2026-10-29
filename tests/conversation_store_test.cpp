@@ -62,15 +62,17 @@ TEST_CASE("conversation store persists session state and append-only events", "[
         const auto restored_session = store.get_session("session-1");
         REQUIRE(restored_session.has_value());
         REQUIRE(restored_session->m_context_json == R"({"goal":"inspect"})");
-        REQUIRE(store.close_session("session-1"));
+        // Deleting a conversation removes the session and its events.
+        REQUIRE(store.delete_session("session-1"));
         REQUIRE_FALSE(store.append_event("session-1", "user", "late"));
-        REQUIRE(store.get_session("session-1")->m_closed);
+        REQUIRE_FALSE(store.get_session("session-1").has_value());
+        REQUIRE(store.events("session-1").empty());
     }
 
     std::filesystem::remove(path);
 }
 
-TEST_CASE("conversation store rejects missing and closed sessions", "[conversation]")
+TEST_CASE("conversation store rejects missing and deleted sessions", "[conversation]")
 {
     const auto path = make_temp_db();
     std::filesystem::remove(path);
@@ -80,8 +82,9 @@ TEST_CASE("conversation store rejects missing and closed sessions", "[conversati
     REQUIRE_FALSE(store.append_event("missing", "user", "x"));
     REQUIRE_FALSE(store.create_session("", ""));
     REQUIRE(store.create_session("s", ""));
-    REQUIRE(store.close_session("s"));
+    REQUIRE(store.delete_session("s"));
     REQUIRE_FALSE(store.update_context("s", "{}"));
+    REQUIRE_FALSE(store.delete_session("s"));
     store.close();
     std::filesystem::remove(path);
 }
@@ -127,24 +130,15 @@ TEST_CASE("conversation session lifecycle mutations roll back with their events"
     REQUIRE(unchanged->m_context_json == R"({"goal":"original"})");
     REQUIRE(store.events("atomic-context").empty());
 
-    REQUIRE_FALSE(store.close_session_with_event("atomic-context", "", "{}"));
-    const auto still_open = store.get_session("atomic-context");
-    REQUIRE(still_open.has_value());
-    REQUIRE_FALSE(still_open->m_closed);
-    REQUIRE(store.events("atomic-context").empty());
-
     REQUIRE(store.update_context_with_event(
         "atomic-context", R"({"goal":"committed"})",
         "session.context_updated", R"({"goal":"committed"})"));
-    REQUIRE(store.close_session_with_event("atomic-context", "session.close", "{}"));
+    REQUIRE(store.events("atomic-context").size() == 1);
 
-    const auto closed = store.get_session("atomic-context");
-    REQUIRE(closed.has_value());
-    REQUIRE(closed->m_closed);
-    const auto events = store.events("atomic-context");
-    REQUIRE(events.size() == 2);
-    REQUIRE(events[0].m_kind == "session.context_updated");
-    REQUIRE(events[1].m_kind == "session.close");
+    // Deleting removes the session together with every event of it.
+    REQUIRE(store.delete_session("atomic-context"));
+    REQUIRE_FALSE(store.get_session("atomic-context").has_value());
+    REQUIRE(store.events("atomic-context").empty());
 
     store.close();
     std::filesystem::remove(path);
@@ -268,7 +262,7 @@ TEST_CASE("conversation shrink rejects missing, closed, and non-question targets
     REQUIRE_FALSE(store.shrink_question("s", 1));
     REQUIRE(store.append_event("s", "assistant", R"({"text":"not a question"})"));
     REQUIRE_FALSE(store.shrink_question("s", 1));
-    REQUIRE(store.close_session("s"));
+    REQUIRE(store.delete_session("s"));
     REQUIRE_FALSE(store.shrink_question("s", 1));
 
     store.close();

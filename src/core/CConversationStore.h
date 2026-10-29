@@ -21,7 +21,12 @@ struct sqlite3;
 namespace fcpp
 {
 
-/** @brief Persisted session metadata and compact conversation state. */
+/**
+ * @brief Persisted session metadata and compact conversation state.
+ *
+ * A session either exists or it does not. There is no "closed" state: closing a
+ * conversation removes it together with its events.
+ */
 struct SConversationSession
 {
     std::string m_id;
@@ -29,7 +34,6 @@ struct SConversationSession
     std::string m_context_json;
     std::int64_t m_created_at = 0;
     std::int64_t m_updated_at = 0;
-    bool m_closed = false;
 };
 
 /** @brief Immutable conversation event. Payload is opaque UTF-8/JSON text. */
@@ -161,22 +165,15 @@ public:
     bool bind_project(const std::string& session_id, const std::string& project_id);
 
     /**
-     * @brief Append a closing event and close the session atomically.
-     * @param session_id Session to close.
-     * @param event_kind Closing event kind.
-     * @param event_payload Closing event payload.
-     * @return True when the event and closed state are committed.
+     * @brief Удалить сессию и все её события одной транзакцией.
+     *
+     * Сессия либо есть, либо её нет. Закрытие — это удаление: события сессии
+     * удаляются вместе с ней, чтобы не оставлять осиротевших записей.
+     *
+     * @param session_id Удаляемая сессия.
+     * @return true если сессия и её события удалены.
      */
-    bool close_session_with_event(const std::string& session_id,
-                                  const std::string& event_kind,
-                                  const std::string& event_payload);
-
-    /**
-     * @brief Mark a session closed without appending an event.
-     * @param session_id Session to close.
-     * @return True when the session transitions from open to closed.
-     */
-    bool close_session(const std::string& session_id);
+    bool delete_session(const std::string& session_id);
 
     /**
      * @brief Persist context and its audit event atomically.
@@ -217,9 +214,6 @@ public:
      */
     std::optional<SConversationSession> latest_session_for_project(
         const std::string& project_id) const;
-
-    /** @brief Reopen the persistent project conversation, retaining its event history. */
-    bool reopen_session(const std::string& session_id);
 
     bool append_event(const std::string& session_id,
                       const std::string& kind,

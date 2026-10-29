@@ -362,8 +362,6 @@ TEST_CASE("agent API: conversation survives restart and stays bound to its proje
         REQUIRE(store.append_event(session_a, "user", R"({"text":"persisted user turn"})"));
         REQUIRE(store.append_event(session_a, "assistant",
                                    R"({"text":"persisted assistant turn","ok":true})"));
-        // Closing an API session must not destroy the project conversation.
-        REQUIRE(store.close_session(session_a));
         store.close();
     }
 
@@ -403,7 +401,6 @@ TEST_CASE("agent API: conversation survives restart and stays bound to its proje
         REQUIRE(turns[0].m_user_text == "persisted user turn");
         REQUIRE(turns[0].m_assistant_text == "persisted assistant turn");
         REQUIRE(store.get_session(session_a).has_value());
-        REQUIRE_FALSE(store.get_session(session_a)->m_closed);
         REQUIRE(store.get_session(session_b).has_value());
         REQUIRE(store.get_session(session_b)->m_project_id == project_id_b);
     }
