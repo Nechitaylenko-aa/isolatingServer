@@ -1,4 +1,5 @@
 #include "core/CHistorian.h"
+#include "core/CCursorContextAnalyzer.h"
 #include "core/CLogger.h"
 #include "core/CRequestOrchestrator.h"
 
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "fcpp-agent/IModelApi.h"
+#include "fcpp-agent/IClang.h"
 
 namespace
 {
@@ -52,6 +54,52 @@ public:
 private:
     std::string m_text;
     std::vector<std::vector<fcpp::SModelMessage>>* m_captured_messages;
+};
+
+class CContextAwareModel final : public fcpp::IModelApi
+{
+public:
+    explicit CContextAwareModel(fcpp::ELlmRole role) : m_role(role) {}
+    bool is_available() const override { return true; }
+
+    fcpp::SModelReply complete(
+        const std::vector<fcpp::SModelMessage>& messages) override
+    {
+        if (m_role == fcpp::ELlmRole::CoderSmart)
+            return {true, "Combined context answer", {}, "stop", {}};
+        const std::string system = messages.empty() ? std::string{} : messages.front().m_content;
+        if (system.find("Select the prior conversation turns") != std::string::npos)
+            return {true, "1", {}, "stop", {}};
+        if (system.find("Decide whether the C++ entity") != std::string::npos)
+            return {true, "YES", {}, "stop", {}};
+        return {true, "invalid", {}, "stop", {}};
+    }
+
+    fcpp::SModelReply complete(
+        const std::vector<fcpp::SModelMessage>& messages,
+        const std::vector<fcpp::SModelTool>&) override { return complete(messages); }
+    fcpp::SModelReply complete_stream(
+        const std::vector<fcpp::SModelMessage>& messages,
+        const fcpp::SStreamCallback&) override { return complete(messages); }
+
+private:
+    fcpp::ELlmRole m_role;
+};
+
+class CCursorTestClang final : public fcpp::IClang
+{
+public:
+    explicit CCursorTestClang(fcpp::SClangSymbol symbol) : m_symbol(std::move(symbol)) {}
+    bool is_available() const override { return true; }
+    std::string version() const override { return "test"; }
+    bool extract(const std::filesystem::path&, const std::vector<std::string>&,
+                 fcpp::SClangExtract&) const override { return true; }
+    std::optional<fcpp::SClangSymbol> cursor_at(
+        const std::filesystem::path&, std::uint32_t, std::uint32_t,
+        const std::vector<std::string>&,
+        fcpp::EFocusKind = fcpp::EFocusKind::Innermost) const override { return m_symbol; }
+private:
+    fcpp::SClangSymbol m_symbol;
 };
 
 std::vector<fcpp::SConversationTurn> sample_history()
@@ -217,4 +265,73 @@ TEST_CASE("orchestrator returns only the history pairs selected by the historian
     REQUIRE(result.m_history_context[0].m_user_text == "Remember the red bicycle");
     REQUIRE(result.m_history_context[0].m_assistant_text == "I will keep that in context.");
     REQUIRE(result.m_exit_reason == fcpp::EExitReason::ScopeClassificationNotImplemented);
+}
+
+
+TEST_CASE("combined cursor and history route sends both selected contexts to smart C++ coder",
+          "[orchestrator][cursor][historian]")
+{
+    const auto directory = log_path("combined-context");
+    const auto source_file = directory / "sample.cpp";
+    std::filesystem::create_directories(directory);
+    {
+        std::ofstream source(source_file);
+        REQUIRE(source.is_open());
+        source << "class CWidget {\\npublic:\\n    int value() const { return 42; }\\n};\\n";
+    }
+
+    fcpp::SClangSymbol symbol{};
+    symbol.m_name = "CWidget";
+    symbol.m_qualified_name = "CWidget";
+    symbol.m_signature = "class CWidget";
+    symbol.m_kind = fcpp::ESymbolKind::Class;
+    symbol.m_location.m_file = source_file.string();
+    symbol.m_location.m_line = 1;
+    symbol.m_location.m_column = 1;
+    symbol.m_location.m_end_line = 4;
+    symbol.m_is_definition = true;
+
+    fcpp::SLlmRoleSet roles;
+    std::vector<std::vector<fcpp::SModelMessage>> coder_messages;
+    fcpp::CLogger logger(log_path("combined-context-logs"), fcpp::ELogLevel::Trace);
+    fcpp::CLlmLayer llm(roles, logger,
+        [&](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            if (role == fcpp::ELlmRole::CoderSmart)
+                return std::make_unique<CFixedReplyModel>("Combined context answer", &coder_messages);
+            return std::make_unique<CContextAwareModel>(role);
+        });
+    CCursorTestClang clang(symbol);
+    fcpp::CCursorContextAnalyzer analyzer(clang, llm);
+    fcpp::CHistorian historian(llm);
+    fcpp::CRequestOrchestrator orchestrator(logger, &historian, &analyzer, &llm);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "combined-context-test";
+    request.m_text = "Explain this class and remember my earlier constraint";
+    request.m_cursor_file = source_file.string();
+    request.m_cursor_line = 2;
+    request.m_cursor_column = 3;
+    request.m_history = {
+        {1, "The earlier constraint", "Keep the method const."},
+        {2, "Unrelated topic", "A different answer."}
+    };
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_status == fcpp::ERequestStatus::Completed);
+    REQUIRE(result.m_route == fcpp::EOrchestrationRoute::CursorAndHistoryContextRequired);
+    REQUIRE(result.m_history_context.size() == 1);
+    REQUIRE(result.m_history_context.front().m_user_text == "The earlier constraint");
+    REQUIRE(result.m_message == "Combined context answer");
+    REQUIRE(coder_messages.size() == 1);
+    REQUIRE(coder_messages.front().size() == 2);
+    REQUIRE(coder_messages.front()[0].m_content.find("senior C++ engineer") != std::string::npos);
+    REQUIRE(coder_messages.front()[1].m_content.find("class CWidget") != std::string::npos);
+    REQUIRE(coder_messages.front()[1].m_content.find("Keep the method const.") != std::string::npos);
+    REQUIRE(coder_messages.front()[1].m_content.find(request.m_text) != std::string::npos);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(directory, ignored);
 }
