@@ -20,6 +20,14 @@ const char* system_prompt_for(EPromptType type)
                "Use only the information supplied in the request. "
                "Do not claim to have inspected files or run commands. "
                "State assumptions when needed and do not invent project-specific facts.";
+    case EPromptType::CppExpert:
+        return "You are a senior C++ engineer with expert knowledge of modern C++17/20/23, "
+               "RAII, object lifetime, templates, concurrency, the standard library, "
+               "undefined behavior, and performance. Answer in the user's language. "
+               "Treat supplied cursor source as primary evidence and distinguish visible "
+               "facts from assumptions. Explain code precisely and propose compilable C++ "
+               "when asked, accounting for ownership, exceptions, and edge cases. "
+               "Do not claim to inspect files or run tools beyond the supplied context.";
     case EPromptType::YesNo:
         return "Determine whether the statement or condition in the user's request is true. "
                "Respond with exactly YES or NO, with no explanation.";
@@ -61,6 +69,7 @@ bool validate_prompt_result(EPromptType type, const std::string& text, std::stri
     switch (type)
     {
     case EPromptType::CppAssistant:
+    case EPromptType::CppExpert:
         if (!trim_ascii(text).empty())
             return true;
         error = "empty assistant answer";
