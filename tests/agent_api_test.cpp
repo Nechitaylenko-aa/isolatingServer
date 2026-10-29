@@ -275,69 +275,51 @@ TEST_CASE("agent API: lifecycle diagnostics are JSONL and correlate request IDs"
 }
 
 
-TEST_CASE("agent API: ask is routed through the new orchestration tree", "[api][ask]")
+TEST_CASE("agent API: ask requires a conversation session before orchestration", "[api][ask][validation]")
 {
-    const std::filesystem::path home = make_temp_dir("fcpp-api-ask-tree-home");
+    const std::filesystem::path home = make_temp_dir("fcpp-api-ask-no-session-home");
     HomeScope scope(home);
     fcpp::CConfigManager config;
     REQUIRE(config.bootstrap());
     REQUIRE(config.load());
 
     fcpp::CAgentApi api(config);
-    fcpp::SApiRequest session_open;
-    session_open.m_method = fcpp::EApiMethod::SessionOpen;
-    const fcpp::SApiResponse session = api.execute(session_open);
-    REQUIRE(session.m_ok);
-
     fcpp::SApiRequest request;
     request.m_method = fcpp::EApiMethod::Ask;
-    request.m_session_id = session.m_session_id;
-    request.m_text = "Что делает этот метод?";
-    const fcpp::SApiResponse response = api.execute(request);
+    request.m_text = "Explain this request";
 
-    REQUIRE(response.m_ok);
-    REQUIRE(response.m_state == "COMPLETED");
-    REQUIRE(response.m_session_id == session.m_session_id);
-    REQUIRE_FALSE(response.m_has_question);
-    REQUIRE(response.m_text.find("ORCHESTRATION_STATUS=STUB_COMPLETE") != std::string::npos);
-    REQUIRE(response.m_text.find("EXIT_REASON=SCOPE_CLASSIFICATION_NOT_IMPLEMENTED") != std::string::npos);
-    REQUIRE(response.m_text.find("ANSWER_GENERATION:SKIPPED_UPSTREAM_STUB") != std::string::npos);
+    const fcpp::SApiResponse response = api.execute(request);
+    REQUIRE_FALSE(response.m_ok);
+    REQUIRE(response.m_error == fcpp::EErrorKind::InvalidRequest);
+    REQUIRE(response.m_message.find("session_id is required") != std::string::npos);
 
     std::filesystem::remove_all(home);
 }
 
-TEST_CASE("agent API: cursor metadata reaches orchestration tree without legacy routing", "[api][ask][cursor]")
+TEST_CASE("agent API: ask rejects empty text before invoking orchestration", "[api][ask][validation]")
 {
-    const std::filesystem::path home = make_temp_dir("fcpp-api-cursor-tree-home");
+    const std::filesystem::path home = make_temp_dir("fcpp-api-ask-empty-home");
     HomeScope scope(home);
     fcpp::CConfigManager config;
     REQUIRE(config.bootstrap());
     REQUIRE(config.load());
 
-    const std::filesystem::path project_dir = make_project();
     fcpp::CAgentApi api(config);
-
-    fcpp::SApiRequest open_request;
-    open_request.m_method = fcpp::EApiMethod::ProjectOpen;
-    open_request.m_path = project_dir.string();
-    const fcpp::SApiResponse opened = api.execute(open_request);
-    REQUIRE(opened.m_ok);
-    REQUIRE_FALSE(opened.m_session_id.empty());
+    fcpp::SApiRequest open_session;
+    open_session.m_method = fcpp::EApiMethod::SessionOpen;
+    const fcpp::SApiResponse session = api.execute(open_session);
+    REQUIRE(session.m_ok);
+    REQUIRE_FALSE(session.m_session_id.empty());
 
     fcpp::SApiRequest request;
     request.m_method = fcpp::EApiMethod::Ask;
-    request.m_session_id = opened.m_session_id;
-    request.m_text = "А что он делает?";
-    request.m_editor_file = (project_dir / "src" / "missing.cpp").string();
-    request.m_editor_line = 5;
-    request.m_editor_column = 1;
+    request.m_session_id = session.m_session_id;
+    request.m_text.clear();
 
     const fcpp::SApiResponse response = api.execute(request);
-    REQUIRE(response.m_ok);
-    REQUIRE(response.m_state == "COMPLETED");
-    REQUIRE(response.m_text.find("CURSOR_APPLICABILITY:STUB_NOT_APPLICABLE") != std::string::npos);
-    REQUIRE(response.m_text.find("EXIT_REASON=SCOPE_CLASSIFICATION_NOT_IMPLEMENTED") != std::string::npos);
+    REQUIRE_FALSE(response.m_ok);
+    REQUIRE(response.m_error == fcpp::EErrorKind::InvalidRequest);
+    REQUIRE(response.m_message == "empty ask text");
 
     std::filesystem::remove_all(home);
-    std::filesystem::remove_all(project_dir);
 }
