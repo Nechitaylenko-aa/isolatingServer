@@ -257,7 +257,8 @@ TEST_CASE("orchestrator returns only the history pairs selected by the historian
     fcpp::CLlmLayer llm(roles, logger,
         [&answer_messages](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
         {
-            return std::make_unique<CContextAwareModel>(role, &answer_messages);
+            return std::make_unique<CContextAwareModel>(
+                role, role == fcpp::ELlmRole::CoderLocal ? &answer_messages : nullptr);
         });
     fcpp::CHistorian historian(llm);
     fcpp::CRequestOrchestrator orchestrator(logger, &historian, nullptr, &llm);
