@@ -14,7 +14,7 @@ namespace fcpp
 {
 namespace
 {
-TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
+TEST_CASE("request orchestrator reports missing LLM layer for no-context route")
 {
     const std::filesystem::path log_dir =
         std::filesystem::temp_directory_path() / "fcpp-agent-orchestrator-test";
@@ -32,12 +32,12 @@ TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
     const SOrchestrationResult result = orchestrator.run(request);
 
     REQUIRE(result.m_ok);
-    REQUIRE(result.m_status == ERequestStatus::StubComplete);
-    REQUIRE(result.m_exit_reason == EExitReason::ScopeClassificationNotImplemented);
+    REQUIRE(result.m_status == ERequestStatus::Failed);
+    REQUIRE(result.m_exit_reason == EExitReason::LlmGenerationFailed);
     REQUIRE(result.m_route == EOrchestrationRoute::NoApplicableContext);
     REQUIRE(result.m_trace.size() == 5);
-    REQUIRE(result.m_trace.back() == ETraceEvent::ExitScopeClassificationNotImplemented);
-    REQUIRE(result.m_message.find("No answer generated") != std::string::npos);
+    REQUIRE(result.m_trace.back() == ETraceEvent::ExitLlmGenerationFailed);
+    REQUIRE(result.m_message.find("LLM layer is not configured") != std::string::npos);
 
     std::ifstream log_file(logger.path());
     REQUIRE(log_file.is_open());
