@@ -8,15 +8,17 @@
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CLogger.h"
 #include "fcpp-agent/SLogEvent.h"
+#include "llm/CLlmLayer.h"
 
 namespace fcpp
 {
 
 CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historian,
-                                         CCursorContextAnalyzer* cursor_analyzer)
+                                         CCursorContextAnalyzer* cursor_analyzer, CLlmLayer* llm)
     : m_logger(logger)
     , m_historian(historian)
     , m_cursor_analyzer(cursor_analyzer)
+    , m_llm(llm)
 {
 }
 
@@ -93,15 +95,80 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         else
             result.m_route = EOrchestrationRoute::NoApplicableContext;
 
-        result.m_ok = true;
-        result.m_status = ERequestStatus::StubComplete;
-        result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
-        result.m_message = "No answer generated: scope classification is not implemented yet.";
         result.m_trace.emplace_back(ETraceEvent::ApplicabilityAssessed);
         result.m_trace.emplace_back(ETraceEvent::RouteSelected);
         m_logger.log(ELogLevel::Info,
             SLogEvent::route_selected(request.m_request_id, result.m_route));
-        result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
+
+        if (result.m_route != EOrchestrationRoute::NoApplicableContext)
+        {
+            result.m_ok = true;
+            result.m_status = ERequestStatus::StubComplete;
+            result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
+            result.m_message = "Selected context route is not implemented yet.";
+            result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
+        }
+        else if (m_llm == nullptr)
+        {
+            result.m_ok = false;
+            result.m_status = ERequestStatus::Failed;
+            result.m_exit_reason = EExitReason::LlmGenerationFailed;
+            result.m_message = "LLM layer is not configured.";
+            result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+            m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+                {{"request_id", request.m_request_id}, {"reason", result.m_message}});
+        }
+        else
+        {
+            constexpr const char* k_default_cpp_prompt =
+                "You are a helpful, precise C++ software engineering assistant. "
+                "Answer the user's question directly in the user's language. "
+                "No repository, editor, or conversation context is provided. "
+                "Do not claim to have inspected files or run commands. "
+                "State assumptions when needed and do not invent project-specific facts.";
+            const SLlmExecutionResult generated = m_llm->request_text(
+                ELlmRole::CoderLocal, k_default_cpp_prompt, request.m_text);
+            if (!generated.m_ok)
+            {
+                result.m_ok = false;
+                result.m_status = ERequestStatus::Failed;
+                result.m_exit_reason = EExitReason::LlmGenerationFailed;
+                result.m_message = generated.m_error.empty()
+                    ? "LLM answer generation failed." : generated.m_error;
+                result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+                m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+                    {{"request_id", request.m_request_id}, {"reason", result.m_message},
+                     {"role", llm_role_name(generated.m_used_role)},
+                     {"escalated", generated.m_escalated}});
+            }
+            else
+            {
+                result.m_trace.emplace_back(ETraceEvent::AnswerGenerated);
+                // Temporary audit stub: accept non-empty answers. Temperature/risk
+                // scoring and independent review will be implemented behind this seam.
+                const bool audit_ok = !generated.m_text.empty();
+                m_logger.log_event(audit_ok ? ELogLevel::Info : ELogLevel::Error,
+                    "answer.audit",
+                    {{"request_id", request.m_request_id}, {"accepted", audit_ok},
+                     {"audit", "stub"}, {"answer_bytes", generated.m_text.size()}});
+                if (!audit_ok)
+                {
+                    result.m_ok = false;
+                    result.m_status = ERequestStatus::Failed;
+                    result.m_exit_reason = EExitReason::LlmGenerationFailed;
+                    result.m_message = "Answer audit rejected an empty response.";
+                    result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+                }
+                else
+                {
+                    result.m_ok = true;
+                    result.m_status = ERequestStatus::Completed;
+                    result.m_exit_reason = EExitReason::None;
+                    result.m_message = generated.m_text;
+                    result.m_trace.emplace_back(ETraceEvent::AnswerAudited);
+                }
+            }
+        }
     }
 
     switch (result.m_exit_reason)
