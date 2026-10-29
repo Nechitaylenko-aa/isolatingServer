@@ -65,6 +65,8 @@ public:
     SOrchestrationResult run(const SOrchestrationRequest& request) const;
 
 private:
+    void generate_and_audit_default_answer(
+        const SOrchestrationRequest& request, SOrchestrationResult& result) const;
     CLogger& m_logger;
     CHistorian* m_historian = nullptr;
     CCursorContextAnalyzer* m_cursor_analyzer = nullptr;
