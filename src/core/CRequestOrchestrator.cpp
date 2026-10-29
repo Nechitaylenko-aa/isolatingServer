@@ -22,18 +22,6 @@ CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historia
 {
 }
 
-namespace
-{
-constexpr const char* default_cpp_prompt()
-{
-    return "You are a helpful, precise C++ software engineering assistant. "
-           "Answer the user's question directly in the user's language. "
-           "No repository, editor, or conversation context is provided. "
-           "Do not claim to have inspected files or run commands. "
-           "State assumptions when needed and do not invent project-specific facts.";
-}
-} // namespace
-
 void CRequestOrchestrator::generate_and_audit_default_answer(
     const SOrchestrationRequest& request, SOrchestrationResult& result) const
 {
@@ -50,7 +38,7 @@ void CRequestOrchestrator::generate_and_audit_default_answer(
     }
 
     const SLlmExecutionResult generated = m_llm->request_text(
-        ELlmRole::CoderLocal, default_cpp_prompt(), request.m_text);
+        ELlmRole::CoderLocal, EPromptType::CppAssistant, request.m_text);
     if (!generated.m_ok)
     {
         result.m_ok = false;
