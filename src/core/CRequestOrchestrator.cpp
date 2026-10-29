@@ -30,25 +30,25 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
 {
     const auto started = std::chrono::steady_clock::now();
     SOrchestrationResult result;
-    result.m_route = "NO_APPLICABLE_CONTEXT";
+    result.m_route = EOrchestrationRoute::NoApplicableContext;
 
     m_logger.log(ELogLevel::Info, request);
 
     if (request.m_text.empty())
     {
-        result.m_status = "REJECTED";
-        result.m_exit_reason = "EMPTY_REQUEST";
+        result.m_status = ERequestStatus::Rejected;
+        result.m_exit_reason = EExitReason::EmptyRequest;
         result.m_message = "Request rejected: text is empty.";
-        result.m_trace = {"VALIDATION:FAILED", "EXIT:EMPTY_REQUEST"};
+        result.m_trace = {ETraceEvent::ValidationFailed, ETraceEvent::ExitRejected};
         m_logger.log(ELogLevel::Error, result, request.m_request_id,
             request.m_session_id, 0);
         return result;
     }
 
-    result.m_trace.emplace_back("VALIDATION:OK");
+    result.m_trace.emplace_back(ETraceEvent::ValidationOk);
     bool cursor_applicable = false;
     bool history_applicable = false;
-    std::string failure;
+    EExitReason failure = EExitReason::None;
 
     const bool has_cursor = !request.m_cursor_file.empty()
         && request.m_cursor_line > 0 && request.m_cursor_column > 0;
@@ -62,7 +62,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         m_logger.log(cursor.m_ok ? ELogLevel::Info : ELogLevel::Error,
             cursor, request.m_request_id);
         if (!cursor.m_ok)
-            failure = "CURSOR_RELEVANCE_FAILED";
+            failure = EExitReason::CursorRelevanceFailed;
         else
             cursor_applicable = cursor.m_context_applicable;
     }
@@ -75,42 +75,42 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         m_logger.log(history.m_ok ? ELogLevel::Info : ELogLevel::Error,
             history, request.m_request_id, request.m_history.size());
         if (!history.m_ok)
-            failure = "HISTORY_RELEVANCE_FAILED";
+            failure = EExitReason::HistoryRelevanceFailed;
         else
             history_applicable = history.m_history_needed;
     }
 
-    if (!failure.empty())
+    if (failure != EExitReason::None)
     {
         result.m_ok = false;
-        result.m_status = "FAILED";
+        result.m_status = ERequestStatus::Failed;
         result.m_exit_reason = failure;
-        result.m_message = failure;
-        result.m_trace.emplace_back("APPLICABILITY:FAILED");
+        result.m_message = exit_reason_name(failure);
+        result.m_trace.emplace_back(ETraceEvent::ApplicabilityFailed);
     }
     else
     {
         if (cursor_applicable && history_applicable)
-            result.m_route = "CURSOR_AND_HISTORY_CONTEXT_REQUIRED";
+            result.m_route = EOrchestrationRoute::CursorAndHistoryContextRequired;
         else if (cursor_applicable)
-            result.m_route = "CURSOR_CONTEXT_REQUIRED";
+            result.m_route = EOrchestrationRoute::CursorContextRequired;
         else if (history_applicable)
-            result.m_route = "HISTORY_CONTEXT_REQUIRED";
+            result.m_route = EOrchestrationRoute::HistoryContextRequired;
         else
-            result.m_route = "NO_APPLICABLE_CONTEXT";
+            result.m_route = EOrchestrationRoute::NoApplicableContext;
 
         result.m_ok = true;
-        result.m_status = "STUB_COMPLETE";
-        result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
+        result.m_status = ERequestStatus::StubComplete;
+        result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
         result.m_message = "No answer generated: scope classification is not implemented yet.";
-        result.m_trace.emplace_back("APPLICABILITY:ASSESSED");
-        result.m_trace.emplace_back(result.m_route);
+        result.m_trace.emplace_back(ETraceEvent::ApplicabilityAssessed);
+        result.m_trace.emplace_back(ETraceEvent::RouteSelected);
         m_logger.log(ELogLevel::Info,
-            SLogEvent::route_selected(request.m_request_id, result.m_route));
-        result.m_trace.emplace_back("SCOPE:NOT_IMPLEMENTED");
+            SLogEvent::route_selected(request.m_request_id, orchestration_route_name(result.m_route)));
+        result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
     }
 
-    result.m_trace.emplace_back("EXIT:" + result.m_exit_reason);
+    result.m_trace.emplace_back(result.m_status == ERequestStatus::Rejected ? ETraceEvent::ExitRejected : (result.m_status == ERequestStatus::Failed ? ETraceEvent::ExitFailed : ETraceEvent::ExitCompleted));
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - started).count();
     m_logger.log(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
