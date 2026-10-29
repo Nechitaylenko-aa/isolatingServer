@@ -277,7 +277,7 @@ TEST_CASE("combined cursor and history route sends both selected contexts to sma
     {
         std::ofstream source(source_file);
         REQUIRE(source.is_open());
-        source << "class CWidget {\\npublic:\\n    int value() const { return 42; }\\n};\\n";
+        source << "class CWidget {\npublic:\n    int value() const { return 42; }\n};\n";
     }
 
     fcpp::SClangSymbol symbol{};
