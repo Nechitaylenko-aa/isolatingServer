@@ -14,7 +14,6 @@ namespace fcpp
 {
 namespace
 {
-
 TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
 {
     const std::filesystem::path log_dir =
@@ -48,8 +47,8 @@ TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
     REQUIRE(log_text.find("request.finished") != std::string::npos);
     REQUIRE(log_text.find("orchestrator.stage") == std::string::npos);
     REQUIRE(log_text.find("orchestrator-test-001") != std::string::npos);
-    REQUIRE(log_text.find("\\"text_length\\":21") != std::string::npos);
-    REQUIRE(log_text.find("\\"elapsed_ms\\":") != std::string::npos);
+    REQUIRE(log_text.find(R"("text_length":20)") != std::string::npos);
+    REQUIRE(log_text.find(R"("elapsed_ms":)") != std::string::npos);
 
     std::filesystem::remove_all(log_dir, ignored);
 }
@@ -83,9 +82,6 @@ TEST_CASE("request orchestrator rejects an empty request and logs the exit")
     std::filesystem::remove_all(log_dir, ignored);
 }
 
-} // namespace
-} // namespace fcpp
-
 TEST_CASE("logger expands typed log events into structured JSONL")
 {
     const std::filesystem::path log_dir =
@@ -101,9 +97,11 @@ TEST_CASE("logger expands typed log events into structured JSONL")
     REQUIRE(log_file.is_open());
     const std::string log_text((std::istreambuf_iterator<char>(log_file)),
                                std::istreambuf_iterator<char>());
-    REQUIRE(log_text.find("\\"event\\":\\"llm.escalated\\"") != std::string::npos);
-    REQUIRE(log_text.find("\\"from_role\\":\\"THINKER_LOCAL\\"") != std::string::npos);
-    REQUIRE(log_text.find("\\"to_role\\":\\"THINKER_SMART\\"") != std::string::npos);
+    REQUIRE(log_text.find(R"("event":"llm.escalated")") != std::string::npos);
+    REQUIRE(log_text.find(R"("from_role":"THINKER_LOCAL")") != std::string::npos);
+    REQUIRE(log_text.find(R"("to_role":"THINKER_SMART")") != std::string::npos);
 
     std::filesystem::remove_all(log_dir, ignored);
 }
+} // namespace
+} // namespace fcpp
