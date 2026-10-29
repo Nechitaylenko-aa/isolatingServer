@@ -62,8 +62,10 @@ class CContextAwareModel final : public fcpp::IModelApi
 public:
     explicit CContextAwareModel(
         fcpp::ELlmRole role,
-        std::vector<std::vector<fcpp::SModelMessage>>* captured_messages = nullptr)
-        : m_role(role), m_captured_messages(captured_messages) {}
+        std::vector<std::vector<fcpp::SModelMessage>>* captured_messages = nullptr,
+        std::string selection_reply = "1")
+        : m_role(role), m_captured_messages(captured_messages),
+          m_selection_reply(std::move(selection_reply)) {}
     bool is_available() const override { return true; }
 
     fcpp::SModelReply complete(
@@ -77,7 +79,7 @@ public:
             return {true, "History-only answer", {}, "stop", {}};
         const std::string system = messages.empty() ? std::string{} : messages.front().m_content;
         if (system.find("Select the prior conversation turns") != std::string::npos)
-            return {true, "1", {}, "stop", {}};
+            return {true, m_selection_reply, {}, "stop", {}};
         if (system.find("Decide whether the C++ entity") != std::string::npos)
             return {true, "YES", {}, "stop", {}};
         return {true, "invalid", {}, "stop", {}};
@@ -93,6 +95,7 @@ public:
 private:
     fcpp::ELlmRole m_role;
     std::vector<std::vector<fcpp::SModelMessage>>* m_captured_messages;
+    std::string m_selection_reply;
 };
 
 class CCursorTestClang final : public fcpp::IClang
@@ -258,7 +261,8 @@ TEST_CASE("orchestrator returns only the history pairs selected by the historian
         [&answer_messages](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
         {
             return std::make_unique<CContextAwareModel>(
-                role, role == fcpp::ELlmRole::CoderLocal ? &answer_messages : nullptr);
+                role, role == fcpp::ELlmRole::CoderLocal ? &answer_messages : nullptr,
+                role == fcpp::ELlmRole::ThinkerLocal ? "2" : "1");
         });
     fcpp::CHistorian historian(llm);
     fcpp::CRequestOrchestrator orchestrator(logger, &historian, nullptr, &llm);
