@@ -10,6 +10,81 @@ namespace fcpp
 {
 namespace
 {
+const char* system_prompt_for(EPromptType type)
+{
+    switch (type)
+    {
+    case EPromptType::CppAssistant:
+        return "You are a helpful, precise C++ software engineering assistant. "
+               "Answer the user's question directly in the user's language. "
+               "Use only the information supplied in the request. "
+               "Do not claim to have inspected files or run commands. "
+               "State assumptions when needed and do not invent project-specific facts.";
+    case EPromptType::YesNo:
+        return "Determine whether the statement or condition in the user's request is true. "
+               "Respond with exactly YES or NO, with no explanation.";
+    case EPromptType::CursorRelevance:
+        return "Determine whether the symbol at the editor cursor is relevant to answering "
+               "the user's question. Respond with exactly YES or NO, with no explanation.";
+    case EPromptType::HistoryRelevance:
+        return "Determine whether the supplied conversation history is needed to answer "
+               "the user's current question. Respond with exactly YES or NO, with no explanation.";
+    case EPromptType::ScopeClassification:
+        return "Classify the requested change scope. Respond with exactly one label: "
+               "LOCAL, FILE, PROJECT, or REPOSITORY. Do not add explanation.";
+    }
+    return "";
+}
+
+std::string trim_ascii(const std::string& value)
+{
+    const std::size_t first = value.find_first_not_of(" 	
+");
+    if (first == std::string::npos)
+        return {};
+    const std::size_t last = value.find_last_not_of(" 	
+");
+    return value.substr(first, last - first + 1);
+}
+
+std::string uppercase_ascii(std::string value)
+{
+    for (char& ch : value)
+    {
+        if (ch >= 'a' && ch <= 'z')
+            ch = static_cast<char>(ch - 'a' + 'A');
+    }
+    return value;
+}
+
+bool validate_prompt_result(EPromptType type, const std::string& text, std::string& error)
+{
+    const std::string normalized = uppercase_ascii(trim_ascii(text));
+    switch (type)
+    {
+    case EPromptType::CppAssistant:
+        if (!text.empty())
+            return true;
+        error = "empty assistant answer";
+        return false;
+    case EPromptType::YesNo:
+    case EPromptType::CursorRelevance:
+    case EPromptType::HistoryRelevance:
+        if (normalized == "YES" || normalized == "NO")
+            return true;
+        error = "expected exactly YES or NO";
+        return false;
+    case EPromptType::ScopeClassification:
+        if (normalized == "LOCAL" || normalized == "FILE"
+            || normalized == "PROJECT" || normalized == "REPOSITORY")
+            return true;
+        error = "expected LOCAL, FILE, PROJECT, or REPOSITORY";
+        return false;
+    }
+    error = "unknown prompt type";
+    return false;
+}
+
 ELlmRole smart_fallback(ELlmRole role)
 {
     switch (role)
@@ -159,6 +234,26 @@ SLlmExecutionResult CLlmLayer::execute(
     result.m_used_role = fallback;
     log_failure(role, result.m_error, true);
     return result;
+}
+
+SLlmExecutionResult CLlmLayer::request_text(
+    ELlmRole role, EPromptType prompt_type, const std::string& request)
+{
+    const char* system_prompt = system_prompt_for(prompt_type);
+    if (*system_prompt == '\\0')
+    {
+        SLlmExecutionResult result;
+        result.m_error = "invalid prompt type";
+        result.m_used_role = role;
+        log_failure(role, result.m_error, false);
+        return result;
+    }
+
+    return execute(role, system_prompt, request,
+        [prompt_type](const std::string& text, std::string& error)
+        {
+            return validate_prompt_result(prompt_type, text, error);
+        });
 }
 
 SLlmExecutionResult CLlmLayer::request_text(
