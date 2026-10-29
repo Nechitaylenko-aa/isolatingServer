@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/CAgentApi.h"
+#include "core/CConversationStore.h"
 #include "core/CConfigManager.h"
 #include "fcpp-agent/IAgentApi.h"
 
@@ -320,6 +321,88 @@ TEST_CASE("agent API: ask rejects empty text before invoking orchestration", "[a
     REQUIRE_FALSE(response.m_ok);
     REQUIRE(response.m_error == fcpp::EErrorKind::InvalidRequest);
     REQUIRE(response.m_message == "empty ask text");
+
+    std::filesystem::remove_all(home);
+}
+
+
+TEST_CASE("agent API: conversation survives restart and stays bound to its project", "[api][session][persistence]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-api-session-persistence-home");
+    HomeScope scope(home);
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    const std::filesystem::path project_a = make_project();
+    const std::filesystem::path project_b = make_project();
+    std::string session_a;
+    std::string project_id_a;
+    std::string session_b;
+    std::string project_id_b;
+
+    // First process lifetime: open project A and remember the agent-issued address.
+    {
+        fcpp::CAgentApi api(config);
+        fcpp::SApiRequest open_a;
+        open_a.m_method = fcpp::EApiMethod::ProjectOpen;
+        open_a.m_path = project_a.string();
+        const fcpp::SApiResponse response = api.execute(open_a);
+        REQUIRE(response.m_ok);
+        REQUIRE_FALSE(response.m_session_id.empty());
+        session_a = response.m_session_id;
+        project_id_a = response.m_project_id;
+    }
+
+    // Persist a real turn, then close the SQLite connection as process shutdown would.
+    {
+        fcpp::CConversationStore store;
+        REQUIRE(store.open(config.agent_dir() / "sessions.sqlite"));
+        REQUIRE(store.append_event(session_a, "user", R"({"text":"persisted user turn"})"));
+        REQUIRE(store.append_event(session_a, "assistant",
+                                   R"({"text":"persisted assistant turn","ok":true})"));
+        store.close();
+    }
+
+    // A new agent instance opens a different project: it must not receive A's session.
+    {
+        fcpp::CAgentApi api(config);
+        fcpp::SApiRequest open_b;
+        open_b.m_method = fcpp::EApiMethod::ProjectOpen;
+        open_b.m_path = project_b.string();
+        const fcpp::SApiResponse response = api.execute(open_b);
+        REQUIRE(response.m_ok);
+        REQUIRE_FALSE(response.m_session_id.empty());
+        session_b = response.m_session_id;
+        project_id_b = response.m_project_id;
+        REQUIRE(project_id_b != project_id_a);
+        REQUIRE(session_b != session_a);
+    }
+
+    // After another restart, reopening A restores A's address, not B's.
+    {
+        fcpp::CAgentApi api(config);
+        fcpp::SApiRequest open_a;
+        open_a.m_method = fcpp::EApiMethod::ProjectOpen;
+        open_a.m_path = project_a.string();
+        const fcpp::SApiResponse response = api.execute(open_a);
+        REQUIRE(response.m_ok);
+        REQUIRE(response.m_project_id == project_id_a);
+        REQUIRE(response.m_session_id == session_a);
+    }
+
+    // The conversation events themselves survive the agent/store reconnection.
+    {
+        fcpp::CConversationStore store;
+        REQUIRE(store.open(config.agent_dir() / "sessions.sqlite"));
+        const auto turns = fcpp::reconstruct_conversation_turns(store.events(session_a));
+        REQUIRE(turns.size() == 1);
+        REQUIRE(turns[0].m_user_text == "persisted user turn");
+        REQUIRE(turns[0].m_assistant_text == "persisted assistant turn");
+        REQUIRE(store.get_session(session_b).has_value());
+        REQUIRE(store.get_session(session_b)->m_project_id == project_id_b);
+    }
 
     std::filesystem::remove_all(home);
 }
