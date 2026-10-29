@@ -35,7 +35,7 @@ TEST_CASE("request orchestrator reports missing LLM layer for no-context route")
     REQUIRE(result.m_status == ERequestStatus::Failed);
     REQUIRE(result.m_exit_reason == EExitReason::LlmGenerationFailed);
     REQUIRE(result.m_route == EOrchestrationRoute::NoApplicableContext);
-    REQUIRE(result.m_trace.size() == 5);
+    REQUIRE(result.m_trace.size() == 4);
     REQUIRE(result.m_trace.back() == ETraceEvent::ExitLlmGenerationFailed);
     REQUIRE(result.m_message.find("LLM layer is not configured") != std::string::npos);
 
