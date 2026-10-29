@@ -113,6 +113,8 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_message = "No answer generated: scope classification is not implemented yet.";
         result.m_trace.emplace_back("APPLICABILITY:ASSESSED");
         result.m_trace.emplace_back(result.m_route);
+        m_logger.log(ELogLevel::Info,
+            SLogEvent::route_selected(request.m_request_id, result.m_route));
         result.m_trace.emplace_back("SCOPE:NOT_IMPLEMENTED");
     }
 

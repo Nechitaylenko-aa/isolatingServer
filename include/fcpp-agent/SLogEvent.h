@@ -24,6 +24,7 @@ struct SLogEvent
                                       const std::string&, long long);
     static SLogEvent cursor_assessed(const std::string&, bool, bool, bool, bool, bool);
     static SLogEvent history_assessed(const std::string&, std::size_t, bool, bool, bool);
+    static SLogEvent route_selected(const std::string& request_id, const std::string& route);
     static SLogEvent operation_failed(const std::string&, const std::string&);
     static SLogEvent llm_escalated(const std::string&, const std::string&, const std::string&);
 };

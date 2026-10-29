@@ -49,6 +49,12 @@ SLogEvent SLogEvent::history_assessed(const std::string& request_id,
         {"escalated", escalated}}};
 }
 
+SLogEvent SLogEvent::route_selected(const std::string& request_id,
+                                      const std::string& route)
+{
+    return {"request.route", {{"request_id", request_id}, {"route", route}}};
+}
+
 SLogEvent SLogEvent::operation_failed(const std::string& component,
                                       const std::string& reason)
 {
