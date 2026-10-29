@@ -4,6 +4,7 @@
  */
 #include "core/CLogger.h"
 #include "core/CRequestOrchestrator.h"
+#include "fcpp-agent/SOrchestrationTypes.h"
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CHistorian.h"
 #include "fcpp-agent/SError.h"
@@ -77,8 +78,8 @@ void CLogger::log(ELogLevel level, const SOrchestrationResult& result,
 {
     log_event(level, "request.finished",
         {{"request_id", request_id}, {"session_id", session_id},
-         {"status", result.m_status}, {"route", result.m_route},
-         {"exit_reason", result.m_exit_reason}, {"elapsed_ms", elapsed_ms}});
+         {"status", request_status_name(result.m_status)}, {"route", orchestration_route_name(result.m_route)},
+         {"exit_reason", exit_reason_name(result.m_exit_reason)}, {"elapsed_ms", elapsed_ms}});
 }
 
 void CLogger::log(ELogLevel level, const SCursorContextResult& result,
