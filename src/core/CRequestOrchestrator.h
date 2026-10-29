@@ -65,6 +65,17 @@ public:
     SOrchestrationResult run(const SOrchestrationRequest& request) const;
 
 private:
+    enum class ERootChoice
+    {
+        Failure,
+        CursorAndHistory,
+        Cursor,
+        History,
+        NoContext
+    };
+
+    ERootChoice choose_root(const SOrchestrationRequest& request,
+                            SOrchestrationResult& result) const;
     void generate_and_audit_default_answer(
         const SOrchestrationRequest& request, SOrchestrationResult& result) const;
     CLogger& m_logger;
