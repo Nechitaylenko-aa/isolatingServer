@@ -141,6 +141,10 @@ add_library(fcpp_core STATIC
     src/core/SRequestOutcome.cpp
     src/core/CRequestPipeline.cpp
     src/core/CRequestOrchestrator.cpp
+    src/core/CCursorContextAnalyzer.cpp
+    src/core/CHistorian.cpp
+    src/core/SLlmRoleConfig.cpp
+    src/llm/CLlmLayer.cpp
     src/core/CIntentAnalyzer.cpp
     src/core/CAnswerService.cpp
     src/core/CAnswerQuality.cpp

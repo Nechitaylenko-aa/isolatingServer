@@ -97,5 +97,3 @@ std::unique_ptr<IModelApi> CModelFactory::create(const SConfig& config, EModelRo
 
 } // namespace fcpp
 
-// New contract-checked LLM service, kept separate at the interface level.
-#include "llm/CLlmLayer.cpp"

@@ -5,6 +5,7 @@
 
 #include "core/CRequestOrchestrator.h"
 #include "core/CHistorian.h"
+#include "core/CCursorContextAnalyzer.h"
 
 #include <chrono>
 #include <utility>
@@ -16,9 +17,11 @@
 namespace fcpp
 {
 
-CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historian)
+CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historian,
+                                         CCursorContextAnalyzer* cursor_analyzer)
     : m_logger(logger)
     , m_historian(historian)
+    , m_cursor_analyzer(cursor_analyzer)
 {
 }
 
@@ -80,12 +83,46 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         stage("INTELLIGIBILITY_CHECK", "STUB_ACCEPTED",
               {{"implementation", "placeholder_non_empty_check"}});
 
+        bool cursor_applicable = false;
+        bool cursor_analysis_failed = false;
+        std::string cursor_error;
+        if (request.m_cursor_file.empty() || request.m_cursor_line == 0 || request.m_cursor_column == 0)
+        {
+            stage("CURSOR_APPLICABILITY", "NOT_APPLICABLE_NO_CURSOR");
+        }
+        else if (m_cursor_analyzer == nullptr)
+        {
+            stage("CURSOR_APPLICABILITY", "STUB_NO_ANALYZER_INJECTED",
+                  {{"implementation", "cursor_analyzer_dependency_not_supplied"}});
+        }
+        else
+        {
+            const SCursorContextResult cursor = m_cursor_analyzer->assess(
+                request.m_text, request.m_cursor_file, request.m_cursor_line,
+                request.m_cursor_column, request.m_cursor_compile_arguments);
+            result.m_cursor_symbol = cursor.m_symbol;
+            cursor_applicable = cursor.m_ok && cursor.m_context_applicable;
+            cursor_analysis_failed = !cursor.m_ok;
+            cursor_error = cursor.m_error;
+            const std::string outcome = !cursor.m_ok ? "FAILED"
+                : (!cursor.m_symbol.has_value() ? "NOT_APPLICABLE_NO_SYMBOL"
+                   : (cursor.m_context_applicable ? "APPLICABLE" : "NOT_APPLICABLE"));
+            stage("CURSOR_APPLICABILITY", outcome,
+                  {{"llm_called", cursor.m_llm_called},
+                   {"used_role", llm_role_name(cursor.m_used_role)},
+                   {"escalated", cursor.m_escalated},
+                   {"reason", cursor.m_error}});
+        }
+
         bool history_applicable = false;
         bool history_analysis_failed = false;
         std::string history_error;
-        if (request.m_history.empty())
+        if (cursor_applicable)
         {
-            // The historian is deliberately not called for an empty history.
+            stage("HISTORY_APPLICABILITY", "SKIPPED_CURSOR_CONTEXT_SELECTED");
+        }
+        else if (request.m_history.empty())
+        {
             stage("HISTORY_APPLICABILITY", "NOT_APPLICABLE_NO_HISTORY");
         }
         else if (m_historian != nullptr)
@@ -107,10 +144,9 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
             stage("HISTORY_APPLICABILITY", "STUB_NO_HISTORIAN_INJECTED",
                   {{"implementation", "historian_dependency_not_supplied"}});
         }
-        stage("CURSOR_APPLICABILITY", "STUB_NOT_APPLICABLE",
-              {{"implementation", "pending_semantic_analyzer"}});
 
-        result.m_route = history_applicable ? "HISTORY_CONTEXT_REQUIRED" : "NO_APPLICABLE_CONTEXT";
+        result.m_route = cursor_applicable ? "CURSOR_CONTEXT_REQUIRED"
+            : (history_applicable ? "HISTORY_CONTEXT_REQUIRED" : "NO_APPLICABLE_CONTEXT");
         stage("CONTEXT_BRANCH", result.m_route);
 
         // Placeholder: general question vs. codebase question is not guessed here.
@@ -129,7 +165,14 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_status = "STUB_COMPLETE";
         result.m_exit_reason = "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED";
         result.m_message = "No answer generated: scope classification is not implemented yet.";
-        if (history_analysis_failed)
+        if (cursor_analysis_failed)
+        {
+            result.m_ok = false;
+            result.m_status = "FAILED";
+            result.m_exit_reason = "CURSOR_RELEVANCE_FAILED";
+            result.m_message = "Cursor relevance assessment failed: " + cursor_error;
+        }
+        else if (history_analysis_failed)
         {
             result.m_ok = false;
             result.m_status = "FAILED";
@@ -172,5 +215,3 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
 
 } // namespace fcpp
 
-// Historian implementation is a separate class; compile it with the orchestration unit.
-#include "core/CHistorian.cpp"
