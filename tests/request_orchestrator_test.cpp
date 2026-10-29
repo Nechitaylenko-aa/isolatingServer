@@ -35,7 +35,7 @@ TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
     REQUIRE(result.m_status == "STUB_COMPLETE");
     REQUIRE(result.m_exit_reason == "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED");
     REQUIRE(result.m_route == "NO_APPLICABLE_CONTEXT");
-    REQUIRE(result.m_trace.size() == 13);
+    REQUIRE(result.m_trace.size() == 5);
     REQUIRE(result.m_trace.back() == "EXIT:SCOPE_CLASSIFICATION_NOT_IMPLEMENTED");
     REQUIRE(result.m_message.find("ORCHESTRATION_STATUS=STUB_COMPLETE") != std::string::npos);
     REQUIRE(result.m_message.find("EXIT_REASON=SCOPE_CLASSIFICATION_NOT_IMPLEMENTED") != std::string::npos);
@@ -44,9 +44,9 @@ TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
     REQUIRE(log_file.is_open());
     const std::string log_text((std::istreambuf_iterator<char>(log_file)),
                                std::istreambuf_iterator<char>());
-    REQUIRE(log_text.find("orchestrator.started") != std::string::npos);
-    REQUIRE(log_text.find("orchestrator.stage") != std::string::npos);
-    REQUIRE(log_text.find("orchestrator.finished") != std::string::npos);
+    REQUIRE(log_text.find("request.started") != std::string::npos);
+    REQUIRE(log_text.find("request.finished") != std::string::npos);
+    REQUIRE(log_text.find("orchestrator.stage") == std::string::npos);
     REQUIRE(log_text.find("orchestrator-test-001") != std::string::npos);
 
     std::filesystem::remove_all(log_dir, ignored);
