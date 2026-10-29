@@ -6,12 +6,6 @@
 #include "core/CRequestOrchestrator.h"
 #include "core/CHistorian.h"
 #include "core/CCursorContextAnalyzer.h"
-
-#include <chrono>
-#include <utility>
-
-#include <nlohmann/json.hpp>
-
 #include "core/CLogger.h"
 #include "fcpp-agent/SLogEvent.h"
 

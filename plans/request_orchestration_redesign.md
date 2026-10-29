@@ -130,6 +130,53 @@
 
 Детальные условия переходов, повторные вызовы и политика уточнения определяются до реализации.
 
+```mermaid
+flowchart TD
+    A["CRequestOrchestrator::run()"] --> B{"Текст запроса пуст?"}
+
+    B -- Да --> C["Rejected"]
+    C --> D["EmptyRequest"]
+    D --> E["Логирование"]
+    E --> Z(("Выход"))
+
+    B -- Нет --> F["ValidationOk"]
+    F --> G["Анализ контекста курсора"]
+
+    G --> H{"Анализ завершился ошибкой?"}
+    H -- Да --> I["CursorRelevanceFailed"]
+    H -- Нет --> J["cursor_applicable"]
+
+    I --> N{"Есть ошибка?"}
+    J --> K["Анализ контекста истории"]
+    K --> L{"Анализ завершился ошибкой?"}
+    L -- Да --> M["HistoryRelevanceFailed"]
+    L -- Нет --> O["history_applicable"]
+
+    M --> N
+    O --> N
+
+    N -- Да --> P["status = Failed"]
+    P --> Q["ApplicabilityFailed"]
+    Q --> R["Логирование результата"]
+    R --> Z
+
+    N -- Нет --> S{"Выбор маршрута"}
+
+    S -- "Курсор + история" --> T["CursorAndHistoryContextRequired"]
+    S -- "Только курсор" --> U["CursorContextRequired"]
+    S -- "Только история" --> V["HistoryContextRequired"]
+    S -- "Нет контекста" --> W["NoApplicableContext"]
+
+    T --> X["ScopeClassificationNotImplemented"]
+    U --> X
+    V --> X
+    W --> X
+
+    X --> Y["StubComplete"]
+    Y --> AA["Логирование маршрута и результата"]
+    AA --> Z
+```
+
 ## План работ
 
 1. **Детализировать дерево.** Определить все переходы, штатные исходы, уточнения и ошибки; составить сценарии тестирования.
