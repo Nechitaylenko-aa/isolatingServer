@@ -106,7 +106,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_trace.emplace_back(ETraceEvent::ApplicabilityAssessed);
         result.m_trace.emplace_back(ETraceEvent::RouteSelected);
         m_logger.log(ELogLevel::Info,
-            SLogEvent::route_selected(request.m_request_id, orchestration_route_name(result.m_route)));
+            SLogEvent::route_selected(request.m_request_id, result.m_route));
         result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
     }
 
