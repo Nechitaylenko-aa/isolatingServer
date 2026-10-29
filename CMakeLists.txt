@@ -125,6 +125,7 @@ add_library(fcpp_core STATIC
     src/core/SConfig.cpp
     src/core/SStaleReport.cpp
     src/core/CLogger.cpp
+    src/core/SLogEvent.cpp
     src/core/CDoctor.cpp
     src/core/CPatchParser.cpp
     src/core/CPatchValidator.cpp

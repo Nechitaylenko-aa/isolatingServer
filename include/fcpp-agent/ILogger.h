@@ -1,59 +1,27 @@
 /**
  * @file ILogger.h
- * @brief Интерфейс structured logging (§60).
- *
- * Уровни: ERROR/WARN/INFO/DEBUG/TRACE. Логи агента пишутся вне проекта.
+ * @brief Logging interface for structured events.
  */
-
 #ifndef FCPP_AGENT_ILOGGER_H
 #define FCPP_AGENT_ILOGGER_H
 
 #include <string>
+#include "fcpp-agent/SLogEvent.h"
 
 namespace fcpp
 {
+enum class ELogLevel { Error, Warn, Info, Debug, Trace, Count };
 
-/**
- * @brief Уровень логирования.
- *
- * Преобразование в текст — статическим массивом в .cpp (Секция 3).
- */
-enum class ELogLevel
-{
-    Error, ///< Ошибка.
-    Warn,  ///< Предупреждение.
-    Info,  ///< Информация.
-    Debug, ///< Отладка.
-    Trace, ///< Трассировка.
-    Count  ///< Маркер количества для инициализации массива.
-};
-
-/**
- * @brief Интерфейс логгера.
- */
 class ILogger
 {
 public:
-    /**
-     * @brief Виртуальный деструктор.
-     */
     virtual ~ILogger() = default;
-
-    /**
-     * @brief Записать сообщение.
-     * @param level Уровень.
-     * @param message Сообщение.
-     */
     virtual void log(ELogLevel level, const std::string& message) = 0;
-
-    /**
-     * @brief Получить машинное имя уровня.
-     * @param level Уровень.
-     * @return Стабильное текстовое имя.
-     */
+    virtual void log(ELogLevel level, const SLogEvent& event)
+    {
+        log(level, event.m_name);
+    }
     static const char* level_name(ELogLevel level);
 };
-
 } // namespace fcpp
-
-#endif // FCPP_AGENT_ILOGGER_H
+#endif

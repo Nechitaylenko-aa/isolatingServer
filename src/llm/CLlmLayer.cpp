@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "llm/CModelOpenAICompat.h"
+#include "fcpp-agent/SLogEvent.h"
 
 namespace fcpp
 {
@@ -53,10 +54,9 @@ std::unique_ptr<IModelApi> CLlmLayer::make_model(ELlmRole role) const
 
 void CLlmLayer::log_failure(ELlmRole role, const std::string& reason, bool escalated)
 {
-    m_logger.log(ELogLevel::Error,
-        std::string("llm.failed role=") + llm_role_name(role)
-        + " reason=" + reason
-        + " escalated=" + (escalated ? "true" : "false"));
+    m_logger.log(ELogLevel::Error, SLogEvent::operation_failed(
+        std::string("llm.") + llm_role_name(role),
+        reason + (escalated ? " (escalation failed)" : "")));
 }
 
 SLlmExecutionResult CLlmLayer::execute(
