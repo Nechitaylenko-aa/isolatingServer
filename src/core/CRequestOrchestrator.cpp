@@ -39,7 +39,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_status = ERequestStatus::Rejected;
         result.m_exit_reason = EExitReason::EmptyRequest;
         result.m_message = "Request rejected: text is empty.";
-        result.m_trace = {ETraceEvent::ValidationFailed, ETraceEvent::ExitRejected};
+        result.m_trace = {ETraceEvent::ValidationFailed, ETraceEvent::ExitEmptyRequest};
         m_logger.log(ELogLevel::Error, result, request.m_request_id,
             request.m_session_id, 0);
         return result;
@@ -110,7 +110,24 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
     }
 
-    result.m_trace.emplace_back(result.m_status == ERequestStatus::Rejected ? ETraceEvent::ExitRejected : (result.m_status == ERequestStatus::Failed ? ETraceEvent::ExitFailed : ETraceEvent::ExitCompleted));
+    switch (result.m_exit_reason)
+    {
+    case EExitReason::EmptyRequest:
+        result.m_trace.emplace_back(ETraceEvent::ExitEmptyRequest);
+        break;
+    case EExitReason::CursorRelevanceFailed:
+        result.m_trace.emplace_back(ETraceEvent::ExitCursorRelevanceFailed);
+        break;
+    case EExitReason::HistoryRelevanceFailed:
+        result.m_trace.emplace_back(ETraceEvent::ExitHistoryRelevanceFailed);
+        break;
+    case EExitReason::ScopeClassificationNotImplemented:
+        result.m_trace.emplace_back(ETraceEvent::ExitScopeClassificationNotImplemented);
+        break;
+    case EExitReason::None:
+        result.m_trace.emplace_back(ETraceEvent::ExitCompleted);
+        break;
+    }
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - started).count();
     m_logger.log(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
