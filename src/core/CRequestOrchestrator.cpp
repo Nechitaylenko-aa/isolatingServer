@@ -185,6 +185,9 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     case EExitReason::ScopeClassificationNotImplemented:
         result.m_trace.emplace_back(ETraceEvent::ExitScopeClassificationNotImplemented);
         break;
+    case EExitReason::LlmGenerationFailed:
+        // The specific terminal event was recorded at the failure site.
+        break;
     case EExitReason::None:
         result.m_trace.emplace_back(ETraceEvent::ExitCompleted);
         break;
