@@ -12,6 +12,17 @@
 
 namespace fcpp
 {
+namespace
+{
+
+enum class EApplicability
+{
+    Failed,
+    NotApplicable,
+    Applicable
+};
+
+} // namespace
 
 CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historian,
                                          CCursorContextAnalyzer* cursor_analyzer, CLlmLayer* llm)
@@ -78,6 +89,66 @@ void CRequestOrchestrator::generate_and_audit_default_answer(
     result.m_trace.emplace_back(ETraceEvent::AnswerAudited);
 }
 
+CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
+    const SOrchestrationRequest& request, SOrchestrationResult& result) const
+{
+    EApplicability cursor = EApplicability::NotApplicable;
+    EApplicability history = EApplicability::NotApplicable;
+    EExitReason failure = EExitReason::None;
+
+    const bool cursor_position_provided = !request.m_cursor_file.empty()
+        && request.m_cursor_line > 0 && request.m_cursor_column > 0;
+
+    if (cursor_position_provided && m_cursor_analyzer != nullptr)
+    {
+        const SCursorContextResult assessed = m_cursor_analyzer->assess(
+            request.m_text, request.m_cursor_file, request.m_cursor_line,
+            request.m_cursor_column, request.m_cursor_compile_arguments);
+        result.m_cursor_symbol = assessed.m_symbol;
+        m_logger.log(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
+            assessed, request.m_request_id);
+
+        if (!assessed.m_ok)
+            failure = EExitReason::CursorRelevanceFailed;
+        else
+            cursor = assessed.m_context_applicable
+                ? EApplicability::Applicable : EApplicability::NotApplicable;
+    }
+
+    // History is assessed independently: both contexts may be applicable.
+    if (failure == EExitReason::None
+        && !request.m_history.empty() && m_historian != nullptr)
+    {
+        const SHistoryRelevance assessed =
+            m_historian->assess_relevance(request.m_text, request.m_history);
+        m_logger.log(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
+            assessed, request.m_request_id, request.m_history.size());
+
+        if (!assessed.m_ok)
+            failure = EExitReason::HistoryRelevanceFailed;
+        else
+            history = assessed.m_history_needed
+                ? EApplicability::Applicable : EApplicability::NotApplicable;
+    }
+
+    if (failure != EExitReason::None)
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = failure;
+        result.m_message = exit_reason_name(failure);
+        result.m_trace.emplace_back(ETraceEvent::ApplicabilityFailed);
+        return ERootChoice::Failure;
+    }
+
+    result.m_trace.emplace_back(ETraceEvent::ApplicabilityAssessed);
+    return cursor == EApplicability::Applicable
+        ? (history == EApplicability::Applicable
+            ? ERootChoice::CursorAndHistory : ERootChoice::Cursor)
+        : (history == EApplicability::Applicable
+            ? ERootChoice::History : ERootChoice::NoContext);
+}
+
 SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& request) const
 {
     const auto started = std::chrono::steady_clock::now();
@@ -98,78 +169,52 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     }
 
     result.m_trace.emplace_back(ETraceEvent::ValidationOk);
-    bool cursor_applicable = false;
-    bool history_applicable = false;
-    EExitReason failure = EExitReason::None;
 
-    const bool has_cursor = !request.m_cursor_file.empty()
-        && request.m_cursor_line > 0 && request.m_cursor_column > 0;
-
-    if (has_cursor && m_cursor_analyzer != nullptr)
+    switch (choose_root(request, result))
     {
-        const SCursorContextResult cursor = m_cursor_analyzer->assess(
-            request.m_text, request.m_cursor_file, request.m_cursor_line,
-            request.m_cursor_column, request.m_cursor_compile_arguments);
-        result.m_cursor_symbol = cursor.m_symbol;
-        m_logger.log(cursor.m_ok ? ELogLevel::Info : ELogLevel::Error,
-            cursor, request.m_request_id);
-        if (!cursor.m_ok)
-            failure = EExitReason::CursorRelevanceFailed;
-        else
-            cursor_applicable = cursor.m_context_applicable;
+    case ERootChoice::Failure:
+        break;
+
+    case ERootChoice::CursorAndHistory:
+        result.m_route = EOrchestrationRoute::CursorAndHistoryContextRequired;
+        break;
+
+    case ERootChoice::Cursor:
+        result.m_route = EOrchestrationRoute::CursorContextRequired;
+        break;
+
+    case ERootChoice::History:
+        result.m_route = EOrchestrationRoute::HistoryContextRequired;
+        break;
+
+    case ERootChoice::NoContext:
+        result.m_route = EOrchestrationRoute::NoApplicableContext;
+        break;
     }
 
-    // Assess history independently: cursor and history can both be applicable.
-    if (failure == EExitReason::None && !request.m_history.empty() && m_historian != nullptr)
+    if (result.m_exit_reason == EExitReason::None)
     {
-        const SHistoryRelevance history =
-            m_historian->assess_relevance(request.m_text, request.m_history);
-        m_logger.log(history.m_ok ? ELogLevel::Info : ELogLevel::Error,
-            history, request.m_request_id, request.m_history.size());
-        if (!history.m_ok)
-            failure = EExitReason::HistoryRelevanceFailed;
-        else
-            history_applicable = history.m_history_needed;
-    }
-
-    if (failure != EExitReason::None)
-    {
-        result.m_ok = false;
-        result.m_status = ERequestStatus::Failed;
-        result.m_exit_reason = failure;
-        result.m_message = exit_reason_name(failure);
-        result.m_trace.emplace_back(ETraceEvent::ApplicabilityFailed);
-    }
-    else
-    {
-        if (cursor_applicable && history_applicable)
-            result.m_route = EOrchestrationRoute::CursorAndHistoryContextRequired;
-        else if (cursor_applicable)
-            result.m_route = EOrchestrationRoute::CursorContextRequired;
-        else if (history_applicable)
-            result.m_route = EOrchestrationRoute::HistoryContextRequired;
-        else
-            result.m_route = EOrchestrationRoute::NoApplicableContext;
-
-        result.m_trace.emplace_back(ETraceEvent::ApplicabilityAssessed);
         result.m_trace.emplace_back(ETraceEvent::RouteSelected);
         m_logger.log(ELogLevel::Info,
             SLogEvent::route_selected(request.m_request_id, result.m_route));
 
-        if (result.m_route != EOrchestrationRoute::NoApplicableContext)
+        switch (result.m_route)
         {
+        case EOrchestrationRoute::CursorAndHistoryContextRequired:
+        case EOrchestrationRoute::CursorContextRequired:
+        case EOrchestrationRoute::HistoryContextRequired:
             result.m_ok = true;
             result.m_status = ERequestStatus::StubComplete;
             result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
             result.m_message = "Selected context route is not implemented yet.";
             result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
-        }
-        else
-        {
+            break;
+
+        case EOrchestrationRoute::NoApplicableContext:
             generate_and_audit_default_answer(request, result);
+            break;
         }
     }
-
 
     switch (result.m_exit_reason)
     {
@@ -192,6 +237,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_trace.emplace_back(ETraceEvent::ExitCompleted);
         break;
     }
+
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - started).count();
     m_logger.log(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
@@ -200,4 +246,3 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
 }
 
 } // namespace fcpp
-
