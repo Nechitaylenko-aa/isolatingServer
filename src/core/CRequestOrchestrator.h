@@ -49,6 +49,7 @@ struct SOrchestrationResult
     std::vector<ETraceEvent> m_trace;
     std::string m_message;
     std::optional<SClangSymbol> m_cursor_symbol;
+    std::string m_cursor_context;
     std::vector<SConversationTurn> m_history_context;
 };
 
@@ -78,6 +79,8 @@ private:
     ERootChoice choose_root(const SOrchestrationRequest& request,
                             SOrchestrationResult& result) const;
     void generate_and_audit_default_answer(
+        const SOrchestrationRequest& request, SOrchestrationResult& result) const;
+    void generate_and_audit_cursor_answer(
         const SOrchestrationRequest& request, SOrchestrationResult& result) const;
     CLogger& m_logger;
     CHistorian* m_historian = nullptr;

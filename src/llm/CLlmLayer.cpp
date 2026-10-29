@@ -61,7 +61,7 @@ bool validate_prompt_result(EPromptType type, const std::string& text, std::stri
     switch (type)
     {
     case EPromptType::CppAssistant:
-        if (!text.empty())
+        if (!trim_ascii(text).empty())
             return true;
         error = "empty assistant answer";
         return false;

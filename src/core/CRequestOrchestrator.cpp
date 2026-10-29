@@ -35,6 +35,68 @@ CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historia
 {
 }
 
+void CRequestOrchestrator::generate_and_audit_cursor_answer(
+    const SOrchestrationRequest& request, SOrchestrationResult& result) const
+{
+    if (m_llm == nullptr)
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = EExitReason::LlmGenerationFailed;
+        result.m_message = "LLM layer is not configured.";
+        result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+        m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+            {{"request_id", request.m_request_id}, {"reason", result.m_message}});
+        return;
+    }
+
+    if (result.m_cursor_context.empty())
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = EExitReason::LlmGenerationFailed;
+        result.m_message = "Cursor context is empty; refusing to answer without source evidence.";
+        result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+        m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+            {{"request_id", request.m_request_id}, {"reason", result.m_message}});
+        return;
+    }
+
+    const std::string prompt_input =
+        "CURSOR SOURCE CONTEXT (extracted by Clang):\n"
+        + result.m_cursor_context
+        + "\n\nUSER REQUEST:\n" + request.m_text;
+
+    const SLlmExecutionResult generated = m_llm->request_text(
+        ELlmRole::CoderSmart, EPromptType::CppExpert, prompt_input);
+    if (!generated.m_ok)
+    {
+        result.m_ok = false;
+        result.m_status = ERequestStatus::Failed;
+        result.m_exit_reason = EExitReason::LlmGenerationFailed;
+        result.m_message = generated.m_error.empty()
+            ? "LLM answer generation failed." : generated.m_error;
+        result.m_trace.emplace_back(ETraceEvent::ExitLlmGenerationFailed);
+        m_logger.log_event(ELogLevel::Error, "answer.generation_failed",
+            {{"request_id", request.m_request_id}, {"reason", result.m_message},
+             {"role", llm_role_name(generated.m_used_role)},
+             {"escalated", generated.m_escalated}});
+        return;
+    }
+
+    result.m_trace.emplace_back(ETraceEvent::AnswerGenerated);
+    m_logger.log_event(ELogLevel::Info, "answer.audit",
+        {{"request_id", request.m_request_id}, {"accepted", true},
+         {"audit", "non_empty_contract"}, {"answer_bytes", generated.m_text.size()},
+         {"role", llm_role_name(generated.m_used_role)}});
+
+    result.m_ok = true;
+    result.m_status = ERequestStatus::Completed;
+    result.m_exit_reason = EExitReason::None;
+    result.m_message = generated.m_text;
+    result.m_trace.emplace_back(ETraceEvent::AnswerAudited);
+}
+
 void CRequestOrchestrator::generate_and_audit_default_answer(
     const SOrchestrationRequest& request, SOrchestrationResult& result) const
 {
@@ -106,6 +168,7 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
             request.m_text, request.m_cursor_file, request.m_cursor_line,
             request.m_cursor_column, request.m_cursor_compile_arguments);
         result.m_cursor_symbol = assessed.m_symbol;
+        result.m_cursor_context = assessed.m_source_context;
         m_logger.log(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
             assessed, request.m_request_id);
 
@@ -211,8 +274,11 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
 
         switch (result.m_route)
         {
-        case EOrchestrationRoute::CursorAndHistoryContextRequired:
         case EOrchestrationRoute::CursorContextRequired:
+            generate_and_audit_cursor_answer(request, result);
+            break;
+
+        case EOrchestrationRoute::CursorAndHistoryContextRequired:
         case EOrchestrationRoute::HistoryContextRequired:
             result.m_ok = true;
             result.m_status = ERequestStatus::StubComplete;

@@ -1,12 +1,70 @@
 #include "core/CCursorContextAnalyzer.h"
 
+#include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <sstream>
 
 namespace fcpp
 {
 namespace
 {
+constexpr std::size_t kMaxCursorContextBytes = 24000;
+
+bool read_cursor_source(const SClangSymbol& symbol, std::string& source, std::string& error)
+{
+    if (symbol.m_location.m_file.empty() || symbol.m_location.m_line == 0)
+    {
+        error = "clang symbol has no source range";
+        return false;
+    }
+
+    std::ifstream input(symbol.m_location.m_file);
+    if (!input.is_open())
+    {
+        error = "cannot open cursor source file: " + symbol.m_location.m_file;
+        return false;
+    }
+
+    const std::uint32_t first_line = symbol.m_location.m_line;
+    const std::uint32_t last_line = std::max(first_line,
+        symbol.m_location.m_end_line == 0 ? first_line : symbol.m_location.m_end_line);
+    std::string line;
+    std::uint32_t current_line = 0;
+    std::size_t bytes = 0;
+    while (std::getline(input, line))
+    {
+        ++current_line;
+        if (current_line < first_line)
+            continue;
+        if (current_line > last_line)
+            break;
+
+        const std::size_t remaining = kMaxCursorContextBytes - bytes;
+        if (line.size() + 1 > remaining)
+        {
+            source.append(line, 0, remaining);
+            source += "\n[CURSOR CONTEXT TRUNCATED]";
+            break;
+        }
+        source += line;
+        source += '\n';
+        bytes += line.size() + 1;
+        if (bytes >= kMaxCursorContextBytes)
+        {
+            source += "[CURSOR CONTEXT TRUNCATED]";
+            break;
+        }
+    }
+
+    if (source.empty())
+    {
+        error = "cursor source range is empty or outside the source file";
+        return false;
+    }
+    return true;
+}
+
 std::string normalize_answer(const std::string& text)
 {
     const auto first = text.find_first_not_of(" \t\r\n");
@@ -57,6 +115,12 @@ SCursorContextResult CCursorContextAnalyzer::assess(
     }
 
     const SClangSymbol& symbol = *result.m_symbol;
+    if (!read_cursor_source(symbol, result.m_source_context, result.m_error))
+    {
+        result.m_ok = false;
+        return result;
+    }
+
     std::ostringstream description;
     description << "name: " << symbol.m_name
                 << "\nqualified name: " << symbol.m_qualified_name
@@ -64,7 +128,8 @@ SCursorContextResult CCursorContextAnalyzer::assess(
                 << "\nfile: " << symbol.m_location.m_file
                 << "\nline: " << symbol.m_location.m_line
                 << "\ncolumn: " << symbol.m_location.m_column
-                << "\nis definition: " << (symbol.m_is_definition ? "yes" : "no");
+                << "\nis definition: " << (symbol.m_is_definition ? "yes" : "no")
+                << "\naccess: " << symbol.m_access;
 
     const std::string prompt =
         "Decide whether the C++ entity under the editor cursor is needed to answer "

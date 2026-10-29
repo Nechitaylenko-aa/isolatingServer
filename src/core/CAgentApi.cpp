@@ -19,6 +19,7 @@
 
 #include "core/CRequestOrchestrator.h"
 #include "core/CHistorian.h"
+#include "core/CCursorContextAnalyzer.h"
 #include "llm/CLlmLayer.h"
 #include "core/CLogger.h"
 #include "core/CHash.h"
@@ -880,7 +881,14 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 
     CLlmLayer llm(m_config_manager.config().m_llm_roles, m_logger);
     CHistorian historian(llm);
-    CRequestOrchestrator orchestrator(m_logger, &historian, nullptr, &llm);
+    std::unique_ptr<IClang> clang = create_clang_backend({});
+    std::unique_ptr<CCursorContextAnalyzer> cursor_analyzer;
+    if (clang)
+    {
+        cursor_analyzer = std::make_unique<CCursorContextAnalyzer>(*clang, llm);
+    }
+    CRequestOrchestrator orchestrator(m_logger, &historian,
+        cursor_analyzer.get(), &llm);
     const SOrchestrationResult orchestration_result = orchestrator.run(orchestration_request);
 
     SApiResponse response;

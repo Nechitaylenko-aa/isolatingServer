@@ -15,6 +15,7 @@ namespace fcpp
 enum class EPromptType
 {
     CppAssistant,
+    CppExpert,
     YesNo,
     CursorRelevance,
     HistoryRelevance,

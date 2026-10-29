@@ -20,6 +20,7 @@ struct SCursorContextResult
     bool m_escalated = false;
     ELlmRole m_used_role = ELlmRole::Count;
     std::optional<SClangSymbol> m_symbol;
+    std::string m_source_context;
     std::string m_error;
 };
 
