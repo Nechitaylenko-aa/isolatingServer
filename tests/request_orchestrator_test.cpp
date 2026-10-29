@@ -31,7 +31,7 @@ TEST_CASE("request orchestrator reports missing LLM layer for no-context route")
 
     const SOrchestrationResult result = orchestrator.run(request);
 
-    REQUIRE(result.m_ok);
+    REQUIRE_FALSE(result.m_ok);
     REQUIRE(result.m_status == ERequestStatus::Failed);
     REQUIRE(result.m_exit_reason == EExitReason::LlmGenerationFailed);
     REQUIRE(result.m_route == EOrchestrationRoute::NoApplicableContext);
