@@ -14,6 +14,7 @@
 #include "core/CConversationStore.h"
 #include "fcpp-agent/IClang.h"
 #include "fcpp-agent/SOrchestrationTypes.h"
+#include "llm/CLlmLayer.h"
 
 namespace fcpp
 {
@@ -58,7 +59,8 @@ class CRequestOrchestrator
 {
 public:
     explicit CRequestOrchestrator(CLogger& logger, CHistorian* historian = nullptr,
-                                  CCursorContextAnalyzer* cursor_analyzer = nullptr);
+                                  CCursorContextAnalyzer* cursor_analyzer = nullptr,
+                                  CLlmLayer* llm = nullptr);
 
     SOrchestrationResult run(const SOrchestrationRequest& request) const;
 
@@ -66,6 +68,7 @@ private:
     CLogger& m_logger;
     CHistorian* m_historian = nullptr;
     CCursorContextAnalyzer* m_cursor_analyzer = nullptr;
+    CLlmLayer* m_llm = nullptr;
 };
 
 } // namespace fcpp
