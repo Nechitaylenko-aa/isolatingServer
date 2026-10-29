@@ -150,6 +150,26 @@ TEST_CASE("conversation session lifecycle mutations roll back with their events"
     std::filesystem::remove(path);
 }
 
+TEST_CASE("conversation replay does not treat failed assistant messages as answers", "[conversation]")
+{
+    const std::vector<fcpp::SConversationEvent> events{
+        {1, "s", "user", R"({"text":"request that failed"})", 1},
+        {2, "s", "assistant", R"({"text":"internal failure detail","ok":false})", 2},
+        {3, "s", "user", R"({"text":"next request"})", 3},
+        {4, "s", "assistant", R"({"text":"successful answer","ok":true})", 4}
+    };
+
+    const auto turns = fcpp::reconstruct_conversation_turns(events);
+    REQUIRE(turns.size() == 2);
+    REQUIRE(turns[0].m_user_text == "request that failed");
+    REQUIRE(turns[0].m_assistant_text.empty());
+    REQUIRE(turns[0].m_last_event_id == 1);
+    REQUIRE(turns[1].m_user_text == "next request");
+    REQUIRE(turns[1].m_assistant_text == "successful answer");
+    REQUIRE(turns[1].m_last_event_id == 4);
+}
+
+
 TEST_CASE("conversation state projection preserves provenance and only trusts typed events", "[conversation]")
 {
     const std::vector<fcpp::SConversationEvent> events{

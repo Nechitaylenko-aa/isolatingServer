@@ -293,6 +293,8 @@ std::vector<SConversationTurn> reconstruct_conversation_turns(
             }
             else if (event.m_kind == "assistant" && payload.is_object()
                      && payload.contains("text") && payload["text"].is_string()
+                     && !(payload.contains("ok") && payload["ok"].is_boolean()
+                          && !payload["ok"].get<bool>())
                      && !pending_user.empty())
             {
                 turns.push_back(SConversationTurn{
