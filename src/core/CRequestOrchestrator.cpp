@@ -32,11 +32,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     SOrchestrationResult result;
     result.m_route = "NO_APPLICABLE_CONTEXT";
 
-    m_logger.log(ELogLevel::Info, SLogEvent::request_started(
-        request.m_request_id, request.m_session_id, request.m_text.size(),
-        !request.m_cursor_file.empty() && request.m_cursor_line > 0
-            && request.m_cursor_column > 0,
-        request.m_history.size()));
+    m_logger.log(ELogLevel::Info, request);
 
     if (request.m_text.empty())
     {
@@ -44,9 +40,8 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         result.m_exit_reason = "EMPTY_REQUEST";
         result.m_message = "Request rejected: text is empty.";
         result.m_trace = {"VALIDATION:FAILED", "EXIT:EMPTY_REQUEST"};
-        m_logger.log(ELogLevel::Error, SLogEvent::request_finished(
-            request.m_request_id, request.m_session_id, result.m_status,
-            result.m_route, result.m_exit_reason, 0));
+        m_logger.log(ELogLevel::Error, result, request.m_request_id,
+            request.m_session_id, 0);
         return result;
     }
 
@@ -65,9 +60,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
             request.m_cursor_column, request.m_cursor_compile_arguments);
         result.m_cursor_symbol = cursor.m_symbol;
         m_logger.log(cursor.m_ok ? ELogLevel::Info : ELogLevel::Error,
-            SLogEvent::cursor_assessed(request.m_request_id, cursor.m_symbol.has_value(),
-                cursor.m_llm_called, cursor.m_ok, cursor.m_context_applicable,
-                cursor.m_escalated));
+            cursor, request.m_request_id);
         if (!cursor.m_ok)
             failure = "CURSOR_RELEVANCE_FAILED";
         else
@@ -80,8 +73,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         const SHistoryRelevance history =
             m_historian->assess_relevance(request.m_text, request.m_history);
         m_logger.log(history.m_ok ? ELogLevel::Info : ELogLevel::Error,
-            SLogEvent::history_assessed(request.m_request_id, request.m_history.size(),
-                history.m_ok, history.m_history_needed, history.m_escalated));
+            history, request.m_request_id, request.m_history.size());
         if (!history.m_ok)
             failure = "HISTORY_RELEVANCE_FAILED";
         else
@@ -122,8 +114,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - started).count();
     m_logger.log(result.m_ok ? ELogLevel::Info : ELogLevel::Error,
-        SLogEvent::request_finished(request.m_request_id, request.m_session_id,
-            result.m_status, result.m_route, result.m_exit_reason, elapsed));
+        result, request.m_request_id, request.m_session_id, elapsed);
     return result;
 }
 

@@ -3,6 +3,10 @@
  * @brief File logger implementation.
  */
 #include "core/CLogger.h"
+#include "core/CRequestOrchestrator.h"
+#include "core/CCursorContextAnalyzer.h"
+#include "core/CHistorian.h"
+#include "fcpp-agent/SError.h"
 
 #include <chrono>
 #include <cstddef>
@@ -55,6 +59,51 @@ void CLogger::log(ELogLevel level, const std::string& message)
 void CLogger::log(ELogLevel level, const SLogEvent& event)
 {
     log_event(level, event.m_name, event.m_fields);
+}
+
+void CLogger::log(ELogLevel level, const SOrchestrationRequest& request)
+{
+    log_event(level, "request.started",
+        {{"request_id", request.m_request_id}, {"session_id", request.m_session_id},
+         {"text_length", request.m_text.size()},
+         {"has_cursor", !request.m_cursor_file.empty()
+             && request.m_cursor_line > 0 && request.m_cursor_column > 0},
+         {"history_turns", request.m_history.size()}});
+}
+
+void CLogger::log(ELogLevel level, const SOrchestrationResult& result,
+                  const std::string& request_id, const std::string& session_id,
+                  long long elapsed_ms)
+{
+    log_event(level, "request.finished",
+        {{"request_id", request_id}, {"session_id", session_id},
+         {"status", result.m_status}, {"route", result.m_route},
+         {"exit_reason", result.m_exit_reason}, {"elapsed_ms", elapsed_ms}});
+}
+
+void CLogger::log(ELogLevel level, const SCursorContextResult& result,
+                  const std::string& request_id)
+{
+    log_event(level, "cursor.assessed",
+        {{"request_id", request_id}, {"has_symbol", result.m_symbol.has_value()},
+         {"llm_called", result.m_llm_called}, {"ok", result.m_ok},
+         {"applicable", result.m_context_applicable}, {"escalated", result.m_escalated},
+         {"error", result.m_error}});
+}
+
+void CLogger::log(ELogLevel level, const SHistoryRelevance& result,
+                  const std::string& request_id, std::size_t history_turns)
+{
+    log_event(level, "history.assessed",
+        {{"request_id", request_id}, {"history_turns", history_turns},
+         {"ok", result.m_ok}, {"needed", result.m_history_needed},
+         {"escalated", result.m_escalated}, {"error", result.m_error}});
+}
+
+void CLogger::log(ELogLevel level, const SError& error)
+{
+    log_event(level, "operation.failed",
+        {{"error_kind", error_kind_name(error.m_kind)}, {"message", error.m_message}});
 }
 
 void CLogger::log_event(ELogLevel level, const std::string& event,
