@@ -12,6 +12,15 @@
 
 namespace fcpp
 {
+enum class EPromptType
+{
+    CppAssistant,
+    YesNo,
+    CursorRelevance,
+    HistoryRelevance,
+    ScopeClassification
+};
+
 struct SLlmExecutionResult
 {
     bool m_ok = false;
@@ -39,6 +48,11 @@ public:
 
     CLlmLayer(const SLlmRoleSet& roles, ILogger& logger, TModelFactory factory = {});
 
+    // The caller chooses the prompt contract; this layer builds the system prompt.
+    SLlmExecutionResult request_text(
+        ELlmRole role, EPromptType prompt_type, const std::string& request);
+
+    // Explicit-prompt overload retained for specialized callers.
     SLlmExecutionResult request_text(
         ELlmRole role, const std::string& system_prompt, const std::string& request);
 
