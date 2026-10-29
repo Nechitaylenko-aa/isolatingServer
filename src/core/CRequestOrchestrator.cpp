@@ -68,7 +68,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     }
 
     // Assess history independently: cursor and history can both be applicable.
-    if (failure.empty() && !request.m_history.empty() && m_historian != nullptr)
+    if (failure == EExitReason::None && !request.m_history.empty() && m_historian != nullptr)
     {
         const SHistoryRelevance history =
             m_historian->assess_relevance(request.m_text, request.m_history);
