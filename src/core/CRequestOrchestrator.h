@@ -49,6 +49,7 @@ struct SOrchestrationResult
     std::vector<ETraceEvent> m_trace;
     std::string m_message;
     std::optional<SClangSymbol> m_cursor_symbol;
+    std::vector<SConversationTurn> m_history_context;
 };
 
 /**

@@ -4,6 +4,8 @@
  */
 
 #include "core/CRequestOrchestrator.h"
+
+#include <cstddef>
 #include "core/CHistorian.h"
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CLogger.h"
@@ -124,10 +126,20 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
             assessed, request.m_request_id, request.m_history.size());
 
         if (!assessed.m_ok)
+        {
             failure = EExitReason::HistoryRelevanceFailed;
+        }
         else
+        {
             history = assessed.m_history_needed
                 ? EApplicability::Applicable : EApplicability::NotApplicable;
+            result.m_history_context.clear();
+            for (const std::size_t index : assessed.m_relevant_turn_indices)
+            {
+                if (index < request.m_history.size())
+                    result.m_history_context.push_back(request.m_history[index]);
+            }
+        }
     }
 
     if (failure != EExitReason::None)
