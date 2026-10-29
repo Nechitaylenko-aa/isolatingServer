@@ -81,7 +81,8 @@ private:
     void generate_and_audit_default_answer(
         const SOrchestrationRequest& request, SOrchestrationResult& result) const;
     void generate_and_audit_cursor_answer(
-        const SOrchestrationRequest& request, SOrchestrationResult& result) const;
+        const SOrchestrationRequest& request, SOrchestrationResult& result,
+        bool include_history = false) const;
     CLogger& m_logger;
     CHistorian* m_historian = nullptr;
     CCursorContextAnalyzer* m_cursor_analyzer = nullptr;

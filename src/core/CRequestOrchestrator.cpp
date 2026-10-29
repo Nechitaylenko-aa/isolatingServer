@@ -36,7 +36,8 @@ CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historia
 }
 
 void CRequestOrchestrator::generate_and_audit_cursor_answer(
-    const SOrchestrationRequest& request, SOrchestrationResult& result) const
+    const SOrchestrationRequest& request, SOrchestrationResult& result,
+    bool include_history) const
 {
     if (m_llm == nullptr)
     {
@@ -62,10 +63,20 @@ void CRequestOrchestrator::generate_and_audit_cursor_answer(
         return;
     }
 
-    const std::string prompt_input =
+    std::string prompt_input =
         "CURSOR SOURCE CONTEXT (extracted by Clang):\n"
-        + result.m_cursor_context
-        + "\n\nUSER REQUEST:\n" + request.m_text;
+        + result.m_cursor_context;
+
+    if (include_history)
+    {
+        prompt_input += "\n\nRELEVANT CONVERSATION HISTORY (selected by historian):\n";
+        for (const SConversationTurn& turn : result.m_history_context)
+        {
+            prompt_input += "USER: " + turn.m_user_text + "\n";
+            prompt_input += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
+        }
+    }
+    prompt_input += "\nUSER REQUEST:\n" + request.m_text;
 
     const SLlmExecutionResult generated = m_llm->request_text(
         ELlmRole::CoderSmart, EPromptType::CppExpert, prompt_input);
@@ -279,11 +290,14 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
             break;
 
         case EOrchestrationRoute::CursorAndHistoryContextRequired:
+            generate_and_audit_cursor_answer(request, result, true);
+            break;
+
         case EOrchestrationRoute::HistoryContextRequired:
             result.m_ok = true;
             result.m_status = ERequestStatus::StubComplete;
             result.m_exit_reason = EExitReason::ScopeClassificationNotImplemented;
-            result.m_message = "Selected context route is not implemented yet.";
+            result.m_message = "History-only route is not implemented yet.";
             result.m_trace.emplace_back(ETraceEvent::ScopeNotImplemented);
             break;
 
