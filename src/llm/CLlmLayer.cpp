@@ -38,12 +38,10 @@ const char* system_prompt_for(EPromptType type)
 
 std::string trim_ascii(const std::string& value)
 {
-    const std::size_t first = value.find_first_not_of(" 	
-");
+    const std::size_t first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos)
         return {};
-    const std::size_t last = value.find_last_not_of(" 	
-");
+    const std::size_t last = value.find_last_not_of(" \t\r\n");
     return value.substr(first, last - first + 1);
 }
 
@@ -240,7 +238,7 @@ SLlmExecutionResult CLlmLayer::request_text(
     ELlmRole role, EPromptType prompt_type, const std::string& request)
 {
     const char* system_prompt = system_prompt_for(prompt_type);
-    if (*system_prompt == '\\0')
+    if (*system_prompt == '\0')
     {
         SLlmExecutionResult result;
         result.m_error = "invalid prompt type";
