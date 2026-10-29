@@ -1,6 +1,7 @@
 #ifndef FCPP_AGENT_CHISTORIAN_H
 #define FCPP_AGENT_CHISTORIAN_H
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@ struct SHistoryRelevance
 {
     bool m_ok = false;
     bool m_history_needed = false;
+    std::vector<std::size_t> m_selected_turn_indices;
     bool m_escalated = false;
     std::string m_error;
     ELlmRole m_used_role = ELlmRole::Count;

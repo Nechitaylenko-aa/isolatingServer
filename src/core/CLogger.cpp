@@ -98,6 +98,14 @@ void CLogger::log(ELogLevel level, const SHistoryRelevance& result,
     log_event(level, "history.assessed",
         {{"request_id", request_id}, {"history_turns", history_turns},
          {"ok", result.m_ok}, {"needed", result.m_history_needed},
+         {"selected_turn_count", result.m_selected_turn_indices.size()},
+         {"selected_turns", [&result]()
+            {
+                nlohmann::json selected = nlohmann::json::array();
+                for (const std::size_t index : result.m_selected_turn_indices)
+                    selected.push_back(index + 1);
+                return selected;
+            }()},
          {"escalated", result.m_escalated}, {"error", result.m_error}});
 }
 
