@@ -32,11 +32,11 @@ TEST_CASE("request orchestrator walks stub tree and returns terminal reason")
     const SOrchestrationResult result = orchestrator.run(request);
 
     REQUIRE(result.m_ok);
-    REQUIRE(result.m_status == "STUB_COMPLETE");
-    REQUIRE(result.m_exit_reason == "SCOPE_CLASSIFICATION_NOT_IMPLEMENTED");
-    REQUIRE(result.m_route == "NO_APPLICABLE_CONTEXT");
+    REQUIRE(result.m_status == ERequestStatus::StubComplete);
+    REQUIRE(result.m_exit_reason == EExitReason::ScopeClassificationNotImplemented);
+    REQUIRE(result.m_route == EOrchestrationRoute::NoApplicableContext);
     REQUIRE(result.m_trace.size() == 5);
-    REQUIRE(result.m_trace.back() == "EXIT:SCOPE_CLASSIFICATION_NOT_IMPLEMENTED");
+    REQUIRE(result.m_trace.back() == ETraceEvent::ExitScopeClassificationNotImplemented);
     REQUIRE(result.m_message.find("No answer generated") != std::string::npos);
 
     std::ifstream log_file(logger.path());
@@ -69,9 +69,9 @@ TEST_CASE("request orchestrator rejects an empty request and logs the exit")
     const SOrchestrationResult result = orchestrator.run(request);
 
     REQUIRE_FALSE(result.m_ok);
-    REQUIRE(result.m_status == "REJECTED");
-    REQUIRE(result.m_exit_reason == "EMPTY_REQUEST");
-    REQUIRE(result.m_trace.back() == "EXIT:EMPTY_REQUEST");
+    REQUIRE(result.m_status == ERequestStatus::Rejected);
+    REQUIRE(result.m_exit_reason == EExitReason::EmptyRequest);
+    REQUIRE(result.m_trace.back() == ETraceEvent::ExitEmptyRequest);
 
     std::ifstream log_file(logger.path());
     REQUIRE(log_file.is_open());
