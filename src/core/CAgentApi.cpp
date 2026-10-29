@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/CRequestOrchestrator.h"
+#include "llm/CLlmLayer.h"
 #include "core/CLogger.h"
 #include "core/CHash.h"
 #include "core/CDoctor.h"
@@ -876,7 +877,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
     orchestration_request.m_history = conversation_history;
     orchestration_request.m_project_open = m_project_manager.is_opened();
 
-    CRequestOrchestrator orchestrator(m_logger);
+    CLlmLayer llm(m_config_manager.config().m_llm_roles, m_logger);\n    CRequestOrchestrator orchestrator(m_logger, nullptr, nullptr, &llm);
     const SOrchestrationResult orchestration_result = orchestrator.run(orchestration_request);
 
     SApiResponse response;
