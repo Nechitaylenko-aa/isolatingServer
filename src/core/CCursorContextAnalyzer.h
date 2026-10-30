@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "fcpp-agent/IClang.h"
-#include "fcpp-agent/IFactProvider.h"
 #include "llm/CLlmLayer.h"
 
 namespace fcpp
@@ -27,6 +26,33 @@ struct SCursorSliceLimits
     std::size_t m_radius_lines = 60; ///< Сколько строк брать выше и ниже курсора.
     std::size_t m_max_bytes = 10000; ///< Жёсткий лимит размера среза.
 };
+
+/**
+ * @brief Ограничения ограниченного среза файла целиком.
+ *
+ * Срез читается с начала файла и всегда укладывается в лимит: в модель не
+ * уходит файл произвольного размера (Zero-Window).
+ */
+struct SFileSliceLimits
+{
+    std::size_t m_max_bytes = 8000; ///< Жёсткий лимит размера среза.
+};
+
+/**
+ * @brief Прочитать ограниченный срез файла любого типа.
+ *
+ * @param file Путь к файлу.
+ * @param limits Ограничения среза.
+ * @param out_slice Выходной текст среза.
+ * @param out_truncated Признак усечения по лимиту.
+ * @param out_error Причина сбоя.
+ * @return true при успехе.
+ */
+bool read_file_slice(const std::filesystem::path& file,
+                     const SFileSliceLimits& limits,
+                     std::string& out_slice,
+                     bool& out_truncated,
+                     std::string& out_error);
 
 /**
  * @brief Результат оценки применимости курсорного контекста.

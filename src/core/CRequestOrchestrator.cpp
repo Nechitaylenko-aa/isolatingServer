@@ -209,27 +209,14 @@ void CRequestOrchestrator::answer_from_file(const SOrchestrationRequest& request
     }
     else
     {
-        // No confirmed entity: a bounded slice, not the whole file. The same
-        // limits as the cursor path keep the context window predictable.
-        SFileSliceLimits limits;
-        std::string slice;
-        bool truncated = false;
-        std::string error;
-        if (read_file_slice(request.m_cursor_file, limits, slice, truncated, error))
-        {
-            prompt = "FILE CONTENT (bounded slice):\n" + slice;
-        }
-        else
-        {
-            // The slice was already read during relevance assessment; reuse it
-            // rather than failing after the file was successfully opened once.
-            prompt = "FILE CONTENT:\n" + result.m_file_context;
-        }
+        // The bounded slice was produced by the relevance assessment; reuse it
+        // instead of reading the same file a second time.
+        prompt = "FILE CONTENT (bounded slice):\n" + result.m_file_context;
         m_logger.log_event(ELogLevel::Info, "prompt.composed",
             {{"request_id", request.m_request_id},
              {"stage", "file_answer"},
              {"mode", "bounded_slice"},
-             {"truncated", truncated},
+             {"slice_bytes", result.m_file_context.size()},
              {"prompt_bytes", prompt.size()}});
     }
 

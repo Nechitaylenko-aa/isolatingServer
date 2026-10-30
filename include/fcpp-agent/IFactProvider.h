@@ -10,9 +10,7 @@
 #ifndef FCPP_AGENT_IFACTPROVIDER_H
 #define FCPP_AGENT_IFACTPROVIDER_H
 
-#include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -66,33 +64,6 @@ struct SFactResult
 /**
  * @brief Поставщик фактов о кодовой базе.
  */
-/**
- * @brief Ограничения ограниченного среза файла.
- *
- * Срез читается с начала файла и всегда укладывается в лимит: в модель не
- * уходит файл целиком (Zero-Window).
- */
-struct SFileSliceLimits
-{
-    std::size_t m_max_bytes = 8000; ///< Жёсткий лимит размера среза.
-};
-
-/**
- * @brief Прочитать ограниченный срез файла любого типа.
- *
- * @param file Путь к файлу.
- * @param limits Ограничения среза.
- * @param out_slice Выходной текст среза.
- * @param out_truncated Признак усечения по лимиту.
- * @param out_error Причина сбоя.
- * @return true при успехе.
- */
-bool read_file_slice(const std::filesystem::path& file,
-                     const SFileSliceLimits& limits,
-                     std::string& out_slice,
-                     bool& out_truncated,
-                     std::string& out_error);
-
 /**
  * @brief Поставщик фактов о кодовой базе.
  */

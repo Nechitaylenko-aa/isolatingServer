@@ -348,6 +348,42 @@ SCursorContextResult CCursorContextAnalyzer::assess(
     return result;
 }
 
+bool read_file_slice(const std::filesystem::path& file,
+                     const SFileSliceLimits& limits,
+                     std::string& out_slice,
+                     bool& out_truncated,
+                     std::string& out_error)
+{
+    out_truncated = false;
+    out_slice.clear();
+
+    std::ifstream input(file, std::ios::binary);
+    if (!input.is_open())
+    {
+        out_error = "cannot open file: " + file.filename().string();
+        return false;
+    }
+
+    std::string raw((std::istreambuf_iterator<char>(input)),
+                    std::istreambuf_iterator<char>());
+    if (raw.empty())
+    {
+        out_error = "file is empty: " + file.filename().string();
+        return false;
+    }
+
+    if (raw.size() > limits.m_max_bytes)
+    {
+        out_slice = utf8_prefix(raw, limits.m_max_bytes)
+            + "\n[CONTENT TRUNCATED BY SIZE LIMIT]\n";
+        out_truncated = true;
+        return true;
+    }
+
+    out_slice = std::move(raw);
+    return true;
+}
+
 SFileContextResult CCursorContextAnalyzer::assess_file(
     const std::string& current_request,
     const std::filesystem::path& source_file,

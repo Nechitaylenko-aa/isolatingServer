@@ -5,10 +5,7 @@
 
 #include "core/CIndexFactProvider.h"
 
-#include <cstddef>
 #include <cstdint>
-#include <fstream>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <utility>
@@ -21,64 +18,6 @@
 
 namespace fcpp
 {
-
-/**
- * @brief Оставить в строке не больше max_bytes байт по границе UTF-8.
- * @param text Исходная строка.
- * @param max_bytes Лимит байт.
- * @return Префикс без разрезанного символа UTF-8.
- */
-static std::string utf8_head(const std::string& text, std::size_t max_bytes)
-{
-    if (text.size() <= max_bytes)
-    {
-        return text;
-    }
-    std::size_t end = max_bytes;
-    while (end > 0 && end < text.size()
-           && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U)
-    {
-        --end;
-    }
-    return text.substr(0, end);
-}
-
-bool read_file_slice(const std::filesystem::path& file,
-                     const SFileSliceLimits& limits,
-                     std::string& out_slice,
-                     bool& out_truncated,
-                     std::string& out_error)
-{
-    out_truncated = false;
-    out_slice.clear();
-
-    std::ifstream input(file, std::ios::binary);
-    if (!input.is_open())
-    {
-        out_error = "cannot open file";
-        return false;
-    }
-
-    std::string raw((std::istreambuf_iterator<char>(input)),
-                    std::istreambuf_iterator<char>());
-    if (raw.empty())
-    {
-        out_error = "file is empty";
-        return false;
-    }
-
-    if (raw.size() > limits.m_max_bytes)
-    {
-        out_slice = utf8_head(raw, limits.m_max_bytes)
-            + "\n[CONTENT TRUNCATED BY SIZE LIMIT]\n";
-        out_truncated = true;
-        return true;
-    }
-
-    out_slice = std::move(raw);
-    return true;
-}
-
 namespace
 {
 
