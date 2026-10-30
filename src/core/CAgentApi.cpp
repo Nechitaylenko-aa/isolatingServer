@@ -764,14 +764,6 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
 
 SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 {
-    // Жёсткий контракт адресации диалога: без session_id нет ни истории, ни места
-    // для записи хода, поэтому запрос отклоняется до любой генерации.
-    if (request.m_session_id.empty())
-    {
-        return make_error(EErrorKind::InvalidRequest,
-                          "session_id is required; call session.open first");
-    }
-
     const bool answering_choice = !request.m_selected_option.empty();
     if ((!answering_choice && request.m_text.empty())
         || (answering_choice && request.m_answer_question_id == 0))
@@ -866,38 +858,77 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
     }
 
+    // Адрес диалога — забота агента, а не клиента. Проект открыт, значит проект
+    // адресуем: активная сессия уже создана в project.open и её id отправлен
+    // клиенту. Клиент вправе не передавать session_id, и тогда берётся активная
+    // сессия проекта.
+    //
+    // Если session_id всё же пришёл и не совпал с активной — это не параметр
+    // адресации, а признак поломки: либо в логике, либо балуются экземпляры.
+    // Такой запрос отклоняется и оставляет след в журнале.
+    const std::string current_project_id =
+        m_project_manager.current().m_project.m_project_id;
+    const std::string active_session_id = [&]() -> std::string
+    {
+        const auto active =
+            m_conversation_store.latest_session_for_project(current_project_id);
+        return active.has_value() ? active->m_id : std::string();
+    }();
+
+    std::string session_id = request.m_session_id.empty()
+        ? active_session_id : request.m_session_id;
+
+    if (!request.m_session_id.empty() && !active_session_id.empty()
+        && request.m_session_id != active_session_id)
+    {
+        m_logger.log_event(ELogLevel::Error, "session.foreign", {
+            {"request_id", request.m_request_id},
+            {"project_id", current_project_id},
+            {"received_matches_active", false},
+            {"active_session_known", true}
+        });
+        return make_error(
+            EErrorKind::InvalidRequest,
+            "session_id does not match the active conversation of the open project; "
+            "the client must not address the dialogue itself");
+    }
+
+    if (session_id.empty())
+    {
+        // Проект открыт, но активной сессии нет: project.open обязан был её
+        // создать. Пустой SID — это «агент в жопе», и это должно быть видно.
+        m_logger.log_event(ELogLevel::Error, "session.missing", {
+            {"request_id", request.m_request_id},
+            {"project_id", current_project_id},
+            {"stage", "resolve_active_session"}
+        });
+        return make_error(EErrorKind::IoError,
+                          "no active conversation session for the open project");
+    }
+
     std::string session_context_json = "{}";
     std::vector<SConversationTurn> conversation_history;
     std::vector<SConversationEvent> stored_events;
     {
-        const auto session = m_conversation_store.get_session(request.m_session_id);
+        const auto session = m_conversation_store.get_session(session_id);
         if (!session.has_value())
         {
             return make_error(EErrorKind::InvalidRequest, "unknown conversation session");
         }
-        if (m_project_manager.has_current())
+        if (!session->m_project_id.empty()
+            && session->m_project_id != current_project_id)
         {
-            const std::string& current_project =
-                m_project_manager.current().m_project.m_project_id;
-            if (!session->m_project_id.empty() && session->m_project_id != current_project)
-            {
-                return make_error(EErrorKind::InvalidRequest,
-                                  "conversation session belongs to another project");
-            }
-            // Сессия без проекта (созданная до open) фиксируется за первым
-            // проектом, в котором её используют, — иначе она стала бы каналом
-            // смешивания историй разных проектов.
-            if (session->m_project_id.empty()
-                && !m_conversation_store.bind_project(request.m_session_id, current_project))
-            {
-                return make_error(EErrorKind::IoError,
-                                  "cannot bind conversation session to the current project");
-            }
+            return make_error(EErrorKind::InvalidRequest,
+                              "conversation session belongs to another project");
         }
-        else if (!session->m_project_id.empty())
+        // Сессия без проекта (созданная до open) фиксируется за первым проектом,
+        // в котором её используют, — иначе она стала бы каналом смешивания
+        // историй разных проектов.
+        if (session->m_project_id.empty()
+            && !m_conversation_store.bind_project(session_id, current_project_id))
         {
-            return make_error(EErrorKind::ProjectNotOpen,
-                              "conversation session belongs to a project; open it first");
+            return make_error(EErrorKind::IoError,
+                              "cannot bind conversation session to the current project");
         }
 
         session_context_json = session->m_context_json;
@@ -906,7 +937,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         while (true)
         {
             std::vector<SConversationEvent> page = m_conversation_store.events(
-                request.m_session_id, after_event_id, k_event_page_size);
+                session_id, after_event_id, k_event_page_size);
             if (page.empty())
             {
                 break;
@@ -938,7 +969,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
             user_event["answer_question_id"] = request.m_answer_question_id;
             user_event["selected_option"] = request.m_selected_option;
         }
-        if (!m_conversation_store.append_event(request.m_session_id, "user", user_event.dump()))
+        if (!m_conversation_store.append_event(session_id, "user", user_event.dump()))
         {
             return make_error(EErrorKind::IoError, "cannot persist user message");
         }
@@ -947,7 +978,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
     SOrchestrationRequest orchestration_request;
     orchestration_request.m_request_id = request.m_request_id;
     orchestration_request.m_text = effective_text;
-    orchestration_request.m_session_id = request.m_session_id;
+    orchestration_request.m_session_id = session_id;
     orchestration_request.m_cursor_line = request.m_editor_line;
     orchestration_request.m_cursor_column = request.m_editor_column;
     orchestration_request.m_history = conversation_history;
@@ -1039,11 +1070,13 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         {
             assistant_event["question"] = chat_question_json(response.m_question);
         }
-        if (!m_conversation_store.append_event(request.m_session_id, "assistant", assistant_event.dump()))
+        if (!m_conversation_store.append_event(session_id, "assistant", assistant_event.dump()))
         {
             return make_error(EErrorKind::IoError, "answer produced but could not persist conversation event");
         }
-        response.m_session_id = request.m_session_id;
+        // The client learns the dialogue address even when it never sent one:
+        // the id comes back on every answer.
+        response.m_session_id = session_id;
     }
     if (response.m_ok && !response.m_has_question)
     {

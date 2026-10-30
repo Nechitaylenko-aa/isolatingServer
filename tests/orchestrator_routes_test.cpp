@@ -284,7 +284,192 @@ std::unique_ptr<CFixedSymbolClang> make_clang(
     return std::make_unique<CFixedSymbolClang>(std::move(symbol));
 }
 
+/**
+ * @brief Роли с разными окнами у удалённой и локальной модели.
+ *
+ * Окна заданы явно, поэтому проба провайдера не выполняется и тест не ходит в
+ * сеть: именно это и нужно, чтобы видеть, по какой роли посчитан бюджет.
+ *
+ * @param smart_window Окно удалённой роли (отвечает на курсорных маршрутах).
+ * @param local_window Окно локальной роли (отвечает на историю и общий вопрос).
+ * @return Набор ролей.
+ */
+fcpp::SLlmRoleSet make_roles(std::size_t smart_window, std::size_t local_window)
+{
+    fcpp::SLlmRoleSet roles;
+    const auto configure = [](fcpp::SLlmModelRole& role, fcpp::ELlmRole which,
+                              std::size_t window)
+    {
+        role.m_api = "http://127.0.0.1:9/v1";
+        role.m_model = "test";
+        role.m_type = "openai-compat";
+        role.m_configured = true;
+        role.m_resolved_api = role.m_api;
+        role.m_resolved_model = role.m_model;
+        role.m_resolved_type = role.m_type;
+        role.m_resolved_role = which;
+        role.m_resolved_context_window_tokens = window;
+        role.m_resolved_output_reserve_tokens = 1024;
+    };
+    configure(roles.at(fcpp::ELlmRole::CoderSmart), fcpp::ELlmRole::CoderSmart, smart_window);
+    configure(roles.at(fcpp::ELlmRole::CoderLocal), fcpp::ELlmRole::CoderLocal, local_window);
+    configure(roles.at(fcpp::ELlmRole::ThinkerSmart), fcpp::ELlmRole::ThinkerSmart, smart_window);
+    configure(roles.at(fcpp::ELlmRole::ThinkerLocal), fcpp::ELlmRole::ThinkerLocal, local_window);
+    return roles;
+}
+
 } // namespace
+
+TEST_CASE("route plan resolves to the role that actually answers",
+          "[orchestrator][budget][route-role]")
+{
+    // Invariant of the whole budget: every route must name the role that the
+    // answer step really calls. If this drifts, budget is planned against one
+    // window and the answer overflows another.
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::CursorContextRequired) == fcpp::ELlmRole::CoderSmart);
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::CursorAndHistoryContextRequired) == fcpp::ELlmRole::CoderSmart);
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::FileContextRequired) == fcpp::ELlmRole::CoderSmart);
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::FileAndHistoryContextRequired) == fcpp::ELlmRole::CoderSmart);
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::HistoryContextRequired) == fcpp::ELlmRole::CoderLocal);
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::NoApplicableContext) == fcpp::ELlmRole::CoderLocal);
+    REQUIRE(fcpp::answer_role_for_route(
+                fcpp::EOrchestrationRoute::Unselected) == fcpp::ELlmRole::Count);
+}
+
+TEST_CASE("history route is budgeted against the local window, not the remote one",
+          "[orchestrator][budget][route-role]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-route-budget-local");
+
+    SScript script;
+    script.m_selection = "1";
+    script.m_answer = "history answer";
+
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    // Remote window 57344, local window 8192: the difference is unmistakable.
+    const fcpp::SLlmRoleSet roles = make_roles(57344, 8192);
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+    fcpp::CHistorian historian(llm);
+    fcpp::CRequestOrchestrator orchestrator(logger, &historian, nullptr, &llm);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "route-budget-local";
+    request.m_text = "What did I ask you to remember?";
+    request.m_history = {{1, "Remember the red bicycle", "I will keep that."}};
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_route == fcpp::EOrchestrationRoute::HistoryContextRequired);
+    // The budget recorded in the result must be the local one: the answer went
+    // to CoderLocal, so sizing it against CoderSmart would be a lie.
+    REQUIRE(result.m_budget.m_ok);
+    REQUIRE(result.m_budget.m_window == 8192);
+
+    const std::string log_text = read_log(logger);
+    REQUIRE(log_text.find("history answer") == std::string::npos);
+    // Two fit checks on entry (both candidate roles), then the real role budget.
+    REQUIRE(count_events(log_text, "context.request_fit") == 2);
+    REQUIRE(count_events(log_text, "context.budget") == 1);
+    REQUIRE(log_text.find(R"("role":"CODER_LOCAL")") != std::string::npos);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+}
+
+TEST_CASE("cursor route is budgeted against the remote window",
+          "[orchestrator][budget][route-role]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-route-budget-remote");
+    const std::filesystem::path source = dir / "widget.h";
+    write_file(source, "class CWidget\n{\npublic:\n    int value() const;\n};\n");
+
+    SScript script;
+    script.m_relevance = "YES";
+    script.m_answer = "cursor answer";
+
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    const fcpp::SLlmRoleSet roles = make_roles(57344, 8192);
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+    const auto clang = make_clang(source, "CWidget");
+    fcpp::CCursorContextAnalyzer analyzer(*clang, llm);
+    fcpp::CRequestOrchestrator orchestrator(logger, nullptr, &analyzer, &llm);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "route-budget-remote";
+    request.m_text = "What does this class do?";
+    request.m_cursor_file = source.string();
+    request.m_cursor_line = 2;
+    request.m_cursor_column = 3;
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_route == fcpp::EOrchestrationRoute::CursorContextRequired);
+    REQUIRE(result.m_budget.m_ok);
+    // The cursor route answers with the smart coder, so its window applies.
+    REQUIRE(result.m_budget.m_window == 57344);
+    REQUIRE(result.m_budget.m_cursor > 30000);
+
+    const std::string log_text = read_log(logger);
+    REQUIRE(log_text.find(R"("role":"CODER_SMART")") != std::string::npos);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+}
+
+TEST_CASE("request that fits the remote window but not the local one is refused",
+          "[orchestrator][budget][route-role]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-route-budget-refuse");
+
+    SScript script;
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    const fcpp::SLlmRoleSet roles = make_roles(57344, 2048);
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+    fcpp::CHistorian historian(llm);
+    fcpp::CRequestOrchestrator orchestrator(logger, &historian, nullptr, &llm);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "route-budget-refuse";
+    // ~3300 tokens: fits 57344-1024, does not fit 2048-1024.
+    request.m_text = std::string(10000, 'x');
+    request.m_history = {{1, "Anything", "Something."}};
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    // Refused on entry: the route could have been answered by the local model,
+    // so admitting the request would risk an overflow nobody planned for.
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_exit_reason == fcpp::EExitReason::RequestTooLong);
+    REQUIRE(result.m_route == fcpp::EOrchestrationRoute::Unselected);
+    REQUIRE(script.m_calls.empty());
+
+    const std::string log_text = read_log(logger);
+    REQUIRE(count_events(log_text, "context.request_fit") == 2);
+    REQUIRE(count_events(log_text, "request.finished") == 1);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+}
 
 TEST_CASE("cursor route sends the slice and index facts, never the history",
           "[orchestrator][route][cursor]")

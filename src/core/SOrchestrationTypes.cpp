@@ -76,6 +76,26 @@ const char* request_status_name(ERequestStatus value)
         ? m_request_status_names[index] : "UNKNOWN";
 }
 
+ELlmRole answer_role_for_route(EOrchestrationRoute route)
+{
+    // Direct indexing by the route enum keeps the table and the enum in step:
+    // adding a route without naming its answering role fails to compile.
+    static const ELlmRole k_answer_roles[static_cast<std::size_t>(EOrchestrationRoute::Count)]
+    {
+        ELlmRole::Count,      // Unselected
+        ELlmRole::CoderLocal, // NoApplicableContext
+        ELlmRole::CoderSmart, // CursorContextRequired
+        ELlmRole::CoderLocal, // HistoryContextRequired
+        ELlmRole::CoderSmart, // CursorAndHistoryContextRequired
+        ELlmRole::CoderSmart, // FileContextRequired
+        ELlmRole::CoderSmart  // FileAndHistoryContextRequired
+    };
+
+    const auto index = static_cast<std::size_t>(route);
+    return index < static_cast<std::size_t>(EOrchestrationRoute::Count)
+        ? k_answer_roles[index] : ELlmRole::Count;
+}
+
 const char* exit_reason_name(EExitReason value)
 {
     const auto index = static_cast<std::size_t>(value);

@@ -146,11 +146,19 @@ public:
 
     /**
      * @brief Обновить индекс, если он устарел (точечно или полным rebuild).
+     *
+     * При полном rebuild используется переданный инвентарь, а не сохранённый в
+     * активном поколении: если устаревание вызвано появлением нового
+     * translation unit, старый инвентарь его не содержит и индекс снова
+     * оказался бы устаревшим.
+     *
      * @param clang Backend доступа к libclang.
      * @param external_compile_commands Путь к compile_commands.json (может быть пустым).
+     * @param fresh_commands Актуальный инвентарь с диска (пусто — взять сохранённый).
      * @return true при успехе; false при ошибке.
      */
-    bool refresh_if_stale(IClang& clang, const std::string& external_compile_commands);
+    bool refresh_if_stale(IClang& clang, const std::string& external_compile_commands,
+                          const std::vector<SCompileCommand>& fresh_commands = {});
 
     /**
      * @brief Сохранить отпечаток compile_commands.json для детекции изменений окружения.

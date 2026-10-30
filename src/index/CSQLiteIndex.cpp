@@ -2211,20 +2211,28 @@ bool CSQLiteIndex::detect_stale(const std::string& external_compile_commands, SS
         }
     }
 
-    // 4. Новые файлы (в этом инкременте не поддерживаются — требует нового инвентаря).
-    const std::vector<std::string> externals = external_tu_paths(external_compile_commands);
-    for (const std::string& path : externals)
+    // 4. Новые translation units. Список путей обязан проходить ровно тот же
+    // фильтр, что и store_inventory(): писатель отбрасывает внешние пути
+    // (/usr/, /opt/, /_deps/), поэтому их отсутствие в `file` — норма, а не
+    // признак смены окружения. Без этого фильтра любой внешний TU
+    // (например, sqlite3.c из build/_deps) навсегда объявлял индекс устаревшим
+    // и вызывал полный rebuild на каждом открытии проекта.
+    std::set<std::string> indexed_paths;
+    for (const SFileRecord& record : files)
     {
-        bool known = false;
-        for (const SFileRecord& record : files)
+        indexed_paths.insert(record.m_path);
+    }
+
+    const std::vector<std::string> externals = external_tu_paths(external_compile_commands);
+    for (const std::string& raw_path : externals)
+    {
+        const std::filesystem::path normalized =
+            CProjectPaths::resolve(raw_path, m_project_root);
+        if (normalized.empty() || is_external_path(normalized, m_project_root.lexically_normal()))
         {
-            if (record.m_path == path)
-            {
-                known = true;
-                break;
-            }
+            continue;
         }
-        if (!known)
+        if (indexed_paths.find(normalized.string()) == indexed_paths.end())
         {
             out_report.m_reason = EStaleReason::EnvironmentChange;
             return true;
@@ -2321,7 +2329,9 @@ std::vector<std::string> CSQLiteIndex::external_tu_paths(const std::string& exte
     return paths;
 }
 
-bool CSQLiteIndex::refresh_if_stale(IClang& clang, const std::string& external_compile_commands)
+bool CSQLiteIndex::refresh_if_stale(IClang& clang,
+                                    const std::string& external_compile_commands,
+                                    const std::vector<SCompileCommand>& fresh_commands)
 {
     SStaleReport report;
     if (!detect_stale(external_compile_commands, report))
@@ -2336,12 +2346,20 @@ bool CSQLiteIndex::refresh_if_stale(IClang& clang, const std::string& external_c
 
     if (report.m_reason == EStaleReason::EnvironmentChange || report.m_reason == EStaleReason::Missing)
     {
-        std::vector<SCompileCommand> commands;
-        if (!load_current_commands(commands))
+        // The inventory must come from the project, not from the previous
+        // generation: when stale was caused by a new translation unit, reusing
+        // the stored commands would drop that unit again and the index would be
+        // declared stale forever.
+        if (!fresh_commands.empty())
+        {
+            return rebuild(clang, fresh_commands);
+        }
+        std::vector<SCompileCommand> stored;
+        if (!load_current_commands(stored))
         {
             return false;
         }
-        return rebuild(clang, commands);
+        return rebuild(clang, stored);
     }
 
     // ContentChange: точечная переиндексация изменённых TU и их заголовков.

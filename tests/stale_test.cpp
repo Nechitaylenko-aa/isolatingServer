@@ -75,6 +75,42 @@ private:
 };
 
 /**
+ * @brief Перезаписать compile_commands.json для заданного набора TU.
+ *
+ * Внешний путь добавляется намеренно: реальный CMake всегда приносит в
+ * инвентарь файлы из build/_deps, которые индекс не хранит.
+ *
+ * @param project Корень проекта.
+ * @param src Каталог с исходниками (для -I).
+ * @param tus Список translation units.
+ */
+void write_commands(const std::filesystem::path& project,
+                    const std::filesystem::path& src,
+                    const std::vector<std::filesystem::path>& tus)
+{
+    const std::string directory = project.string();
+    const std::string include_flag = "-I" + src.string();
+
+    std::ofstream commands(project / "build" / "compile_commands.json");
+    commands << "[\n";
+    // Внешний TU: лежит под build/_deps, индексировать его запрещено.
+    const std::filesystem::path external =
+        project / "build" / "_deps" / "vendor-src" / "vendor.c";
+    std::filesystem::create_directories(external.parent_path());
+    std::ofstream(external) << "int vendor_symbol(void) { return 0; }\n";
+    commands << "  {\"directory\":\"" << directory << "\",\"file\":\"" << external.string()
+             << "\",\"arguments\":[\"cc\",\"-c\",\"" << external.string() << "\"]},\n";
+    for (std::size_t index = 0; index < tus.size(); ++index)
+    {
+        commands << "  {\"directory\":\"" << directory << "\",\"file\":\"" << tus[index].string()
+                 << "\",\"arguments\":[\"clang++\",\"-std=c++20\",\"" << include_flag
+                 << "\",\"-c\",\"" << tus[index].string() << "\"]}";
+        commands << (index + 1 < tus.size() ? ",\n" : "\n");
+    }
+    commands << "]\n";
+}
+
+/**
  * @brief Создать минимальный проект с двумя TU, включающими общий заголовок.
  * @return Путь к проекту.
  */
@@ -98,16 +134,7 @@ std::filesystem::path make_project()
     const std::string directory = project.string();
     const std::string include_flag = "-I" + src.string();
 
-    std::ofstream commands(project / "build" / "compile_commands.json");
-    commands << "[\n";
-    commands << "  {\"directory\":\"" << directory << "\",\"file\":\"" << (src / "a.cpp").string()
-             << "\",\"arguments\":[\"clang++\",\"-std=c++20\",\"" << include_flag << "\",\"-c\",\""
-             << (src / "a.cpp").string() << "\"]},\n";
-    commands << "  {\"directory\":\"" << directory << "\",\"file\":\"" << (src / "b.cpp").string()
-             << "\",\"arguments\":[\"clang++\",\"-std=c++20\",\"" << include_flag << "\",\"-c\",\""
-             << (src / "b.cpp").string() << "\"]}\n";
-    commands << "]\n";
-
+    write_commands(project, src, {src / "a.cpp", src / "b.cpp"});
     return project;
 }
 
@@ -171,6 +198,90 @@ TEST_CASE("stale: изменение заголовка помечает зав�
         REQUIRE_FALSE(report.is_stale());
         index.close_db();
     }
+
+    std::filesystem::remove_all(home);
+    std::filesystem::remove_all(project_dir);
+}
+
+TEST_CASE("stale: внешний TU из build/_deps не делает индекс устаревшим", "[stale][external]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-stale-ext-home");
+    HomeScope scope(home);
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    const std::filesystem::path project_dir = make_project();
+
+    fcpp::CProjectManager manager(config);
+    REQUIRE(manager.open(project_dir));
+    const fcpp::SProjectContext& project = manager.current();
+
+    // Инвентарь содержит vendor.c под build/_deps, который индекс не хранит.
+    // Его отсутствие в `file` — норма. Раньше это навсегда помечало индекс
+    // устаревшим и вызывало полный rebuild на каждом открытии проекта.
+    fcpp::CSQLiteIndex index(project.m_project.m_db_path);
+    REQUIRE(index.open(project.m_project.m_canonical_path));
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        fcpp::SStaleReport report;
+        REQUIRE(index.detect_stale(
+            (project_dir / "build" / "compile_commands.json").string(), report));
+        REQUIRE_FALSE(report.is_stale());
+    }
+    index.close_db();
+
+    // Открытие второго экземпляра на неизменённом проекте не должно
+    // порождать новую generation.
+    const std::uint64_t before = project.m_index_status.m_symbol_count;
+    REQUIRE(before > 0);
+
+    fcpp::CProjectManager second(config);
+    REQUIRE(second.open(project_dir));
+    REQUIRE(second.current().m_index_status.m_symbol_count == before);
+
+    std::filesystem::remove_all(home);
+    std::filesystem::remove_all(project_dir);
+}
+
+TEST_CASE("stale: новый TU с диска попадает в индекс через rebuild", "[stale][rebuild]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-stale-new-home");
+    HomeScope scope(home);
+
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    const std::filesystem::path project_dir = make_project();
+    const std::filesystem::path src = project_dir / "src";
+
+    fcpp::CProjectManager manager(config);
+    REQUIRE(manager.open(project_dir));
+    const std::uint64_t symbols_before =
+        manager.current().m_index_status.m_symbol_count;
+    REQUIRE(symbols_before > 0);
+
+    // Новый translation unit появляется в проекте и в инвентаре.
+    std::ofstream(src / "c.cpp")
+        << "#include \"a.hpp\"\nnamespace stale { int extra() { return 7; } }\n";
+    write_commands(project_dir, src, {src / "a.cpp", src / "b.cpp", src / "c.cpp"});
+
+    fcpp::CProjectManager reopened(config);
+    REQUIRE(reopened.open(project_dir));
+
+    // rebuild обязан взять инвентарь с диска: иначе c.cpp снова потерялся бы,
+    // и индекс остался бы устаревшим навсегда.
+    REQUIRE(reopened.current().m_index_status.m_symbol_count > symbols_before);
+
+    fcpp::CSQLiteIndex index(reopened.current().m_project.m_db_path);
+    REQUIRE(index.open(reopened.current().m_project.m_canonical_path));
+    fcpp::SStaleReport report;
+    REQUIRE(index.detect_stale(
+        (project_dir / "build" / "compile_commands.json").string(), report));
+    REQUIRE_FALSE(report.is_stale());
+    index.close_db();
 
     std::filesystem::remove_all(home);
     std::filesystem::remove_all(project_dir);

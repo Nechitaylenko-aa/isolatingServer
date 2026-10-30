@@ -452,7 +452,9 @@ int main(int argc, char* argv[])
         }
 
         // Тело запроса §94: только text + editor{file,cursor}. --stream — режим вывода.
-        // Диалог адресуется сессией: без --session запрос отклоняется (§41).
+        // Адрес диалога принадлежит агенту: активную сессию проекта создаёт
+        // project.open и возвращает её id. --session необязателен и служит
+        // проверкой, что клиент говорит с той же сессией, а не адресом.
         fcpp::SApiRequest request;
         request.m_method = fcpp::EApiMethod::Ask;
         request.m_text = argv[2];
@@ -484,12 +486,6 @@ int main(int argc, char* argv[])
                 request.m_editor_column = static_cast<std::uint32_t>(std::strtoul(next().c_str(), nullptr, 10));
             }
         }
-        if (request.m_session_id.empty())
-        {
-            std::cerr << "fcpp-agent: ask требует --session <id>; диалог адресуется сессией\n";
-            return 2;
-        }
-
         bool streamed_output = false;
         if (request.m_stream)
         {

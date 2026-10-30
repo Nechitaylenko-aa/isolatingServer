@@ -9,6 +9,8 @@
 #ifndef FCPP_AGENT_SORCHESTRATIONTYPES_H
 #define FCPP_AGENT_SORCHESTRATIONTYPES_H
 
+#include "fcpp-agent/SLlmRoleConfig.h"
+
 namespace fcpp
 {
 
@@ -99,6 +101,19 @@ const char* exit_reason_name(EExitReason value);
  * @return Стабильное имя.
  */
 const char* orchestration_route_name(EOrchestrationRoute value);
+
+/**
+ * @brief Роль модели, которая формирует ответ на этом маршруте.
+ *
+ * Единственный владелец соответствия «маршрут → роль». Оркестратор не должен
+ * повторять это знание в ветках: иначе бюджет посчитается по одной роли, а
+ * генерация уйдёт в другую, и защита от переполнения окна окажется в слое LLM
+ * вместо планового бюджета.
+ *
+ * @param route Маршрут.
+ * @return Роль-ответчик; `ELlmRole::Count` для невыбранного маршрута.
+ */
+ELlmRole answer_role_for_route(EOrchestrationRoute route);
 
 /**
  * @brief Текстовое имя события дерева.

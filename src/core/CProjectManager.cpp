@@ -383,8 +383,11 @@ bool CProjectManager::open(const std::filesystem::path& path, std::string* out_f
     }
     else
     {
-        // Индекс уже построен — обновляем только при фактическом устаревании (Этап 4.1).
-        if (!index.refresh_if_stale(*clang, compile_commands.string()))
+        // Индекс уже построен — обновляем только при фактическом устаревании
+        // (Этап 4.1). Разобранный инвентарь передаётся явно: если устаревание
+        // вызвано новым translation unit, rebuild обязан взять его с диска, а
+        // не из предыдущего поколения, иначе новый файл терялся бы снова.
+        if (!index.refresh_if_stale(*clang, compile_commands.string(), commands))
         {
             index.close_db();
             return fail("refresh_stale_index");

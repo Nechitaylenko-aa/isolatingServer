@@ -5,11 +5,13 @@
 
 #include "core/CRequestOrchestrator.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <filesystem>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "core/CHistorian.h"
 #include "core/CCursorContextAnalyzer.h"
@@ -28,6 +30,33 @@ namespace
 std::size_t estimate_tokens(const std::string& text)
 {
     return (text.size() + 2U) / 3U + 4U;
+}
+
+/**
+ * @brief Оставить не больше max_bytes байт с конца текста по границе UTF-8.
+ *
+ * Хвост, а не голова: при подгонке среза под чужое окно важнее конец блока,
+ * где обычно находится вопрос, а не первые строки определения.
+ *
+ * @param text Исходный текст.
+ * @param max_bytes Предел в байтах.
+ * @return Усечённый текст по границе символа.
+ */
+std::string trim_utf8_tail(const std::string& text, std::size_t max_bytes)
+{
+    if (text.size() <= max_bytes)
+    {
+        return text;
+    }
+    std::size_t start = text.size() - max_bytes;
+    // Do not start inside a multi-byte sequence.
+    while (start < text.size()
+           && (static_cast<unsigned char>(text[start]) & 0xC0U) == 0x80U)
+    {
+        ++start;
+    }
+    return "[CONTENT TRIMMED TO THE RESPONDING MODEL BUDGET]\n"
+        + text.substr(start);
 }
 
 /**
@@ -89,17 +118,73 @@ bool CRequestOrchestrator::normalise(SOrchestrationRequest& request) const
     return true;
 }
 
-bool CRequestOrchestrator::plan_budget(const SOrchestrationRequest& request,
-                                       SOrchestrationResult& result) const
+bool CRequestOrchestrator::check_request_fits(const SOrchestrationRequest& request,
+                                             SOrchestrationResult& result) const
 {
     if (m_llm == nullptr)
     {
-        // No model means no window: the answer step will report the missing
-        // layer itself, so budgeting is not the place to fail.
+        // No model means no window to reason about: the answer step reports the
+        // missing layer itself, so this is not the place to fail.
         return true;
     }
 
-    const ELlmRole role = ELlmRole::CoderSmart;
+    // The route is not chosen yet, so the answering role is unknown. A question
+    // that fits the remote window may still not fit the local one, and the
+    // reverse. Judging by a single role silently admits unanswerable requests.
+    static const ELlmRole k_candidate_roles[]{
+        ELlmRole::CoderSmart, ELlmRole::CoderLocal};
+
+    const std::size_t request_tokens = estimate_tokens(request.m_text);
+    std::size_t tightest_window = 0;
+    SContextBudgetSplit tightest;
+
+    for (const ELlmRole role : k_candidate_roles)
+    {
+        const std::size_t window = m_llm->context_window_tokens(role);
+        const std::size_t reserve = m_llm->output_reserve_tokens(role);
+        const SContextBudgetSplit split =
+            split_context_budget(window, reserve, request_tokens);
+
+        m_logger.log_event(ELogLevel::Info, "context.request_fit",
+            {{"request_id", request.m_request_id},
+             {"role", llm_role_name(role)},
+             {"window_tokens", split.m_window},
+             {"reserve_tokens", split.m_reserve},
+             {"budget_tokens", split.m_total},
+             {"request_tokens", split.m_request},
+             {"fits", split.m_ok},
+             {"error", split.m_error}});
+
+        if (tightest_window == 0 || split.m_window < tightest_window)
+        {
+            tightest_window = split.m_window;
+            tightest = split;
+        }
+        if (!split.m_ok)
+        {
+            // One refusing role is enough: the route may send the answer there.
+            fail(request, result, EExitReason::RequestTooLong,
+                 split.m_error, ETraceEvent::ExitRequestTooLong);
+            return false;
+        }
+    }
+
+    // Keep the tightest distribution as the pre-route diagnostic value. It is
+    // replaced by the real role's budget once the route is known.
+    result.m_budget = tightest;
+    (void)tightest_window;
+    return true;
+}
+
+void CRequestOrchestrator::plan_budget(ELlmRole role,
+                                       const SOrchestrationRequest& request,
+                                       SOrchestrationResult& result) const
+{
+    if (m_llm == nullptr || role == ELlmRole::Count)
+    {
+        return;
+    }
+
     const std::size_t window = m_llm->context_window_tokens(role);
     const std::size_t reserve = m_llm->output_reserve_tokens(role);
     const std::size_t request_tokens = estimate_tokens(request.m_text);
@@ -108,6 +193,7 @@ bool CRequestOrchestrator::plan_budget(const SOrchestrationRequest& request,
     m_logger.log_event(ELogLevel::Info, "context.budget",
         {{"request_id", request.m_request_id},
          {"role", llm_role_name(role)},
+         {"route", orchestration_route_name(result.m_route)},
          {"window_tokens", result.m_budget.m_window},
          {"reserve_tokens", result.m_budget.m_reserve},
          {"budget_tokens", result.m_budget.m_total},
@@ -116,12 +202,72 @@ bool CRequestOrchestrator::plan_budget(const SOrchestrationRequest& request,
          {"history_limit_tokens", result.m_budget.m_history},
          {"ok", result.m_budget.m_ok},
          {"error", result.m_budget.m_error}});
+}
 
+bool CRequestOrchestrator::fit_material_to_budget(SOrchestrationResult& result) const
+{
     if (!result.m_budget.m_ok)
     {
-        fail(request, result, EExitReason::RequestTooLong,
-             result.m_budget.m_error, ETraceEvent::ExitRequestTooLong);
         return false;
+    }
+
+    // The material was sliced on assessment limits, which are deliberately
+    // independent of the answering role. Fit it now that the role is known:
+    // both operations are local edits, no model is called again.
+    const std::size_t cursor_bytes = result.m_budget.m_cursor * 3U;
+    const std::size_t history_bytes = result.m_budget.m_history * 3U;
+
+    if (cursor_bytes > 0 && result.m_cursor_context.size() > cursor_bytes)
+    {
+        const std::string trimmed = trim_utf8_tail(result.m_cursor_context, cursor_bytes);
+        m_logger.log_event(ELogLevel::Info, "context.cursor_trimmed",
+            {{"original_bytes", result.m_cursor_context.size()},
+             {"limit_bytes", cursor_bytes},
+             {"result_bytes", trimmed.size()}});
+        result.m_cursor_context = trimmed;
+    }
+
+    if (cursor_bytes > 0 && result.m_file_context.size() > cursor_bytes)
+    {
+        const std::string trimmed = trim_utf8_tail(result.m_file_context, cursor_bytes);
+        m_logger.log_event(ELogLevel::Info, "context.file_trimmed",
+            {{"original_bytes", result.m_file_context.size()},
+             {"limit_bytes", cursor_bytes},
+             {"result_bytes", trimmed.size()}});
+        result.m_file_context = trimmed;
+    }
+
+    if (history_bytes > 0 && !result.m_history_context.empty())
+    {
+        std::size_t total = 0;
+        for (const SConversationTurn& turn : result.m_history_context)
+        {
+            total += turn.m_user_text.size() + turn.m_assistant_text.size();
+        }
+        if (total > history_bytes)
+        {
+            // Drop the oldest selected pairs: the newest carry the conversation.
+            std::vector<SConversationTurn> kept;
+            std::size_t kept_bytes = 0;
+            for (auto it = result.m_history_context.rbegin();
+                 it != result.m_history_context.rend(); ++it)
+            {
+                const std::size_t pair_bytes =
+                    it->m_user_text.size() + it->m_assistant_text.size();
+                if (!kept.empty() && kept_bytes + pair_bytes > history_bytes)
+                {
+                    break;
+                }
+                kept_bytes += pair_bytes;
+                kept.push_back(*it);
+            }
+            std::reverse(kept.begin(), kept.end());
+            m_logger.log_event(ELogLevel::Info, "context.history_trimmed",
+                {{"original_turns", result.m_history_context.size()},
+                 {"kept_turns", kept.size()},
+                 {"limit_bytes", history_bytes}});
+            result.m_history_context = std::move(kept);
+        }
     }
     return true;
 }
@@ -350,13 +496,10 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
     if (!request.m_cursor_file.empty() && !has_position
         && m_cursor_analyzer != nullptr)
     {
-        // The slice is bounded by the code share of the budget, not by a fixed
-        // constant: limits must never add up to more than the model window.
-        SFileSliceLimits slice_limits;
-        if (result.m_budget.m_ok && result.m_budget.m_cursor > 0)
-        {
-            slice_limits.m_max_bytes = result.m_budget.m_cursor * 3U;
-        }
+        // Assessment limits, not the answering role's budget: the route is not
+        // chosen yet, so the role is unknown. The slice is re-fitted to the real
+        // budget afterwards, in fit_material_to_budget().
+        const SFileSliceLimits slice_limits;
         const SFileContextResult assessed =
             m_cursor_analyzer->assess_file(request.m_text, request.m_cursor_file,
                                            slice_limits);
@@ -386,11 +529,7 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
     if (!request.m_cursor_file.empty() && has_position
         && m_cursor_analyzer != nullptr)
     {
-        SCursorSliceLimits cursor_limits;
-        if (result.m_budget.m_ok && result.m_budget.m_cursor > 0)
-        {
-            cursor_limits.m_max_bytes = result.m_budget.m_cursor * 3U;
-        }
+        const SCursorSliceLimits cursor_limits;
         const SCursorContextResult assessed = m_cursor_analyzer->assess(
             request.m_text, request.m_cursor_file, request.m_cursor_line,
             request.m_cursor_column, request.m_cursor_compile_arguments,
@@ -412,12 +551,10 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
 
     if (!request.m_history.empty() && m_historian != nullptr)
     {
-        const std::size_t history_bytes =
-            result.m_budget.m_ok && result.m_budget.m_history > 0
-                ? result.m_budget.m_history * 3U : 0;
+        // Assessment cap, not the answering role's share: the historian already
+        // owns its own tail limit. The final budget is enforced afterwards.
         const SHistoryRelevance assessed =
-            m_historian->assess_relevance(request.m_text, request.m_history,
-                                          history_bytes);
+            m_historian->assess_relevance(request.m_text, request.m_history);
         m_logger.log(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
                      assessed, request.m_request_id, request.m_history.size());
 
@@ -497,9 +634,11 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     }
     result.m_trace.emplace_back(ETraceEvent::ValidationOk);
 
-    // The user's question must fit before any context is gathered: budgeting on
-    // a request that cannot be answered wastes index reads and model calls.
-    if (!plan_budget(normalised, result))
+    // The user's question must fit before any context is gathered: answering a
+    // request that cannot be answered wastes index reads and model calls. The
+    // route is still unknown, so the check runs against every possible answering
+    // role, not against one hard-coded window.
+    if (!check_request_fits(normalised, result))
     {
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - started).count();
@@ -544,119 +683,145 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         m_logger.log(ELogLevel::Info,
                      SLogEvent::route_selected(normalised.m_request_id, result.m_route));
 
-        const bool needs_facts =
-            result.m_route == EOrchestrationRoute::CursorContextRequired
-            || result.m_route == EOrchestrationRoute::CursorAndHistoryContextRequired;
-
-        if (!needs_facts || collect_facts(normalised, result))
+        // The answering role is known only now. Budget must be planned for it,
+        // otherwise a route answered by the local model is sized against the
+        // remote window and the context overflows past the budget check.
+        const bool budget_known = m_llm != nullptr;
+        if (budget_known)
         {
-            switch (result.m_route)
+            plan_budget(answer_role_for_route(result.m_route), normalised, result);
+        }
+
+        // Without an LLM layer there is no window to exceed; the answer step
+        // reports the missing layer itself. Only a real budget refusal is fatal.
+        if (budget_known && !result.m_budget.m_ok)
+        {
+            fail(normalised, result, EExitReason::RequestTooLong,
+                 result.m_budget.m_error, ETraceEvent::ExitRequestTooLong);
+        }
+        else if (budget_known && !fit_material_to_budget(result))
+        {
+            fail(normalised, result, EExitReason::RequestTooLong,
+                 "Collected context does not fit the answering model budget.",
+                 ETraceEvent::ExitRequestTooLong);
+        }
+        else
+        {
+            const bool needs_facts =
+                result.m_route == EOrchestrationRoute::CursorContextRequired
+                || result.m_route == EOrchestrationRoute::CursorAndHistoryContextRequired;
+
+            if (!needs_facts || collect_facts(normalised, result))
             {
-            case EOrchestrationRoute::CursorContextRequired:
-            {
-                if (result.m_cursor_context.empty())
+                switch (result.m_route)
                 {
-                    fail(normalised, result, EExitReason::CursorRelevanceFailed,
-                         "Cursor route selected without source context.",
-                         ETraceEvent::ExitCursorRelevanceFailed);
+                case EOrchestrationRoute::CursorContextRequired:
+                {
+                    if (result.m_cursor_context.empty())
+                    {
+                        fail(normalised, result, EExitReason::CursorRelevanceFailed,
+                             "Cursor route selected without source context.",
+                             ETraceEvent::ExitCursorRelevanceFailed);
+                        break;
+                    }
+                    std::string prompt = build_evidence_block(result);
+                    prompt += "\nUSER REQUEST:\n" + normalised.m_text;
+                    generate_answer(normalised, result, ELlmRole::CoderSmart,
+                                    EPromptType::CppExpert, prompt);
                     break;
                 }
-                std::string prompt = build_evidence_block(result);
-                prompt += "\nUSER REQUEST:\n" + normalised.m_text;
-                generate_answer(normalised, result, ELlmRole::CoderSmart,
-                                EPromptType::CppExpert, prompt);
-                break;
-            }
 
-            case EOrchestrationRoute::CursorAndHistoryContextRequired:
-            {
-                if (result.m_cursor_context.empty())
+                case EOrchestrationRoute::CursorAndHistoryContextRequired:
                 {
-                    fail(normalised, result, EExitReason::CursorRelevanceFailed,
-                         "Cursor route selected without source context.",
-                         ETraceEvent::ExitCursorRelevanceFailed);
+                    if (result.m_cursor_context.empty())
+                    {
+                        fail(normalised, result, EExitReason::CursorRelevanceFailed,
+                             "Cursor route selected without source context.",
+                             ETraceEvent::ExitCursorRelevanceFailed);
+                        break;
+                    }
+                    std::string prompt = build_evidence_block(result);
+                    prompt += "\n\nRELEVANT CONVERSATION HISTORY (selected by historian):\n";
+                    for (const SConversationTurn& turn : result.m_history_context)
+                    {
+                        prompt += "USER: " + turn.m_user_text + "\n";
+                        prompt += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
+                    }
+                    prompt += "\nUSER REQUEST:\n" + normalised.m_text;
+                    generate_answer(normalised, result, ELlmRole::CoderSmart,
+                                    EPromptType::CppExpert, prompt);
                     break;
                 }
-                std::string prompt = build_evidence_block(result);
-                prompt += "\n\nRELEVANT CONVERSATION HISTORY (selected by historian):\n";
-                for (const SConversationTurn& turn : result.m_history_context)
-                {
-                    prompt += "USER: " + turn.m_user_text + "\n";
-                    prompt += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
-                }
-                prompt += "\nUSER REQUEST:\n" + normalised.m_text;
-                generate_answer(normalised, result, ELlmRole::CoderSmart,
-                                EPromptType::CppExpert, prompt);
-                break;
-            }
 
-            case EOrchestrationRoute::HistoryContextRequired:
-            {
-                if (result.m_history_context.empty())
+                case EOrchestrationRoute::HistoryContextRequired:
                 {
-                    fail(normalised, result, EExitReason::HistoryRelevanceFailed,
-                         "History route selected without relevant conversation turns.",
-                         ETraceEvent::ExitHistoryRelevanceFailed);
+                    if (result.m_history_context.empty())
+                    {
+                        fail(normalised, result, EExitReason::HistoryRelevanceFailed,
+                             "History route selected without relevant conversation turns.",
+                             ETraceEvent::ExitHistoryRelevanceFailed);
+                        break;
+                    }
+                    std::string prompt =
+                        "RELEVANT CONVERSATION HISTORY (selected by historian):\n";
+                    for (const SConversationTurn& turn : result.m_history_context)
+                    {
+                        prompt += "USER: " + turn.m_user_text + "\n";
+                        prompt += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
+                    }
+                    prompt += "CURRENT USER REQUEST:\n" + normalised.m_text;
+                    generate_answer(normalised, result, ELlmRole::CoderLocal,
+                                    EPromptType::ConversationAssistant, prompt);
                     break;
                 }
-                std::string prompt =
-                    "RELEVANT CONVERSATION HISTORY (selected by historian):\n";
-                for (const SConversationTurn& turn : result.m_history_context)
-                {
-                    prompt += "USER: " + turn.m_user_text + "\n";
-                    prompt += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
-                }
-                prompt += "CURRENT USER REQUEST:\n" + normalised.m_text;
-                generate_answer(normalised, result, ELlmRole::CoderLocal,
-                                EPromptType::ConversationAssistant, prompt);
-                break;
-            }
 
-            case EOrchestrationRoute::FileContextRequired:
-            {
-                if (result.m_file_context.empty())
+                case EOrchestrationRoute::FileContextRequired:
                 {
-                    fail(normalised, result, EExitReason::FileNotRelevant,
-                         "The open file does not relate to the request.",
-                         ETraceEvent::ExitFileNotRelevant);
+                    if (result.m_file_context.empty())
+                    {
+                        fail(normalised, result, EExitReason::FileNotRelevant,
+                             "The open file does not relate to the request.",
+                             ETraceEvent::ExitFileNotRelevant);
+                        break;
+                    }
+                    // Narrow path: the entity is named by the model and confirmed
+                    // by the index. Wide path: the bounded file slice goes to the
+                    // answer model.
+                    (void)collect_file_entity_facts(normalised, result);
+                    answer_from_file(normalised, result, false);
                     break;
                 }
-                // Narrow path: the entity is named by the model and confirmed by
-                // the index. Wide path: the whole file goes to the answer model.
-                (void)collect_file_entity_facts(normalised, result);
-                answer_from_file(normalised, result, false);
-                break;
-            }
 
-            case EOrchestrationRoute::FileAndHistoryContextRequired:
-            {
-                if (result.m_file_context.empty())
+                case EOrchestrationRoute::FileAndHistoryContextRequired:
                 {
-                    fail(normalised, result, EExitReason::FileNotRelevant,
-                         "The open file does not relate to the request.",
-                         ETraceEvent::ExitFileNotRelevant);
+                    if (result.m_file_context.empty())
+                    {
+                        fail(normalised, result, EExitReason::FileNotRelevant,
+                             "The open file does not relate to the request.",
+                             ETraceEvent::ExitFileNotRelevant);
+                        break;
+                    }
+                    if (result.m_history_context.empty())
+                    {
+                        fail(normalised, result, EExitReason::HistoryRelevanceFailed,
+                             "File and history route selected without relevant turns.",
+                             ETraceEvent::ExitHistoryRelevanceFailed);
+                        break;
+                    }
+                    (void)collect_file_entity_facts(normalised, result);
+                    answer_from_file(normalised, result, true);
                     break;
                 }
-                if (result.m_history_context.empty())
-                {
-                    fail(normalised, result, EExitReason::HistoryRelevanceFailed,
-                         "File and history route selected without relevant turns.",
-                         ETraceEvent::ExitHistoryRelevanceFailed);
+
+                case EOrchestrationRoute::NoApplicableContext:
+                    generate_answer(normalised, result, ELlmRole::CoderLocal,
+                                    EPromptType::CppAssistant, normalised.m_text);
+                    break;
+
+                case EOrchestrationRoute::Unselected:
+                case EOrchestrationRoute::Count:
                     break;
                 }
-                (void)collect_file_entity_facts(normalised, result);
-                answer_from_file(normalised, result, true);
-                break;
-            }
-
-            case EOrchestrationRoute::NoApplicableContext:
-                generate_answer(normalised, result, ELlmRole::CoderLocal,
-                                EPromptType::CppAssistant, normalised.m_text);
-                break;
-
-            case EOrchestrationRoute::Unselected:
-            case EOrchestrationRoute::Count:
-                break;
             }
         }
     }

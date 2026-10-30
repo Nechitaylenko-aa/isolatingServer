@@ -172,6 +172,19 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     REQUIRE(reopened.m_ok);
     REQUIRE(reopened.m_session_id == open_response.m_session_id);
 
+    // Клиент не адресует диалог: чужой session_id — признак поломки, а не
+    // параметр. Такой запрос отклоняется и оставляет событие в журнале.
+    {
+        fcpp::SApiRequest foreign;
+        foreign.m_method = fcpp::EApiMethod::Ask;
+        foreign.m_session_id = "session-of-another-instance";
+        foreign.m_text = "Explain this request";
+        const fcpp::SApiResponse foreign_response = api.execute(foreign);
+        REQUIRE_FALSE(foreign_response.m_ok);
+        REQUIRE(foreign_response.m_error == fcpp::EErrorKind::InvalidRequest);
+        REQUIRE(foreign_response.m_message.find("must not address") != std::string::npos);
+    }
+
     // После перезапуска клиент восстанавливает адрес диалога у агента,
     // хранящего id в БД, а не у себя.
     fcpp::SApiRequest session_resume;
@@ -276,7 +289,8 @@ TEST_CASE("agent API: lifecycle diagnostics are JSONL and correlate request IDs"
 }
 
 
-TEST_CASE("agent API: ask requires a conversation session before orchestration", "[api][ask][validation]")
+TEST_CASE("agent API: ask without a session is refused only by the missing environment",
+          "[api][ask][validation]")
 {
     const std::filesystem::path home = make_temp_dir("fcpp-api-ask-no-session-home");
     HomeScope scope(home);
@@ -290,9 +304,36 @@ TEST_CASE("agent API: ask requires a conversation session before orchestration",
     request.m_text = "Explain this request";
 
     const fcpp::SApiResponse response = api.execute(request);
+    // The client no longer addresses the dialogue: a missing session_id is not
+    // a rejection cause in itself. Without an open project the preflight stops
+    // the request, and that is the only visible reason.
     REQUIRE_FALSE(response.m_ok);
-    REQUIRE(response.m_error == fcpp::EErrorKind::InvalidRequest);
-    REQUIRE(response.m_message.find("session_id is required") != std::string::npos);
+    REQUIRE(response.m_error == fcpp::EErrorKind::ProjectNotOpen);
+    REQUIRE(response.m_message.find("session_id is required") == std::string::npos);
+
+    std::filesystem::remove_all(home);
+}
+
+TEST_CASE("agent API: ask outside any project reports the missing session, not a foreign one",
+          "[api][ask][session]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-api-ask-foreign-home");
+    HomeScope scope(home);
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    REQUIRE(config.load());
+
+    fcpp::CAgentApi api(config);
+    // A client may still send an id. Without an open project there is no active
+    // session to compare against, so the preflight reports the environment.
+    fcpp::SApiRequest request;
+    request.m_method = fcpp::EApiMethod::Ask;
+    request.m_session_id = "client-supplied-id";
+    request.m_text = "Explain this request";
+
+    const fcpp::SApiResponse response = api.execute(request);
+    REQUIRE_FALSE(response.m_ok);
+    REQUIRE(response.m_error == fcpp::EErrorKind::ProjectNotOpen);
 
     std::filesystem::remove_all(home);
 }
