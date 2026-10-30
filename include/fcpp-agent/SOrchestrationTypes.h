@@ -30,6 +30,7 @@ enum class EExitReason
 {
     None,                    ///< Штатное завершение.
     EmptyRequest,            ///< Запрос пуст после нормализации.
+    RequestTooLong,          ///< Сам текст запроса не укладывается в контекст.
     CursorRelevanceFailed,   ///< Оценка курсора завершилась сбоем.
     HistoryRelevanceFailed,  ///< Оценка истории завершилась сбоем.
     FileRelevanceFailed,     ///< Оценка файла без курсора завершилась сбоем.
@@ -69,6 +70,7 @@ enum class ETraceEvent
     ExitLlmGenerationFailed,      ///< Терминальный выход: модель.
     ExitCompleted,                ///< Терминальный выход: успех.
     ExitEmptyRequest,             ///< Терминальный выход: пустой запрос.
+    ExitRequestTooLong,           ///< Терминальный выход: запрос не влезает.
     ExitCursorRelevanceFailed,    ///< Терминальный выход: курсор.
     ExitHistoryRelevanceFailed,   ///< Терминальный выход: история.
     ExitFileRelevanceFailed,      ///< Терминальный выход: оценка файла.

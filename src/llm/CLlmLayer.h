@@ -66,6 +66,18 @@ public:
      */
     std::size_t context_window_tokens(ELlmRole role) const;
 
+    /**
+     * @brief Резерв под ответ для роли, в токенах.
+     *
+     * Значение из конфига, приведённое к допустимому диапазону тем же правилом,
+     * что применяется при вызове модели: резерв не может оставить промпту
+     * меньше половины окна.
+     *
+     * @param role Логическая роль.
+     * @return Эффективный резерв; 0 для некорректной роли.
+     */
+    std::size_t output_reserve_tokens(ELlmRole role) const;
+
     // The caller chooses the prompt contract; this layer builds the system prompt.
     SLlmExecutionResult request_text(
         ELlmRole role, EPromptType prompt_type, const std::string& request);

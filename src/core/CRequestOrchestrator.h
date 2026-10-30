@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "core/CContextBudget.h"
 #include "core/CConversationStore.h"
 #include "fcpp-agent/IClang.h"
 #include "fcpp-agent/IFactProvider.h"
@@ -60,6 +61,7 @@ struct SOrchestrationResult
     std::string m_file_entity;                      ///< Сущность, выбранная моделью.
     std::vector<SConversationTurn> m_history_context;///< Отобранные пары истории.
     std::vector<SFactSection> m_fact_sections;      ///< Факты из индекса.
+    SContextBudgetSplit m_budget;                   ///< Распределение бюджета.
 };
 
 /**
@@ -109,6 +111,20 @@ private:
      * @return true если запрос пригоден к обработке.
      */
     bool normalise(SOrchestrationRequest& request) const;
+
+    /**
+     * @brief Рассчитать бюджет промпта для роли и проверить длину запроса.
+     *
+     * Текст запроса входит в контекст целиком; если он не укладывается —
+     * запрос отклоняется видимой причиной `RequestTooLong`, а не режется.
+     * Остаток делится между кодом и историей.
+     *
+     * @param request Запрос.
+     * @param result Результат, куда пишется распределение.
+     * @return true если бюджет распределён.
+     */
+    bool plan_budget(const SOrchestrationRequest& request,
+                     SOrchestrationResult& result) const;
 
     /**
      * @brief Оценить применимость курсора и истории независимо.

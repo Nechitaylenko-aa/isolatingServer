@@ -64,9 +64,6 @@ struct SFactResult
 /**
  * @brief Поставщик фактов о кодовой базе.
  */
-/**
- * @brief Поставщик фактов о кодовой базе.
- */
 class IFactProvider
 {
 public:

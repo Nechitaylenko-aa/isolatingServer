@@ -358,6 +358,27 @@ std::size_t CLlmLayer::context_window_tokens(ELlmRole role) const
     return k_fallback_context_window;
 }
 
+std::size_t CLlmLayer::output_reserve_tokens(ELlmRole role) const
+{
+    if (role == ELlmRole::Count)
+    {
+        return 0;
+    }
+    const std::size_t window = context_window_tokens(role);
+    std::size_t reserve = m_roles.at(role).m_resolved_output_reserve_tokens;
+    if (window == 0)
+    {
+        return reserve;
+    }
+    // The same clamp as in execute(): the prompt keeps at least half the window.
+    const std::size_t minimum_prompt = window / 2U;
+    if (reserve >= window - minimum_prompt)
+    {
+        reserve = window > minimum_prompt ? window - minimum_prompt : 0;
+    }
+    return reserve;
+}
+
 std::unique_ptr<IModelApi> CLlmLayer::make_model(ELlmRole role) const
 {
     if (m_factory)
@@ -422,8 +443,14 @@ SLlmExecutionResult CLlmLayer::execute(
         return result;
     }
 
+    // Whether the last attempt was damaged by prompt truncation: an empty reply
+    // to a truncated prompt says nothing about the model's ability, so escalating
+    // to a second role with the same broken prompt only wastes a full timeout.
+    bool last_attempt_truncated = false;
+
     const auto attempt = [&](ELlmRole selected, std::string& text, std::string& error)
     {
+        last_attempt_truncated = false;
         std::unique_ptr<IModelApi> model = make_model(selected);
         if (!model || !model->is_available())
         {
@@ -472,6 +499,7 @@ SLlmExecutionResult CLlmLayer::execute(
         std::size_t dropped_bytes = 0;
         const std::string fitted_request =
             fit_to_budget(request, prompt_budget, truncated, dropped_bytes);
+        last_attempt_truncated = truncated;
         if (truncated)
         {
             m_logger.log(ELogLevel::Warn, SLogEvent("llm.prompt_truncated",
@@ -537,6 +565,18 @@ SLlmExecutionResult CLlmLayer::execute(
         result.m_error = primary_error;
         result.m_used_role = role;
         log_failure(role, primary_error, false);
+        return result;
+    }
+
+    if (last_attempt_truncated)
+    {
+        // The prompt, not the model, is the reason the answer was unusable.
+        // Repeating the same over-long prompt on another role would fail the
+        // same way, only after another full timeout.
+        result.m_error = primary_error
+            + "; not escalating: the prompt did not fit the role context window";
+        result.m_used_role = role;
+        log_failure(role, result.m_error, false);
         return result;
     }
 

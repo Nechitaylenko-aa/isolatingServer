@@ -134,6 +134,7 @@ add_library(fcpp_core STATIC
     src/core/CAgentApi.cpp
     # Conversation persistence.
     src/core/CConversationStore.cpp
+    src/core/CContextBudget.cpp
     src/core/CRequestOrchestrator.cpp
     src/core/CIndexFactProvider.cpp
     src/core/CCursorContextAnalyzer.cpp
@@ -199,7 +200,9 @@ add_executable(fcpp_tests
     tests/historian_test.cpp
     tests/cursor_context_test.cpp
     tests/llm_budget_test.cpp
+    tests/context_budget_test.cpp
     tests/file_route_test.cpp
+    tests/orchestrator_routes_test.cpp
 )
 target_link_libraries(fcpp_tests PRIVATE fcpp_core Catch2::Catch2WithMain)
 

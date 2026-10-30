@@ -7,6 +7,7 @@
 
 #include <cctype>
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <utility>
 
@@ -14,6 +15,7 @@
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CLogger.h"
 #include "fcpp-agent/IFactProvider.h"
+#include "fcpp-agent/ITool.h"
 #include "fcpp-agent/SLogEvent.h"
 #include "llm/CLlmLayer.h"
 
@@ -21,6 +23,12 @@ namespace fcpp
 {
 namespace
 {
+
+/** @brief Оценка токенов по байтам (консервативная, как в LLM-слое). */
+std::size_t estimate_tokens(const std::string& text)
+{
+    return (text.size() + 2U) / 3U + 4U;
+}
 
 /**
  * @brief Убрать пробельные символы по краям.
@@ -81,12 +89,66 @@ bool CRequestOrchestrator::normalise(SOrchestrationRequest& request) const
     return true;
 }
 
+bool CRequestOrchestrator::plan_budget(const SOrchestrationRequest& request,
+                                       SOrchestrationResult& result) const
+{
+    if (m_llm == nullptr)
+    {
+        // No model means no window: the answer step will report the missing
+        // layer itself, so budgeting is not the place to fail.
+        return true;
+    }
+
+    const ELlmRole role = ELlmRole::CoderSmart;
+    const std::size_t window = m_llm->context_window_tokens(role);
+    const std::size_t reserve = m_llm->output_reserve_tokens(role);
+    const std::size_t request_tokens = estimate_tokens(request.m_text);
+
+    result.m_budget = split_context_budget(window, reserve, request_tokens);
+    m_logger.log_event(ELogLevel::Info, "context.budget",
+        {{"request_id", request.m_request_id},
+         {"role", llm_role_name(role)},
+         {"window_tokens", result.m_budget.m_window},
+         {"reserve_tokens", result.m_budget.m_reserve},
+         {"budget_tokens", result.m_budget.m_total},
+         {"request_tokens", result.m_budget.m_request},
+         {"cursor_limit_tokens", result.m_budget.m_cursor},
+         {"history_limit_tokens", result.m_budget.m_history},
+         {"ok", result.m_budget.m_ok},
+         {"error", result.m_budget.m_error}});
+
+    if (!result.m_budget.m_ok)
+    {
+        fail(request, result, EExitReason::RequestTooLong,
+             result.m_budget.m_error, ETraceEvent::ExitRequestTooLong);
+        return false;
+    }
+    return true;
+}
+
 bool CRequestOrchestrator::collect_facts(const SOrchestrationRequest& request,
                                          SOrchestrationResult& result) const
 {
     if (m_facts == nullptr || !result.m_cursor_symbol.has_value())
     {
         // Спрашивать не у кого либо не о чем. Это не сбой.
+        return true;
+    }
+
+    // An anonymous namespace, an unnamed struct or an unnamed enum has a USR but
+    // no name, so it cannot be a fact subject: the index is keyed by name. This
+    // is not a failure, but it must be visible — otherwise the log shows zero
+    // sections with an empty entity and looks like a broken index.
+    if (result.m_cursor_symbol->m_name.empty()
+        && result.m_cursor_symbol->m_qualified_name.empty())
+    {
+        m_logger.log_event(ELogLevel::Info, "facts.skipped",
+            {{"request_id", request.m_request_id},
+             {"reason", "entity under cursor has no name"},
+             {"kind", symbol_kind_name(result.m_cursor_symbol->m_kind)},
+             {"file", std::filesystem::path(
+                 result.m_cursor_symbol->m_location.m_file).filename().string()},
+             {"line", result.m_cursor_symbol->m_location.m_line}});
         return true;
     }
 
@@ -288,8 +350,16 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
     if (!request.m_cursor_file.empty() && !has_position
         && m_cursor_analyzer != nullptr)
     {
+        // The slice is bounded by the code share of the budget, not by a fixed
+        // constant: limits must never add up to more than the model window.
+        SFileSliceLimits slice_limits;
+        if (result.m_budget.m_ok && result.m_budget.m_cursor > 0)
+        {
+            slice_limits.m_max_bytes = result.m_budget.m_cursor * 3U;
+        }
         const SFileContextResult assessed =
-            m_cursor_analyzer->assess_file(request.m_text, request.m_cursor_file);
+            m_cursor_analyzer->assess_file(request.m_text, request.m_cursor_file,
+                                           slice_limits);
         m_logger.log_event(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
             "file.assessed",
             {{"request_id", request.m_request_id},
@@ -316,9 +386,15 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
     if (!request.m_cursor_file.empty() && has_position
         && m_cursor_analyzer != nullptr)
     {
+        SCursorSliceLimits cursor_limits;
+        if (result.m_budget.m_ok && result.m_budget.m_cursor > 0)
+        {
+            cursor_limits.m_max_bytes = result.m_budget.m_cursor * 3U;
+        }
         const SCursorContextResult assessed = m_cursor_analyzer->assess(
             request.m_text, request.m_cursor_file, request.m_cursor_line,
-            request.m_cursor_column, request.m_cursor_compile_arguments);
+            request.m_cursor_column, request.m_cursor_compile_arguments,
+            cursor_limits);
         result.m_cursor_symbol = assessed.m_symbol;
         result.m_cursor_context = assessed.m_source_context;
         m_logger.log(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
@@ -336,8 +412,12 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
 
     if (!request.m_history.empty() && m_historian != nullptr)
     {
+        const std::size_t history_bytes =
+            result.m_budget.m_ok && result.m_budget.m_history > 0
+                ? result.m_budget.m_history * 3U : 0;
         const SHistoryRelevance assessed =
-            m_historian->assess_relevance(request.m_text, request.m_history);
+            m_historian->assess_relevance(request.m_text, request.m_history,
+                                          history_bytes);
         m_logger.log(assessed.m_ok ? ELogLevel::Info : ELogLevel::Error,
                      assessed, request.m_request_id, request.m_history.size());
 
@@ -361,6 +441,9 @@ CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
 
     if (first_failure != EExitReason::None)
     {
+        // The concrete failure reason must survive into the result: otherwise the
+        // caller reports a cursor failure for a broken history or unreadable file.
+        result.m_exit_reason = first_failure;
         return ERootChoice::Failure;
     }
     result.m_trace.emplace_back(ETraceEvent::ApplicabilityAssessed);
@@ -413,6 +496,17 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         return result;
     }
     result.m_trace.emplace_back(ETraceEvent::ValidationOk);
+
+    // The user's question must fit before any context is gathered: budgeting on
+    // a request that cannot be answered wastes index reads and model calls.
+    if (!plan_budget(normalised, result))
+    {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started).count();
+        m_logger.log(ELogLevel::Error, result, normalised.m_request_id,
+                     normalised.m_session_id, elapsed);
+        return result;
+    }
 
     switch (choose_root(normalised, result))
     {
@@ -574,6 +668,9 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
     {
     case EExitReason::EmptyRequest:
         terminal = ETraceEvent::ExitEmptyRequest;
+        break;
+    case EExitReason::RequestTooLong:
+        terminal = ETraceEvent::ExitRequestTooLong;
         break;
     case EExitReason::CursorRelevanceFailed:
         terminal = ETraceEvent::ExitCursorRelevanceFailed;

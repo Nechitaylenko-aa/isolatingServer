@@ -25,6 +25,7 @@ static const char* const m_exit_reason_names[static_cast<std::size_t>(EExitReaso
 {
     "NONE",
     "EMPTY_REQUEST",
+    "REQUEST_TOO_LONG",
     "CURSOR_RELEVANCE_FAILED",
     "HISTORY_RELEVANCE_FAILED",
     "FILE_RELEVANCE_FAILED",
@@ -58,6 +59,7 @@ static const char* const m_trace_event_names[static_cast<std::size_t>(ETraceEven
     "EXIT:LLM_GENERATION_FAILED",
     "EXIT:COMPLETED",
     "EXIT:EMPTY_REQUEST",
+    "EXIT:REQUEST_TOO_LONG",
     "EXIT:CURSOR_RELEVANCE_FAILED",
     "EXIT:HISTORY_RELEVANCE_FAILED",
     "EXIT:FILE_RELEVANCE_FAILED",

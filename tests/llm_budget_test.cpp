@@ -41,6 +41,41 @@ private:
     std::vector<std::string> m_messages;
 };
 
+/** @brief Модель с заданным ответом (в том числе пустым). */
+class CReplyModel final : public fcpp::IModelApi
+{
+public:
+    explicit CReplyModel(std::string text)
+        : m_text(std::move(text))
+    {
+    }
+
+    bool is_available() const override
+    {
+        return true;
+    }
+
+    fcpp::SModelReply complete(const std::vector<fcpp::SModelMessage>&) override
+    {
+        return fcpp::SModelReply{true, m_text, {}, "stop", {}};
+    }
+
+    fcpp::SModelReply complete(const std::vector<fcpp::SModelMessage>& messages,
+                               const std::vector<fcpp::SModelTool>&) override
+    {
+        return complete(messages);
+    }
+
+    fcpp::SModelReply complete_stream(const std::vector<fcpp::SModelMessage>& messages,
+                                      const fcpp::SStreamCallback&) override
+    {
+        return complete(messages);
+    }
+
+private:
+    std::string m_text;
+};
+
 /** @brief Модель, запоминающая отправленный промпт. */
 class CCapturingModel final : public fcpp::IModelApi
 {
@@ -188,4 +223,67 @@ TEST_CASE("llm layer reports the configured context window",
 
     REQUIRE(layer.context_window_tokens(fcpp::ELlmRole::CoderLocal) == 8192);
     REQUIRE(layer.context_window_tokens(fcpp::ELlmRole::Count) == 0);
+}
+
+TEST_CASE("llm layer does not escalate an empty reply caused by prompt truncation",
+          "[llm][budget][escalation]")
+{
+    // Резерв 800 при окне 1000 оставляет промпту ~200 токенов: промпт на 20 КБ
+    // гарантированно урезается, и модель отвечает пустой строкой.
+    const fcpp::SLlmRoleSet roles = make_roles(1000, 800);
+    CRecordingLogger logger;
+    std::vector<fcpp::ELlmRole> called_roles;
+
+    fcpp::CLlmLayer layer(roles, logger,
+        [&called_roles](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            called_roles.push_back(role);
+            return std::make_unique<CReplyModel>(std::string{});
+        });
+
+    const fcpp::SLlmExecutionResult result =
+        layer.request_text(fcpp::ELlmRole::CoderLocal, "You are a helper.", long_prompt(20000));
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE_FALSE(result.m_escalated);
+    REQUIRE(result.m_error.find("did not fit the role context window") != std::string::npos);
+    // Только первичная роль: повторять тот же сломанный промпт смысла нет.
+    REQUIRE(called_roles.size() == 1);
+    REQUIRE(called_roles.front() == fcpp::ELlmRole::CoderLocal);
+}
+
+TEST_CASE("llm layer still escalates when the prompt was not truncated",
+          "[llm][budget][escalation]")
+{
+    // Окно большое, промпт влезает целиком: пустой ответ — это уже свойство
+    // модели, и переход на резервную роль оправдан.
+    const fcpp::SLlmRoleSet roles = make_roles(30000, 4096);
+    CRecordingLogger logger;
+    std::vector<fcpp::ELlmRole> called_roles;
+
+    fcpp::CLlmLayer layer(roles, logger,
+        [&called_roles](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            called_roles.push_back(role);
+            return std::make_unique<CReplyModel>(std::string{});
+        });
+
+    const fcpp::SLlmExecutionResult result =
+        layer.request_text(fcpp::ELlmRole::CoderLocal, "You are a helper.", long_prompt(1000));
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_escalated);
+    REQUIRE(called_roles.size() == 2);
+    REQUIRE(called_roles.front() == fcpp::ELlmRole::CoderLocal);
+    REQUIRE(called_roles.back() == fcpp::ELlmRole::CoderSmart);
+
+    bool logged_truncation = false;
+    for (const std::string& message : logger.messages())
+    {
+        if (message == "llm.prompt_truncated")
+        {
+            logged_truncation = true;
+        }
+    }
+    REQUIRE_FALSE(logged_truncation);
 }

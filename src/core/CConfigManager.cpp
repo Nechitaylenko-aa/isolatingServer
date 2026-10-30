@@ -225,15 +225,17 @@ bool CConfigManager::bootstrap()
         {"allow_write", "YES"},
         {"allow_exec", "YES"},
         {"llm_coder_alias", ""}, {"llm_thinker_alias", ""},
+        // Smart roles are remote: the endpoint cannot be probed, so the window
+        // is a hard configuration contract. 56K is the working limit here.
         {"llm_coder_smart_api", ""}, {"llm_coder_smart_model", ""}, {"llm_coder_smart_key", ""},
         {"llm_coder_smart_type", "openai-compat"}, {"llm_coder_smart_alias", ""},
-        {"llm_coder_smart_context_window_tokens", "0"}, {"llm_coder_smart_output_reserve_tokens", "4096"},
+        {"llm_coder_smart_context_window_tokens", "57344"}, {"llm_coder_smart_output_reserve_tokens", "8192"},
         {"llm_coder_local_api", ""}, {"llm_coder_local_model", ""}, {"llm_coder_local_key", ""},
         {"llm_coder_local_type", "openai-compat"}, {"llm_coder_local_alias", ""},
         {"llm_coder_local_context_window_tokens", "0"}, {"llm_coder_local_output_reserve_tokens", "4096"},
         {"llm_thinker_smart_api", ""}, {"llm_thinker_smart_model", ""}, {"llm_thinker_smart_key", ""},
         {"llm_thinker_smart_type", "openai-compat"}, {"llm_thinker_smart_alias", ""},
-        {"llm_thinker_smart_context_window_tokens", "0"}, {"llm_thinker_smart_output_reserve_tokens", "4096"},
+        {"llm_thinker_smart_context_window_tokens", "57344"}, {"llm_thinker_smart_output_reserve_tokens", "8192"},
         {"llm_thinker_local_api", ""}, {"llm_thinker_local_model", ""}, {"llm_thinker_local_key", ""},
         {"llm_thinker_local_type", "openai-compat"}, {"llm_thinker_local_alias", ""},
         {"llm_thinker_local_context_window_tokens", "0"}, {"llm_thinker_local_output_reserve_tokens", "4096"}
@@ -269,8 +271,8 @@ bool CConfigManager::bootstrap()
         content << "llm_coder_smart_key=\"\"\n";
         content << "llm_coder_smart_type=\"openai-compat\"\n";
         content << "llm_coder_smart_alias=\"\"\n";
-        content << "llm_coder_smart_context_window_tokens=\"0\"\n";
-        content << "llm_coder_smart_output_reserve_tokens=\"4096\"\n\n";
+        content << "llm_coder_smart_context_window_tokens=\"57344\"\n";
+        content << "llm_coder_smart_output_reserve_tokens=\"8192\"\n\n";
         content << "llm_coder_local_api=\"\"\n";
         content << "llm_coder_local_model=\"\"\n";
         content << "llm_coder_local_key=\"\"\n";
@@ -283,8 +285,8 @@ bool CConfigManager::bootstrap()
         content << "llm_thinker_smart_key=\"\"\n";
         content << "llm_thinker_smart_type=\"openai-compat\"\n";
         content << "llm_thinker_smart_alias=\"\"\n";
-        content << "llm_thinker_smart_context_window_tokens=\"0\"\n";
-        content << "llm_thinker_smart_output_reserve_tokens=\"4096\"\n\n";
+        content << "llm_thinker_smart_context_window_tokens=\"57344\"\n";
+        content << "llm_thinker_smart_output_reserve_tokens=\"8192\"\n\n";
         content << "llm_thinker_local_api=\"\"\n";
         content << "llm_thinker_local_model=\"\"\n";
         content << "llm_thinker_local_key=\"\"\n";

@@ -56,6 +56,22 @@ public:
         const std::vector<SConversationTurn>& history) const;
 
     /**
+     * @brief Оценить применимость истории в пределах заданного лимита.
+     *
+     * Лимит приходит из общего бюджета промпта (доля истории), поэтому история
+     * не может вместе с кодом превысить окно модели.
+     *
+     * @param current_request Текст запроса.
+     * @param history Полная история диалога.
+     * @param max_bytes Бюджет истории в байтах; 0 — значение по умолчанию.
+     * @return Результат оценки с индексами в исходной истории.
+     */
+    SHistoryRelevance assess_relevance(
+        const std::string& current_request,
+        const std::vector<SConversationTurn>& history,
+        std::size_t max_bytes) const;
+
+    /**
      * @brief Разобрать номера пар из ответа модели.
      * @param text Ответ модели.
      * @param turn_count Сколько пар было предложено.

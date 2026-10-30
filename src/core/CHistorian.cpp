@@ -113,7 +113,17 @@ SHistoryRelevance CHistorian::assess_relevance(
     const std::string& current_request,
     const std::vector<SConversationTurn>& history) const
 {
+    return assess_relevance(current_request, history, k_max_history_bytes);
+}
+
+SHistoryRelevance CHistorian::assess_relevance(
+    const std::string& current_request,
+    const std::vector<SConversationTurn>& history,
+    std::size_t max_bytes) const
+{
     SHistoryRelevance result;
+    const std::size_t byte_limit =
+        max_bytes == 0 ? k_max_history_bytes : max_bytes;
     if (history.empty())
     {
         result.m_ok = true;
@@ -142,7 +152,7 @@ SHistoryRelevance CHistorian::assess_relevance(
             "USER: " + turn.m_user_text
             + "\nASSISTANT: " + turn.m_assistant_text + "\n\n";
         if (!history_text.empty()
-            && history_text.size() + entry.size() > k_max_history_bytes)
+            && history_text.size() + entry.size() > byte_limit)
         {
             break;
         }
