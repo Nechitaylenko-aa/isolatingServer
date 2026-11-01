@@ -92,7 +92,14 @@ CTest: число тестов отслеживается в последнем 
 * [ ] Implement `shrink_question` truncation after the chat vector becomes the authoritative dialogue representation.
 
 ## Осталось (не блокирует текущий функционал)
-* [ ] **7b** — полный цикл изменения: LLM генерирует патч → конвейер 7a (+ каскад ADR-10, hard-stop).
+* [~] **7b** — полный цикл изменения: LLM генерирует патч → конвейер 7a (+ каскад ADR-10, hard-stop).
+  Реализовано в `CRequestOrchestrator::generate_edit` (решение №19 в decisions.md):
+  intent-ось в дереве, `handle_patch`/CLI `patch`/`ILLMClient` удалены как
+  второй вход. Не хватает: сборки/прогона тестов (нет libclang в песочнице,
+  где писался код), тестов на новую ветку (`Edit`/`BuildFailed`/
+  `EditWithoutTarget`), выноса дублирования `generate_edit` vs старого
+  `handle_patch` — последнее снято удалением `handle_patch`, но стоит
+  перепроверить, не осталось ли похожей логики в другом месте.
 * [x] **6c (каскад)** — детерминированный `CModelCascade` (триггеры `EGlitchKind`, бюджет 1 ретрай/уровень, передача ошибки наверх, hard-stop); `CEscalatingIntentAnalyzer` (lite→main→remote) подключён в `ask`. Тест `cascade_test`; CTest 43/43.
 * [x] **6c (answer-каскад)** — генерация ответа по Evidence использует общий `CModelCascade` (lite→main→remote), ограниченный бюджет попыток и повтор с диагностическим контекстом.
 * [ ] **6c (benchmark B)** — LLM-классификация (§71–72).

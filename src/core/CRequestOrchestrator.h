@@ -28,6 +28,8 @@ namespace fcpp
 class CLogger;
 class CHistorian;
 class CCursorContextAnalyzer;
+class CConfigManager;
+class CProjectManager;
 
 /**
  * @brief Нормализованный вход от клиентского фасада.
@@ -62,6 +64,8 @@ struct SOrchestrationResult
     std::vector<SConversationTurn> m_history_context;///< Отобранные пары истории.
     std::vector<SFactSection> m_fact_sections;      ///< Факты из индекса.
     SContextBudgetSplit m_budget;                   ///< Распределение бюджета.
+    EOrchestrationIntent m_intent = EOrchestrationIntent::Answer; ///< Намерение запроса.
+    std::vector<std::string> m_changed_files;       ///< Файлы, изменённые патчем (Intent::Edit).
 };
 
 /**
@@ -77,11 +81,17 @@ public:
      * @param cursor_analyzer Оценка курсора (может быть nullptr).
      * @param llm Слой моделей (может быть nullptr).
      * @param facts Поставщик фактов об индексе (может быть nullptr).
+     * @param config_manager Конфигурация прав allow_write/allow_exec (может быть nullptr —
+     * тогда Intent::Edit всегда запрещён).
+     * @param project_manager Текущий открытый проект, корень для патча и сборки (может быть
+     * nullptr — тогда Intent::Edit всегда запрещён).
      */
     explicit CRequestOrchestrator(CLogger& logger, CHistorian* historian = nullptr,
                                   CCursorContextAnalyzer* cursor_analyzer = nullptr,
                                   CLlmLayer* llm = nullptr,
-                                  const IFactProvider* facts = nullptr);
+                                  const IFactProvider* facts = nullptr,
+                                  const CConfigManager* config_manager = nullptr,
+                                  CProjectManager* project_manager = nullptr);
 
     /**
      * @brief Пройти дерево обработки.
@@ -195,14 +205,64 @@ private:
                                    SOrchestrationResult& result) const;
 
     /**
-     * @brief Сформировать ответ по содержимому файла.
+     * @brief Сформировать ответ или правку по содержимому файла.
+     *
+     * Сбор материала (факты по сущности либо срез файла) не зависит от
+     * намерения — отличается только терминальный шаг.
+     *
      * @param request Запрос.
      * @param result Результат.
      * @param include_history Включать ли отобранную историю.
+     * @param is_edit true — сформировать патч (generate_edit); false — ответ текстом.
      */
-    void answer_from_file(const SOrchestrationRequest& request,
-                          SOrchestrationResult& result,
-                          bool include_history) const;
+    void respond_from_file(const SOrchestrationRequest& request,
+                           SOrchestrationResult& result,
+                           bool include_history,
+                           bool is_edit) const;
+
+    /**
+     * @brief Определить намерение запроса: ответ текстом или правка исходников.
+     *
+     * Используется та же конструкция, что и для применимости курсора/файла/
+     * истории — бинарный вопрос модели класса ThinkerLocal. Без слоя моделей
+     * намерение безопасно по умолчанию равно Answer: ничего не мутировать,
+     * если решить нечем.
+     *
+     * @param request Запрос.
+     * @return Намерение.
+     */
+    EOrchestrationIntent classify_intent(const SOrchestrationRequest& request) const;
+
+    /**
+     * @brief Проверить право на Intent::Edit до того, как потрачен вызов модели.
+     *
+     * Та же логика, что и у check_request_fits: отказ дешевле обнаружить
+     * раньше дорогого шага. При отказе результат уже заполнен через fail().
+     *
+     * @param request Запрос.
+     * @param result Результат.
+     * @return true если изменение исходников разрешено конфигурацией и проектом открыт.
+     */
+    bool check_edit_permission(const SOrchestrationRequest& request,
+                               SOrchestrationResult& result) const;
+
+    /**
+     * @brief Сформировать правку: запросить патч у модели, провалидировать,
+     * применить и (если разрешено) проверить сборкой; откатить при любом сбое.
+     *
+     * Единая точка мутации исходников во всём дереве — симметрична
+     * generate_answer(): роль и готовый ввод передаёт вызывающий, проверка
+     * слоя моделей и аудит не дублируются по маршрутам.
+     *
+     * @param request Запрос.
+     * @param result Результат.
+     * @param role Роль модели (та же, что для generate_answer на этом маршруте).
+     * @param prompt_input Собранный промпт (evidence + запрос).
+     */
+    void generate_edit(const SOrchestrationRequest& request,
+                       SOrchestrationResult& result,
+                       ELlmRole role,
+                       const std::string& prompt_input) const;
 
     /**
      * @brief Собрать префикс промпта из среза кода и фактов индекса.
@@ -249,6 +309,8 @@ private:
     CCursorContextAnalyzer* m_cursor_analyzer = nullptr; ///< Оценка курсора.
     CLlmLayer* m_llm = nullptr;                     ///< Слой моделей.
     const IFactProvider* m_facts = nullptr;         ///< Поставщик фактов.
+    const CConfigManager* m_config_manager = nullptr; ///< Права allow_write/allow_exec.
+    CProjectManager* m_project_manager = nullptr;   ///< Текущий проект (корень патча/сборки).
 };
 
 } // namespace fcpp

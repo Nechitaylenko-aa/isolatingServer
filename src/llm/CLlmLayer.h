@@ -22,7 +22,8 @@ enum class EPromptType
     YesNo,                 ///< Бинарное решение.
     CursorRelevance,       ///< Применимость курсора.
     HistoryRelevance,      ///< Применимость истории.
-    ScopeClassification    ///< Классификация области.
+    ScopeClassification,   ///< Классификация области.
+    CppPatch                ///< Генерация unified diff для изменения исходников (§44).
 };
 
 struct SLlmExecutionResult

@@ -25,9 +25,6 @@
 #include "core/CLogger.h"
 #include "core/CHash.h"
 #include "core/CDoctor.h"
-#include "core/CPatchApplier.h"
-#include "core/CPatchParser.h"
-#include "core/CPatchValidator.h"
 #include "core/CExecutor.h"
 #include "fcpp-agent/IClang.h"
 #include "index/CClangFactory.h"
@@ -57,7 +54,6 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "build.build",
     "tests.run",
     "tool",
-    "patch",
     "doctor",
     "ask",
     "session.open",
@@ -616,8 +612,6 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         }
         case EApiMethod::Tool:
             return handle_tool(request);
-        case EApiMethod::Patch:
-            return handle_patch(request);
         case EApiMethod::Doctor:
         {
             response.m_ok = CDoctor().run(m_config_manager.config());
@@ -1038,7 +1032,8 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
             clang.get());
     }
     CRequestOrchestrator orchestrator(m_logger, &historian,
-        cursor_analyzer.get(), &llm, facts.get());
+        cursor_analyzer.get(), &llm, facts.get(),
+        &m_config_manager, &m_project_manager);
     const SOrchestrationResult orchestration_result = orchestrator.run(orchestration_request);
 
     SApiResponse response;
@@ -1138,82 +1133,6 @@ SApiResponse CAgentApi::handle_tool(const SApiRequest& request)
     response.m_names = tool_result.m_names;
     response.m_locations = tool_result.m_locations;
     response.m_text = tool_result.m_text;
-    return response;
-}
-
-SApiResponse CAgentApi::handle_patch(const SApiRequest& request)
-{
-    if (!m_project_manager.has_current())
-    {
-        m_project_manager.restore_session();
-    }
-    if (!m_project_manager.has_current())
-    {
-        return make_error(EErrorKind::ProjectNotOpen, "project not open");
-    }
-    if (!m_config_manager.config().m_allow_write)
-    {
-        return make_error(EErrorKind::PermissionDenied, "allow_write is NO");
-    }
-
-    SPatchSet patch;
-    if (!CPatchParser::parse(request.m_payload, patch))
-    {
-        return make_error(EErrorKind::InvalidRequest, "cannot parse patch");
-    }
-
-    CPatchValidator validator(m_project_manager.current().m_project.m_canonical_path);
-    SPatchValidation validation;
-    if (!validator.validate(patch, validation))
-    {
-        return make_error(EErrorKind::PatchInvalid, validation.m_message);
-    }
-
-    CPatchApplier applier;
-    std::string message;
-    if (!applier.apply(validation.m_changes, message))
-    {
-        return make_error(EErrorKind::PatchApplyFailed, message);
-    }
-
-    // COMPILATION FAIL (детерминированный триггер ADR-10): при провале сборки — откат.
-    if (request.m_build_after)
-    {
-        if (!m_config_manager.config().m_allow_exec)
-        {
-            applier.revert(validation.m_changes, message);
-            return make_error(EErrorKind::PermissionDenied, "allow_exec is NO; patch reverted");
-        }
-
-        const std::filesystem::path build_dir =
-            m_project_manager.current().m_project.m_canonical_path / m_config_manager.config().m_default_build;
-
-        CExecutor executor;
-        SCommandArgs args;
-        args.m_tool = m_config_manager.config().m_cmake_path.empty()
-                          ? "cmake"
-                          : m_config_manager.config().m_cmake_path.string();
-        args.m_arguments = {"--build", build_dir.string()};
-        args.m_working_dir = m_project_manager.current().m_project.m_canonical_path;
-        args.m_effect = EFFECT_WRITE_BUILD;
-        args.m_timeout_seconds = 600;
-
-        const SExecutionResult build = executor.execute(args, nullptr);
-        if (!build.m_allowed || build.m_exit_code != 0)
-        {
-            std::string revert_message;
-            applier.revert(validation.m_changes, revert_message);
-            SApiResponse failed;
-            failed.m_ok = false;
-            failed.m_error = EErrorKind::BuildFailed;
-            failed.m_message = "COMPILATION FAIL; patch reverted\n" + build.m_stderr;
-            return failed;
-        }
-    }
-
-    SApiResponse response;
-    response.m_ok = true;
-    response.m_text = "patch applied (" + std::to_string(validation.m_changes.size()) + " files)";
     return response;
 }
 

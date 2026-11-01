@@ -31,7 +31,20 @@ static const char* const m_exit_reason_names[static_cast<std::size_t>(EExitReaso
     "FILE_RELEVANCE_FAILED",
     "FILE_NOT_RELEVANT",
     "LLM_GENERATION_FAILED",
-    "INDEX_UNAVAILABLE"
+    "INDEX_UNAVAILABLE",
+    "PERMISSION_DENIED",
+    "EDIT_WITHOUT_TARGET",
+    "PATCH_UNPARSABLE",
+    "PATCH_INVALID",
+    "PATCH_APPLY_FAILED",
+    "BUILD_FAILED"
+};
+
+/** @brief Имена намерений, индексированные по EOrchestrationIntent. */
+static const char* const m_intent_names[static_cast<std::size_t>(EOrchestrationIntent::Count)]
+{
+    "ANSWER",
+    "EDIT"
 };
 
 /** @brief Имена маршрутов, индексированные по EOrchestrationRoute. */
@@ -64,7 +77,19 @@ static const char* const m_trace_event_names[static_cast<std::size_t>(ETraceEven
     "EXIT:HISTORY_RELEVANCE_FAILED",
     "EXIT:FILE_RELEVANCE_FAILED",
     "EXIT:FILE_NOT_RELEVANT",
-    "EXIT:INDEX_UNAVAILABLE"
+    "EXIT:INDEX_UNAVAILABLE",
+    "INTENT:CLASSIFIED",
+    "PATCH:GENERATED",
+    "PATCH:VALIDATED",
+    "PATCH:APPLIED",
+    "PATCH:BUILD_VERIFIED",
+    "PATCH:REVERTED",
+    "EXIT:PERMISSION_DENIED",
+    "EXIT:EDIT_WITHOUT_TARGET",
+    "EXIT:PATCH_UNPARSABLE",
+    "EXIT:PATCH_INVALID",
+    "EXIT:PATCH_APPLY_FAILED",
+    "EXIT:BUILD_FAILED"
 };
 
 } // namespace
@@ -108,6 +133,13 @@ const char* orchestration_route_name(EOrchestrationRoute value)
     const auto index = static_cast<std::size_t>(value);
     return index < static_cast<std::size_t>(EOrchestrationRoute::Count)
         ? m_route_names[index] : "UNKNOWN";
+}
+
+const char* orchestration_intent_name(EOrchestrationIntent value)
+{
+    const auto index = static_cast<std::size_t>(value);
+    return index < static_cast<std::size_t>(EOrchestrationIntent::Count)
+        ? m_intent_names[index] : "UNKNOWN";
 }
 
 const char* trace_event_name(ETraceEvent value)

@@ -8,9 +8,7 @@
 
 #include <cstddef>
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -52,7 +50,6 @@ void print_usage(const std::string& program)
     std::cout << "  index <status|refresh|rebuild> [<path>]\n";
     std::cout << "  build                           Сборка (cmake --build)\n";
     std::cout << "  test                            Тесты (ctest)\n";
-    std::cout << "  patch <file|-> [--yes] [--build]  Применить unified diff (+проверка сборкой)\n";
     std::cout << "\nДетерминированные запросы (tools):\n";
     std::cout << "  outline|callers|callees|refs|includes|overrides|dispatch\n";
     std::cout << "  def|ancestors|derived|search|source <symbol> [<path>]\n";
@@ -88,30 +85,6 @@ int run_init()
     std::cout << "  конфигурация:   " << manager.config_path().string() << '\n';
 
     return 0;
-}
-
-/**
- * @brief Прочитать текст патча из файла или stdin ("-").
- * @param source Путь к файлу либо "-".
- * @return Текст патча.
- */
-std::string read_patch_text(const std::string& source)
-{
-    if (source == "-")
-    {
-        std::ostringstream buffer;
-        buffer << std::cin.rdbuf();
-        return buffer.str();
-    }
-
-    std::ifstream input(source, std::ios::binary);
-    if (!input.is_open())
-    {
-        return {};
-    }
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    return buffer.str();
 }
 
 /**
@@ -516,50 +489,6 @@ int main(int argc, char* argv[])
         }
         return response.m_ok ? 0 : 1;
     }
-    if (command == "patch")
-    {
-        if (argc < 3)
-        {
-            std::cerr << "fcpp-agent: patch требует путь к патчу (или '-' для stdin)\n";
-            return 2;
-        }
-        const std::string text = read_patch_text(argv[2]);
-        if (text.empty())
-        {
-            std::cerr << "fcpp-agent: пустой патч или не удалось прочитать источник\n";
-            return 1;
-        }
-
-        fcpp::SApiRequest request;
-        request.m_method = fcpp::EApiMethod::Patch;
-        request.m_payload = text;
-        for (int index = 3; index < argc; ++index)
-        {
-            const std::string arg = argv[index];
-            if (arg == "--yes")
-            {
-                request.m_assume_yes = true;
-            }
-            else if (arg == "--build")
-            {
-                request.m_build_after = true;
-            }
-        }
-
-        const fcpp::SApiResponse response = api.execute(request);
-        if (!response.m_ok)
-        {
-            std::cerr << "fcpp-agent: " << fcpp::error_kind_name(response.m_error) << ": " << response.m_message << '\n';
-            return 1;
-        }
-        std::cout << response.m_text << '\n';
-        if (request.m_build_after)
-        {
-            std::cout << "сборка успешна\n";
-        }
-        return 0;
-    }
-
     if (fcpp::api_is_tool_command(command))
     {
         if (argc < 3)

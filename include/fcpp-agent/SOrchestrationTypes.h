@@ -39,7 +39,23 @@ enum class EExitReason
     FileNotRelevant,         ///< Вопрос не относится к открытому файлу.
     LlmGenerationFailed,     ///< Модель не дала пригодный ответ.
     IndexUnavailable,        ///< База индекса проекта недоступна.
+    PermissionDenied,        ///< Intent=Edit запрещён конфигурацией (allow_write/allow_exec).
+    EditWithoutTarget,       ///< Intent=Edit на маршруте без файла/курсора — редактировать нечего.
+    PatchUnparsable,         ///< Ответ модели не разобрался как unified diff.
+    PatchInvalid,            ///< Патч не прошёл валидацию (§46).
+    PatchApplyFailed,        ///< Патч не удалось записать на диск.
+    BuildFailed,             ///< Сборка после применения патча провалилась; патч откачен.
     Count                    ///< Маркер количества.
+};
+
+/**
+ * @brief Намерение запроса: ответить текстом или изменить исходники.
+ */
+enum class EOrchestrationIntent
+{
+    Answer, ///< Пользователь хочет объяснение/ответ текстом.
+    Edit,   ///< Пользователь хочет, чтобы агент изменил исходники (§44).
+    Count   ///< Маркер количества.
 };
 
 /**
@@ -78,6 +94,18 @@ enum class ETraceEvent
     ExitFileRelevanceFailed,      ///< Терминальный выход: оценка файла.
     ExitFileNotRelevant,          ///< Терминальный выход: файл не про запрос.
     ExitIndexUnavailable,         ///< Терминальный выход: индекс.
+    IntentClassified,             ///< Намерение (ответ/правка) определено.
+    PatchGenerated,                ///< Модель вернула текст, разобранный как патч.
+    PatchValidated,                ///< Патч прошёл валидацию (§46).
+    PatchApplied,                  ///< Патч записан на диск.
+    BuildVerified,                 ///< Пост-патч сборка прошла успешно.
+    PatchReverted,                 ///< Патч откачен после сбоя валидации/применения/сборки.
+    ExitPermissionDenied,          ///< Терминальный выход: правка запрещена конфигурацией.
+    ExitEditWithoutTarget,         ///< Терминальный выход: нечего редактировать.
+    ExitPatchUnparsable,           ///< Терминальный выход: модель не вернула диф.
+    ExitPatchInvalid,              ///< Терминальный выход: патч не прошёл валидацию.
+    ExitPatchApplyFailed,          ///< Терминальный выход: патч не записался на диск.
+    ExitBuildFailed,               ///< Терминальный выход: сборка провалилась, патч откачен.
     Count                         ///< Маркер количества.
 };
 
@@ -101,6 +129,13 @@ const char* exit_reason_name(EExitReason value);
  * @return Стабильное имя.
  */
 const char* orchestration_route_name(EOrchestrationRoute value);
+
+/**
+ * @brief Текстовое имя намерения запроса.
+ * @param value Намерение.
+ * @return Стабильное имя.
+ */
+const char* orchestration_intent_name(EOrchestrationIntent value);
 
 /**
  * @brief Роль модели, которая формирует ответ на этом маршруте.

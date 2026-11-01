@@ -52,13 +52,6 @@ private:
     SApiResponse handle_tool(const SApiRequest& request);
 
     /**
-     * @brief Обработать применение патча.
-     * @param request Запрос.
-     * @return Ответ.
-     */
-    SApiResponse handle_patch(const SApiRequest& request);
-
-    /**
      * @brief Обработать пользовательский AI-запрос (§89.13, §94).
      *
      * Тело запроса — только текст и опциональный редакторский контекст;

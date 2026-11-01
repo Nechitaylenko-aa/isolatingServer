@@ -55,6 +55,13 @@ const char* system_prompt_for(EPromptType type)
     case EPromptType::ScopeClassification:
         return "Classify the requested change scope. Respond with exactly one label: "
                "LOCAL, FILE, PROJECT, or REPOSITORY. Do not add explanation.";
+    case EPromptType::CppPatch:
+        return "You are a senior C++ engineer. Produce a single unified diff (git-style, "
+               "with --- / +++ file headers and @@ hunk headers) that implements the "
+               "requested change precisely and keeps the project compiling. Output ONLY "
+               "the diff: no prose, no markdown code fences, no commentary before or "
+               "after it. File paths are relative to the project root. Prefer the "
+               "smallest correct change over a broad rewrite.";
     }
     return "";
 }
@@ -102,6 +109,16 @@ bool validate_prompt_result(EPromptType type, const std::string& text, std::stri
             || normalized == "PROJECT" || normalized == "REPOSITORY")
             return true;
         error = "expected LOCAL, FILE, PROJECT, or REPOSITORY";
+        return false;
+    case EPromptType::CppPatch:
+        // Full structural validation is CPatchParser's job; this is a cheap
+        // sanity gate so a non-diff answer is caught here, not three layers
+        // down inside the patch pipeline.
+        if (text.find("@@") != std::string::npos
+            && (text.find("--- ") != std::string::npos
+                || text.find("+++ ") != std::string::npos))
+            return true;
+        error = "response does not look like a unified diff";
         return false;
     }
     error = "unknown prompt type";

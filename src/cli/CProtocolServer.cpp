@@ -93,11 +93,6 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::Tool;
         return true;
     }
-    if (name == "patch")
-    {
-        out = EApiMethod::Patch;
-        return true;
-    }
     if (name == "index.status")
     {
         out = EApiMethod::IndexStatus;
@@ -337,8 +332,7 @@ bool CProtocolServer::parse_request(const std::string& text,
         {"session_id", EExpectedJsonType::String}, {"sessionId", EExpectedJsonType::String},
         {"projectId", EExpectedJsonType::String},
         {"tool", EExpectedJsonType::String}, {"target", EExpectedJsonType::String},
-        {"payload", EExpectedJsonType::String}, {"limit", EExpectedJsonType::UnsignedInteger},
-        {"assumeYes", EExpectedJsonType::Boolean}, {"buildAfter", EExpectedJsonType::Boolean},
+        {"limit", EExpectedJsonType::UnsignedInteger},
         {"stream", EExpectedJsonType::Boolean}, {"editor", EExpectedJsonType::Object}
     };
     for (const SFieldTypeCheck& field : field_checks)
@@ -467,21 +461,9 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_target = params["target"].get<std::string>();
     }
-    if (params.contains("payload") && params["payload"].is_string())
-    {
-        out_request.m_payload = params["payload"].get<std::string>();
-    }
     if (params.contains("limit"))
     {
         out_request.m_limit = params["limit"].get<std::uint32_t>();
-    }
-    if (params.contains("assumeYes") && params["assumeYes"].is_boolean())
-    {
-        out_request.m_assume_yes = params["assumeYes"].get<bool>();
-    }
-    if (params.contains("buildAfter") && params["buildAfter"].is_boolean())
-    {
-        out_request.m_build_after = params["buildAfter"].get<bool>();
     }
     if (params.contains("stream") && params["stream"].is_boolean())
     {
@@ -524,9 +506,6 @@ bool CProtocolServer::parse_request(const std::string& text,
         case EApiMethod::Tool:
             if (!require_non_empty(out_request.m_tool, "params.tool")
                     || !require_non_empty(out_request.m_target, "params.target")) return false;
-            break;
-        case EApiMethod::Patch:
-            if (!require_non_empty(out_request.m_payload, "params.payload")) return false;
             break;
         case EApiMethod::Ask:
             // Жёсткий контракт: диалог адресуется сессией. Без неё ответ не имеет

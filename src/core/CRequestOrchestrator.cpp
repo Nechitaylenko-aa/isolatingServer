@@ -13,12 +13,19 @@
 #include <utility>
 #include <vector>
 
+#include "core/CConfigManager.h"
+#include "core/CExecutor.h"
 #include "core/CHistorian.h"
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CLogger.h"
+#include "core/CPatchApplier.h"
+#include "core/CPatchParser.h"
+#include "core/CPatchValidator.h"
+#include "core/CProjectManager.h"
 #include "fcpp-agent/IFactProvider.h"
 #include "fcpp-agent/ITool.h"
 #include "fcpp-agent/SLogEvent.h"
+#include "fcpp-agent/SPatch.h"
 #include "llm/CLlmLayer.h"
 
 namespace fcpp
@@ -76,16 +83,44 @@ std::string trim(const std::string& text)
     return text.substr(first, last - first + 1);
 }
 
+/**
+ * @brief Проверить, что ответ модели — ровно утвердительный YES (без учёта регистра).
+ *
+ * Локальная копия, а не переиспользование CLlmLayer::validate_prompt_result:
+ * та функция уже гарантирует, что текст либо YES, либо NO (иначе request_text
+ * вернул бы m_ok=false), так что здесь остаётся только сравнение, а не
+ * повторная валидация формата.
+ *
+ * @param text Текст ответа модели.
+ * @return true если ответ — YES.
+ */
+bool is_affirmative(const std::string& text)
+{
+    std::string upper = trim(text);
+    for (char& ch : upper)
+    {
+        if (ch >= 'a' && ch <= 'z')
+        {
+            ch = static_cast<char>(ch - 'a' + 'A');
+        }
+    }
+    return upper == "YES";
+}
+
 } // namespace
 
 CRequestOrchestrator::CRequestOrchestrator(CLogger& logger, CHistorian* historian,
                                            CCursorContextAnalyzer* cursor_analyzer,
-                                           CLlmLayer* llm, const IFactProvider* facts)
+                                           CLlmLayer* llm, const IFactProvider* facts,
+                                           const CConfigManager* config_manager,
+                                           CProjectManager* project_manager)
     : m_logger(logger)
     , m_historian(historian)
     , m_cursor_analyzer(cursor_analyzer)
     , m_llm(llm)
     , m_facts(facts)
+    , m_config_manager(config_manager)
+    , m_project_manager(project_manager)
 {
 }
 
@@ -396,9 +431,10 @@ bool CRequestOrchestrator::collect_file_entity_facts(
     return true;
 }
 
-void CRequestOrchestrator::answer_from_file(const SOrchestrationRequest& request,
-                                            SOrchestrationResult& result,
-                                            bool include_history) const
+void CRequestOrchestrator::respond_from_file(const SOrchestrationRequest& request,
+                                             SOrchestrationResult& result,
+                                             bool include_history,
+                                             bool is_edit) const
 {
     std::string prompt;
     if (!result.m_fact_sections.empty())
@@ -439,8 +475,15 @@ void CRequestOrchestrator::answer_from_file(const SOrchestrationRequest& request
     }
     prompt += "\nUSER REQUEST:\n" + request.m_text;
 
-    generate_answer(request, result, ELlmRole::CoderSmart,
-                    EPromptType::CppExpert, prompt);
+    if (is_edit)
+    {
+        generate_edit(request, result, ELlmRole::CoderSmart, prompt);
+    }
+    else
+    {
+        generate_answer(request, result, ELlmRole::CoderSmart,
+                        EPromptType::CppExpert, prompt);
+    }
 }
 
 void CRequestOrchestrator::generate_answer(const SOrchestrationRequest& request,
@@ -479,6 +522,207 @@ void CRequestOrchestrator::generate_answer(const SOrchestrationRequest& request,
     result.m_exit_reason = EExitReason::None;
     result.m_message = generated.m_text;
     result.m_trace.emplace_back(ETraceEvent::AnswerAudited);
+}
+
+EOrchestrationIntent CRequestOrchestrator::classify_intent(
+    const SOrchestrationRequest& request) const
+{
+    if (m_llm == nullptr)
+    {
+        // Нечем классифицировать — безопасный дефолт: не мутировать.
+        return EOrchestrationIntent::Answer;
+    }
+
+    const std::string prompt =
+        "QUESTION: Does the user request below ask to modify, fix, add, or remove "
+        "code — as opposed to asking a question, requesting an explanation, or a "
+        "review with no code change?\nUSER REQUEST:\n" + request.m_text;
+
+    const SLlmExecutionResult classified =
+        m_llm->request_text(ELlmRole::ThinkerLocal, EPromptType::YesNo, prompt);
+
+    const EOrchestrationIntent intent =
+        classified.m_ok && is_affirmative(classified.m_text)
+            ? EOrchestrationIntent::Edit : EOrchestrationIntent::Answer;
+
+    m_logger.log_event(ELogLevel::Info, "intent.classified",
+        {{"request_id", request.m_request_id},
+         {"ok", classified.m_ok},
+         {"intent", orchestration_intent_name(intent)},
+         {"role", llm_role_name(classified.m_used_role)},
+         {"escalated", classified.m_escalated},
+         {"error", classified.m_error}});
+
+    // Сбой классификации — не терминальный сбой дерева: Answer безопасен как
+    // дефолт, а точная причина уже видна в intent.classified по ok=false.
+    return intent;
+}
+
+bool CRequestOrchestrator::check_edit_permission(const SOrchestrationRequest& request,
+                                                 SOrchestrationResult& result) const
+{
+    if (m_project_manager == nullptr || m_config_manager == nullptr)
+    {
+        fail(request, result, EExitReason::PermissionDenied,
+             "Edit intent requires project and configuration access; neither is wired.",
+             ETraceEvent::ExitPermissionDenied);
+        return false;
+    }
+    if (!m_project_manager->has_current())
+    {
+        fail(request, result, EExitReason::EditWithoutTarget,
+             "No project is open; there is nothing to edit.",
+             ETraceEvent::ExitEditWithoutTarget);
+        return false;
+    }
+    if (!m_config_manager->config().m_allow_write)
+    {
+        fail(request, result, EExitReason::PermissionDenied,
+             "Source modification is disabled by configuration (allow_write is NO).",
+             ETraceEvent::ExitPermissionDenied);
+        return false;
+    }
+    return true;
+}
+
+void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
+                                         SOrchestrationResult& result,
+                                         ELlmRole role,
+                                         const std::string& prompt_input) const
+{
+    if (m_llm == nullptr)
+    {
+        fail(request, result, EExitReason::LlmGenerationFailed,
+             "LLM layer is not configured.", ETraceEvent::ExitLlmGenerationFailed);
+        return;
+    }
+
+    const SLlmExecutionResult generated =
+        m_llm->request_text(role, EPromptType::CppPatch, prompt_input);
+    if (!generated.m_ok)
+    {
+        fail(request, result, EExitReason::LlmGenerationFailed,
+             generated.m_error.empty() ? "LLM patch generation failed." : generated.m_error,
+             ETraceEvent::ExitLlmGenerationFailed);
+        return;
+    }
+
+    SPatchSet patch;
+    if (!CPatchParser::parse(generated.m_text, patch))
+    {
+        fail(request, result, EExitReason::PatchUnparsable,
+             "Model response is not a well-formed unified diff.",
+             ETraceEvent::ExitPatchUnparsable);
+        return;
+    }
+    result.m_trace.emplace_back(ETraceEvent::PatchGenerated);
+    m_logger.log_event(ELogLevel::Info, "patch.generated",
+        {{"request_id", request.m_request_id},
+         {"role", llm_role_name(generated.m_used_role)},
+         {"escalated", generated.m_escalated},
+         {"files", patch.m_files.size()}});
+
+    // m_project_manager/m_config_manager are non-null here: check_edit_permission()
+    // already gated on both before this call.
+    const std::filesystem::path project_root =
+        m_project_manager->current().m_project.m_canonical_path;
+
+    const CPatchValidator validator(project_root);
+    SPatchValidation validation;
+    if (!validator.validate(patch, validation))
+    {
+        // decisions.md #15: журнал не несёт абсолютных путей. validation.m_message
+        // может их содержать (ошибки адресуют конкретный файл проекта), поэтому
+        // в fail() уходит обобщённая причина, а деталь — только в ответ вызывающему.
+        fail(request, result, EExitReason::PatchInvalid,
+             "Generated patch failed validation; see response for file-level detail.",
+             ETraceEvent::ExitPatchInvalid);
+        result.m_message += "\n" + validation.m_message;
+        return;
+    }
+    result.m_trace.emplace_back(ETraceEvent::PatchValidated);
+    m_logger.log_event(ELogLevel::Info, "patch.validated",
+        {{"request_id", request.m_request_id},
+         {"files", validation.m_changes.size()}});
+
+    const CPatchApplier applier;
+    std::string apply_message;
+    if (!applier.apply(validation.m_changes, apply_message))
+    {
+        fail(request, result, EExitReason::PatchApplyFailed,
+             "Failed to write the generated patch to disk; see response for detail.",
+             ETraceEvent::ExitPatchApplyFailed);
+        result.m_message += "\n" + apply_message;
+        return;
+    }
+    result.m_trace.emplace_back(ETraceEvent::PatchApplied);
+    result.m_changed_files.clear();
+    for (const SFileChange& change : validation.m_changes)
+    {
+        result.m_changed_files.push_back(change.m_path);
+    }
+    m_logger.log_event(ELogLevel::Info, "patch.applied",
+        {{"request_id", request.m_request_id},
+         {"files", validation.m_changes.size()}});
+
+    // §44/§47: allow_exec gates compilation, not application. With it off the
+    // patch stays applied, unverified — a visible trade-off in the response,
+    // never a silent one.
+    if (!m_config_manager->config().m_allow_exec)
+    {
+        result.m_ok = true;
+        result.m_status = ERequestStatus::Completed;
+        result.m_exit_reason = EExitReason::None;
+        result.m_message = "Patch applied (" + std::to_string(validation.m_changes.size())
+            + " files); build verification skipped: allow_exec is NO.";
+        return;
+    }
+
+    const SConfig& config = m_config_manager->config();
+    const std::filesystem::path build_dir = project_root / config.m_default_build;
+
+    CExecutor executor;
+    SCommandArgs build_args{};
+    build_args.m_tool = config.m_cmake_path.empty() ? "cmake" : config.m_cmake_path.string();
+    build_args.m_arguments = {"--build", build_dir.string()};
+    build_args.m_working_dir = project_root;
+    build_args.m_effect = EFFECT_WRITE_BUILD;
+    build_args.m_timeout_seconds = 600;
+
+    const SExecutionResult build = executor.execute(build_args, nullptr);
+    m_logger.log_event(build.m_allowed && build.m_exit_code == 0
+            ? ELogLevel::Info : ELogLevel::Warn,
+        "patch.build",
+        {{"request_id", request.m_request_id},
+         {"allowed", build.m_allowed},
+         {"exit_code", build.m_exit_code}});
+
+    if (!build.m_allowed || build.m_exit_code != 0)
+    {
+        std::string revert_message;
+        const bool reverted = applier.revert(validation.m_changes, revert_message);
+        result.m_trace.emplace_back(ETraceEvent::PatchReverted);
+        m_logger.log_event(reverted ? ELogLevel::Warn : ELogLevel::Error,
+            "patch.reverted",
+            {{"request_id", request.m_request_id},
+             {"ok", reverted},
+             {"revert_error", revert_message}});
+
+        // Compiler stderr likely carries absolute paths — kept out of fail()'s
+        // logged reason for the same decisions.md #15 reason as above.
+        fail(request, result, EExitReason::BuildFailed,
+             "Compilation failed after applying the generated patch; changes were reverted.",
+             ETraceEvent::ExitBuildFailed);
+        result.m_message += "\n" + build.m_stderr;
+        return;
+    }
+
+    result.m_trace.emplace_back(ETraceEvent::BuildVerified);
+    result.m_ok = true;
+    result.m_status = ERequestStatus::Completed;
+    result.m_exit_reason = EExitReason::None;
+    result.m_message = "Patch applied and build verified ("
+        + std::to_string(validation.m_changes.size()) + " files).";
 }
 
 CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(
@@ -707,11 +951,41 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         }
         else
         {
+            // Intent is orthogonal to the context tree above: an edit request
+            // needs exactly the same evidence as an explanation of the same
+            // code, so classification happens once here rather than inside
+            // choose_root(). Costs one ThinkerLocal call, paid only once the
+            // request is known to fit its budget.
+            result.m_intent = classify_intent(normalised);
+            result.m_trace.emplace_back(ETraceEvent::IntentClassified);
+            const bool is_edit = result.m_intent == EOrchestrationIntent::Edit;
+
+            // Routes with no file/cursor carry nothing to point an edit at.
+            const bool route_has_target =
+                result.m_route == EOrchestrationRoute::CursorContextRequired
+                || result.m_route == EOrchestrationRoute::CursorAndHistoryContextRequired
+                || result.m_route == EOrchestrationRoute::FileContextRequired
+                || result.m_route == EOrchestrationRoute::FileAndHistoryContextRequired;
+
+            bool intent_blocked = false;
+            if (is_edit && !route_has_target)
+            {
+                fail(normalised, result, EExitReason::EditWithoutTarget,
+                     "Edit intent requires a cursor position or an open file; "
+                     "neither applies to this request.",
+                     ETraceEvent::ExitEditWithoutTarget);
+                intent_blocked = true;
+            }
+            else if (is_edit && !check_edit_permission(normalised, result))
+            {
+                intent_blocked = true;
+            }
+
             const bool needs_facts =
                 result.m_route == EOrchestrationRoute::CursorContextRequired
                 || result.m_route == EOrchestrationRoute::CursorAndHistoryContextRequired;
 
-            if (!needs_facts || collect_facts(normalised, result))
+            if (!intent_blocked && (!needs_facts || collect_facts(normalised, result)))
             {
                 switch (result.m_route)
                 {
@@ -726,8 +1000,15 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
                     }
                     std::string prompt = build_evidence_block(result);
                     prompt += "\nUSER REQUEST:\n" + normalised.m_text;
-                    generate_answer(normalised, result, ELlmRole::CoderSmart,
-                                    EPromptType::CppExpert, prompt);
+                    if (is_edit)
+                    {
+                        generate_edit(normalised, result, ELlmRole::CoderSmart, prompt);
+                    }
+                    else
+                    {
+                        generate_answer(normalised, result, ELlmRole::CoderSmart,
+                                        EPromptType::CppExpert, prompt);
+                    }
                     break;
                 }
 
@@ -748,8 +1029,15 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
                         prompt += "ASSISTANT: " + turn.m_assistant_text + "\n\n";
                     }
                     prompt += "\nUSER REQUEST:\n" + normalised.m_text;
-                    generate_answer(normalised, result, ELlmRole::CoderSmart,
-                                    EPromptType::CppExpert, prompt);
+                    if (is_edit)
+                    {
+                        generate_edit(normalised, result, ELlmRole::CoderSmart, prompt);
+                    }
+                    else
+                    {
+                        generate_answer(normalised, result, ELlmRole::CoderSmart,
+                                        EPromptType::CppExpert, prompt);
+                    }
                     break;
                 }
 
@@ -788,7 +1076,7 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
                     // by the index. Wide path: the bounded file slice goes to the
                     // answer model.
                     (void)collect_file_entity_facts(normalised, result);
-                    answer_from_file(normalised, result, false);
+                    respond_from_file(normalised, result, false, is_edit);
                     break;
                 }
 
@@ -809,11 +1097,13 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
                         break;
                     }
                     (void)collect_file_entity_facts(normalised, result);
-                    answer_from_file(normalised, result, true);
+                    respond_from_file(normalised, result, true, is_edit);
                     break;
                 }
 
                 case EOrchestrationRoute::NoApplicableContext:
+                    // is_edit is unreachable here: route_has_target already
+                    // rejected Intent::Edit on this route above.
                     generate_answer(normalised, result, ELlmRole::CoderLocal,
                                     EPromptType::CppAssistant, normalised.m_text);
                     break;
@@ -854,6 +1144,24 @@ SOrchestrationResult CRequestOrchestrator::run(const SOrchestrationRequest& requ
         break;
     case EExitReason::LlmGenerationFailed:
         terminal = ETraceEvent::ExitLlmGenerationFailed;
+        break;
+    case EExitReason::PermissionDenied:
+        terminal = ETraceEvent::ExitPermissionDenied;
+        break;
+    case EExitReason::EditWithoutTarget:
+        terminal = ETraceEvent::ExitEditWithoutTarget;
+        break;
+    case EExitReason::PatchUnparsable:
+        terminal = ETraceEvent::ExitPatchUnparsable;
+        break;
+    case EExitReason::PatchInvalid:
+        terminal = ETraceEvent::ExitPatchInvalid;
+        break;
+    case EExitReason::PatchApplyFailed:
+        terminal = ETraceEvent::ExitPatchApplyFailed;
+        break;
+    case EExitReason::BuildFailed:
+        terminal = ETraceEvent::ExitBuildFailed;
         break;
     case EExitReason::None:
         terminal = ETraceEvent::ExitCompleted;

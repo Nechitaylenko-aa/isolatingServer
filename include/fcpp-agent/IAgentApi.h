@@ -40,7 +40,6 @@ enum class EApiMethod
     Build,           ///< Сборка (cmake --build).
     Tests,           ///< Тесты (ctest).
     Tool,            ///< Детерминированный запрос к индексу.
-    Patch,           ///< Применение патча.
     Doctor,          ///< Проверка окружения.
     Ask,             ///< Пользовательский AI-запрос (§89.13, §94).
     SessionOpen,     ///< Создать conversation session.
@@ -115,9 +114,6 @@ struct SApiRequest
     std::string m_project_root; ///< Корень проекта для шага open (protocol-имя projectRoot).
     std::string m_target; ///< Цель (символ/файл) для Tool.
     std::string m_tool;   ///< Имя инструмента для Tool.
-    std::string m_payload;///< Данные (например, текст патча).
-    bool m_assume_yes = false; ///< Автоподтверждение (patch).
-    bool m_build_after = false;///< Проверить сборкой после patch (COMPILATION FAIL → откат).
     std::uint32_t m_limit = 0; ///< Лимит результатов (0 — без лимита).
 
     // Тело запроса Ask (§94): только текст и опциональный редакторский контекст.

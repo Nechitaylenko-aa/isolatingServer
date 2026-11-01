@@ -9,20 +9,24 @@
  *    причина выхода, завершающее событие следа и запись `request.finished`.
  */
 
+#include "core/CConfigManager.h"
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CHistorian.h"
 #include "core/CLogger.h"
+#include "core/CProjectManager.h"
 #include "core/CRequestOrchestrator.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -46,6 +50,8 @@ struct SScript
     std::string m_selection = "NONE"; ///< Ответ историку (номера пар или NONE).
     std::string m_entity = "SEVERAL"; ///< Ответ на выбор сущности файла.
     std::string m_answer = "answer";  ///< Итоговый ответ модели.
+    std::string m_intent = "NO";      ///< Ответ классификатору intent (YES = Edit).
+    std::string m_patch;              ///< Диф, который модель вернёт для CppPatch.
 
     /// Все обращения: роль и пользовательский текст сообщения.
     std::vector<std::pair<fcpp::ELlmRole, std::string>> m_calls;
@@ -121,6 +127,18 @@ public:
             || system.find("concerns the supplied file") != std::string::npos)
         {
             return reply(m_script.m_relevance);
+        }
+        // Намеренно НЕ "YesNo" целиком: система промпта YesNo — общий
+        // контракт, единственный текущий вызывающий — classify_intent().
+        // Различаем по тому же принципу, что и остальные ветки — по тексту
+        // system-промпта, не по EPromptType (фейк не видит enum).
+        if (system.find("Determine whether the statement or condition") != std::string::npos)
+        {
+            return reply(m_script.m_intent);
+        }
+        if (system.find("Produce a single unified diff") != std::string::npos)
+        {
+            return reply(m_script.m_patch);
         }
         return reply(m_script.m_answer);
     }
@@ -316,6 +334,83 @@ fcpp::SLlmRoleSet make_roles(std::size_t smart_window, std::size_t local_window)
     configure(roles.at(fcpp::ELlmRole::ThinkerSmart), fcpp::ELlmRole::ThinkerSmart, smart_window);
     configure(roles.at(fcpp::ELlmRole::ThinkerLocal), fcpp::ELlmRole::ThinkerLocal, local_window);
     return roles;
+}
+
+/**
+ * @brief RAII-переопределение HOME — та же схема, что в agent_api_test.cpp
+ * и stage8a_test.cpp, нужна CConfigManager для поиска ~/.fcpp-agent.
+ */
+class HomeScope
+{
+public:
+    explicit HomeScope(const std::filesystem::path& home)
+    {
+        const char* previous = std::getenv("HOME");
+        if (previous != nullptr)
+        {
+            m_previous = previous;
+        }
+        setenv("HOME", home.string().c_str(), 1);
+    }
+
+    ~HomeScope()
+    {
+        if (m_previous.empty())
+        {
+            unsetenv("HOME");
+        }
+        else
+        {
+            setenv("HOME", m_previous.c_str(), 1);
+        }
+    }
+
+    HomeScope(const HomeScope&) = delete;
+    HomeScope& operator=(const HomeScope&) = delete;
+
+private:
+    std::string m_previous;
+};
+
+/**
+ * @brief Минимальная структура проекта, которую CProjectManager::open()
+ * ожидает увидеть (как в agent_api_test.cpp/stage8a_test.cpp) — CMakeLists.txt
+ * и build/compile_commands.json, помимо собственно правимого файла.
+ * @param dir Каталог проекта (уже существует).
+ * @param source Путь к файлу, который будет правиться (внутри dir).
+ */
+void scaffold_project(const std::filesystem::path& dir, const std::filesystem::path& source)
+{
+    std::filesystem::create_directories(dir / "build");
+    std::ofstream(dir / "CMakeLists.txt")
+        << "cmake_minimum_required(VERSION 3.20)\nproject(edit_fixture LANGUAGES CXX)\n";
+    std::ofstream commands(dir / "build" / "compile_commands.json");
+    commands << "[{\"directory\":\"" << dir.string() << "\",\"file\":\""
+             << source.string() << "\",\"arguments\":[\"clang++\",\"-std=c++20\",\"-c\",\""
+             << source.string() << "\"]}]\n";
+}
+
+/**
+ * @brief Настроить CConfigManager с заданными allow_write/allow_exec, в
+ * изолированном HOME.
+ * @param home Каталог HOME (из make_temp_dir).
+ * @param allow_write Разрешить запись.
+ * @param allow_exec Разрешить исполнение (сборку).
+ * @return Сконфигурированный менеджер.
+ */
+fcpp::CConfigManager make_config(const std::filesystem::path& home,
+                                 bool allow_write, bool allow_exec)
+{
+    fcpp::CConfigManager config;
+    REQUIRE(config.bootstrap());
+    {
+        std::ofstream conf(config.config_path());
+        conf << "allow_read=\"YES\"\n";
+        conf << "allow_write=\"" << (allow_write ? "YES" : "NO") << "\"\n";
+        conf << "allow_exec=\"" << (allow_exec ? "YES" : "NO") << "\"\n";
+    }
+    REQUIRE(config.load());
+    return config;
 }
 
 } // namespace
@@ -520,8 +615,9 @@ TEST_CASE("cursor route sends the slice and index facts, never the history",
     REQUIRE(facts.m_calls == 1);
     REQUIRE(result.m_fact_sections.size() == 1);
 
-    // Relevance was decided by the local thinker, the answer by the smart coder.
-    REQUIRE(script.count_of(fcpp::ELlmRole::ThinkerLocal) == 1);
+    // Relevance and intent are both decided by the local thinker (two
+    // separate ThinkerLocal calls), the answer by the smart coder.
+    REQUIRE(script.count_of(fcpp::ELlmRole::ThinkerLocal) == 2);
     REQUIRE(script.count_of(fcpp::ELlmRole::CoderSmart) == 1);
 
     const std::string answer_prompt = script.last_text(fcpp::ELlmRole::CoderSmart);
@@ -964,10 +1060,13 @@ TEST_CASE("no contexts at all answers through the local assistant role",
     REQUIRE(result.m_ok);
     REQUIRE(result.m_route == fcpp::EOrchestrationRoute::NoApplicableContext);
     REQUIRE(result.m_message == "generic answer");
-    REQUIRE(script.m_calls.size() == 1);
+    // One ThinkerLocal call to classify intent (default script: Answer),
+    // one CoderLocal call for the answer itself.
+    REQUIRE(script.m_calls.size() == 2);
+    REQUIRE(result.m_intent == fcpp::EOrchestrationIntent::Answer);
     // The cheap local role answers when no project context is involved.
-    REQUIRE(script.m_calls.front().first == fcpp::ELlmRole::CoderLocal);
-    REQUIRE(script.m_calls.front().second.find("What is RAII?") != std::string::npos);
+    REQUIRE(script.m_calls.back().first == fcpp::ELlmRole::CoderLocal);
+    REQUIRE(script.m_calls.back().second.find("What is RAII?") != std::string::npos);
 
     const std::string log_text = read_log(logger);
     REQUIRE(count_events(log_text, "request.finished") == 1);
@@ -975,4 +1074,253 @@ TEST_CASE("no contexts at all answers through the local assistant role",
 
     std::error_code ignored;
     std::filesystem::remove_all(dir, ignored);
+}
+
+TEST_CASE("edit intent on cursor route applies a validated patch and skips "
+          "build when allow_exec is NO",
+          "[orchestrator][route][edit]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-edit-home");
+    HomeScope scope(home);
+
+    const std::filesystem::path dir = make_temp_dir("fcpp-edit-cursor");
+    const std::filesystem::path source = dir / "widget.h";
+    write_file(source, "class CWidget\n{\npublic:\n    int value() const;\n};\n");
+    scaffold_project(dir, source);
+
+    fcpp::CConfigManager config = make_config(home, /*allow_write=*/true, /*allow_exec=*/false);
+    fcpp::CProjectManager project(config);
+    REQUIRE(project.open(dir));
+
+    SScript script;
+    script.m_relevance = "YES";
+    script.m_intent = "YES";
+    script.m_patch =
+        "--- a/widget.h\n"
+        "+++ b/widget.h\n"
+        "@@ -1,5 +1,6 @@\n"
+        " class CWidget\n"
+        " {\n"
+        " public:\n"
+        "+    int new_value() const;\n"
+        "     int value() const;\n"
+        " };\n";
+
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    fcpp::SLlmRoleSet roles;
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+
+    const auto clang = make_clang(source, "CWidget");
+    fcpp::CCursorContextAnalyzer analyzer(*clang, llm);
+
+    fcpp::CRequestOrchestrator orchestrator(logger, nullptr, &analyzer, &llm,
+        nullptr, &config, &project);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "edit-cursor";
+    request.m_session_id = "edit-session";
+    request.m_text = "Add a new_value() accessor next to value().";
+    request.m_cursor_file = source.string();
+    request.m_cursor_line = 2;
+    request.m_cursor_column = 3;
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE(result.m_ok);
+    REQUIRE(result.m_status == fcpp::ERequestStatus::Completed);
+    REQUIRE(result.m_intent == fcpp::EOrchestrationIntent::Edit);
+    REQUIRE(result.m_exit_reason == fcpp::EExitReason::None);
+    REQUIRE(result.m_changed_files.size() == 1);
+    REQUIRE(result.m_message.find("allow_exec is NO") != std::string::npos);
+
+    // Cursor relevance (ThinkerLocal), intent (ThinkerLocal), patch (CoderSmart).
+    REQUIRE(script.count_of(fcpp::ELlmRole::ThinkerLocal) == 2);
+    REQUIRE(script.count_of(fcpp::ELlmRole::CoderSmart) == 1);
+
+    const std::string patch_prompt = script.last_text(fcpp::ELlmRole::CoderSmart);
+    REQUIRE(patch_prompt.find("Add a new_value() accessor") != std::string::npos);
+
+    // The patch actually landed on disk.
+    std::ifstream patched(source);
+    const std::string content((std::istreambuf_iterator<char>(patched)),
+                              std::istreambuf_iterator<char>());
+    REQUIRE(content.find("new_value") != std::string::npos);
+
+    const std::string log_text = read_log(logger);
+    REQUIRE(count_events(log_text, "patch.generated") == 1);
+    REQUIRE(count_events(log_text, "patch.validated") == 1);
+    REQUIRE(count_events(log_text, "patch.applied") == 1);
+    // No build was attempted: allow_exec is NO.
+    REQUIRE(count_events(log_text, "patch.build") == 0);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+    std::filesystem::remove_all(home, ignored);
+}
+
+TEST_CASE("edit intent is refused by configuration when allow_write is NO",
+          "[orchestrator][route][edit]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-edit-denied-home");
+    HomeScope scope(home);
+
+    const std::filesystem::path dir = make_temp_dir("fcpp-edit-denied");
+    const std::filesystem::path source = dir / "widget.h";
+    write_file(source, "class CWidget\n{\npublic:\n    int value() const;\n};\n");
+    scaffold_project(dir, source);
+
+    fcpp::CConfigManager config = make_config(home, /*allow_write=*/false, /*allow_exec=*/true);
+    fcpp::CProjectManager project(config);
+    REQUIRE(project.open(dir));
+
+    SScript script;
+    script.m_relevance = "YES";
+    script.m_intent = "YES";
+
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    fcpp::SLlmRoleSet roles;
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+
+    const auto clang = make_clang(source, "CWidget");
+    fcpp::CCursorContextAnalyzer analyzer(*clang, llm);
+
+    fcpp::CRequestOrchestrator orchestrator(logger, nullptr, &analyzer, &llm,
+        nullptr, &config, &project);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "edit-denied";
+    request.m_text = "Rename value() to get_value().";
+    request.m_cursor_file = source.string();
+    request.m_cursor_line = 2;
+    request.m_cursor_column = 3;
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_exit_reason == fcpp::EExitReason::PermissionDenied);
+    REQUIRE(result.m_trace.back() == fcpp::ETraceEvent::ExitPermissionDenied);
+    REQUIRE(result.m_changed_files.empty());
+
+    // Permission is checked before the model is ever asked for a patch.
+    REQUIRE(script.count_of(fcpp::ELlmRole::CoderSmart) == 0);
+
+    // The source file is untouched.
+    std::ifstream unchanged(source);
+    const std::string content((std::istreambuf_iterator<char>(unchanged)),
+                              std::istreambuf_iterator<char>());
+    REQUIRE(content.find("get_value") == std::string::npos);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+    std::filesystem::remove_all(home, ignored);
+}
+
+TEST_CASE("edit intent with no file or cursor target is refused before any "
+          "model call for a patch",
+          "[orchestrator][route][edit]")
+{
+    const std::filesystem::path dir = make_temp_dir("fcpp-edit-no-target");
+
+    SScript script;
+    script.m_intent = "YES";
+
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    fcpp::SLlmRoleSet roles;
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+
+    // No config/project manager wired either — same refusal either way.
+    fcpp::CRequestOrchestrator orchestrator(logger, nullptr, nullptr, &llm);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "edit-no-target";
+    request.m_text = "Fix the bug in this module.";
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_route == fcpp::EOrchestrationRoute::NoApplicableContext);
+    REQUIRE(result.m_intent == fcpp::EOrchestrationIntent::Edit);
+    REQUIRE(result.m_exit_reason == fcpp::EExitReason::EditWithoutTarget);
+    REQUIRE(result.m_trace.back() == fcpp::ETraceEvent::ExitEditWithoutTarget);
+
+    // Only the intent classification itself was asked; no CoderLocal/CoderSmart call.
+    REQUIRE(script.count_of(fcpp::ELlmRole::CoderLocal) == 0);
+    REQUIRE(script.count_of(fcpp::ELlmRole::CoderSmart) == 0);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+}
+
+TEST_CASE("model refusing to produce a diff ends the edit visibly, not with "
+          "a mutated file",
+          "[orchestrator][route][edit]")
+{
+    const std::filesystem::path home = make_temp_dir("fcpp-edit-garbage-home");
+    HomeScope scope(home);
+
+    const std::filesystem::path dir = make_temp_dir("fcpp-edit-garbage");
+    const std::filesystem::path source = dir / "widget.h";
+    write_file(source, "class CWidget\n{\npublic:\n    int value() const;\n};\n");
+    scaffold_project(dir, source);
+
+    fcpp::CConfigManager config = make_config(home, /*allow_write=*/true, /*allow_exec=*/true);
+    fcpp::CProjectManager project(config);
+    REQUIRE(project.open(dir));
+
+    SScript script;
+    script.m_relevance = "YES";
+    script.m_intent = "YES";
+    // No "@@"/"---"/"+++" at all: caught by CLlmLayer's own cheap sanity gate
+    // for CppPatch (validate_prompt_result) before CPatchParser ever runs —
+    // surfaces as LlmGenerationFailed, not PatchUnparsable.
+    script.m_patch = "Sure, here is what I would change: just rename the method.";
+
+    fcpp::CLogger logger(dir / "logs", fcpp::ELogLevel::Trace);
+    fcpp::SLlmRoleSet roles;
+    fcpp::CLlmLayer llm(roles, logger,
+        [&script](fcpp::ELlmRole role) -> std::unique_ptr<fcpp::IModelApi>
+        {
+            return std::make_unique<CScriptedModel>(role, script);
+        });
+
+    const auto clang = make_clang(source, "CWidget");
+    fcpp::CCursorContextAnalyzer analyzer(*clang, llm);
+
+    fcpp::CRequestOrchestrator orchestrator(logger, nullptr, &analyzer, &llm,
+        nullptr, &config, &project);
+
+    fcpp::SOrchestrationRequest request;
+    request.m_request_id = "edit-garbage";
+    request.m_text = "Rename value() to get_value().";
+    request.m_cursor_file = source.string();
+    request.m_cursor_line = 2;
+    request.m_cursor_column = 3;
+
+    const fcpp::SOrchestrationResult result = orchestrator.run(request);
+
+    REQUIRE_FALSE(result.m_ok);
+    REQUIRE(result.m_exit_reason == fcpp::EExitReason::LlmGenerationFailed);
+    REQUIRE(result.m_trace.back() == fcpp::ETraceEvent::ExitLlmGenerationFailed);
+    REQUIRE(result.m_changed_files.empty());
+
+    std::ifstream unchanged(source);
+    const std::string content((std::istreambuf_iterator<char>(unchanged)),
+                              std::istreambuf_iterator<char>());
+    REQUIRE(content.find("get_value") == std::string::npos);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(dir, ignored);
+    std::filesystem::remove_all(home, ignored);
 }

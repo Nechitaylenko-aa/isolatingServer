@@ -96,7 +96,7 @@ std::filesystem::path make_project(const std::string& name = "api")
 
 } // namespace
 
-TEST_CASE("agent API: open/status/tool/patch через единый интерфейс", "[api]")
+TEST_CASE("agent API: open/status/tool через единый интерфейс", "[api]")
 {
     const std::filesystem::path home = make_temp_dir("fcpp-api-home");
     HomeScope scope(home);
@@ -222,25 +222,6 @@ TEST_CASE("agent API: open/status/tool/patch через единый интер�
     const fcpp::SApiResponse tool_response = api.execute(tool_request);
     REQUIRE_FALSE(tool_response.m_ok);
     REQUIRE(tool_response.m_error == fcpp::EErrorKind::SymbolNotFound);
-
-    // Patch через API.
-    const std::string diff =
-        "--- a/src/main.cpp\n"
-        "+++ b/src/main.cpp\n"
-        "@@ -1,1 +1,1 @@\n"
-        "-int main() { return 0; }\n"
-        "+int main() { return 1; }\n";
-
-    fcpp::SApiRequest patch_request;
-    patch_request.m_method = fcpp::EApiMethod::Patch;
-    patch_request.m_payload = diff;
-    patch_request.m_assume_yes = true;
-    const fcpp::SApiResponse patch_response = api.execute(patch_request);
-    REQUIRE(patch_response.m_ok);
-
-    std::ifstream changed(project_dir / "src" / "main.cpp");
-    const std::string content((std::istreambuf_iterator<char>(changed)), std::istreambuf_iterator<char>());
-    REQUIRE(content.find("return 1") != std::string::npos);
 
     fcpp::SApiRequest close_request;
     close_request.m_method = fcpp::EApiMethod::ProjectClose;
