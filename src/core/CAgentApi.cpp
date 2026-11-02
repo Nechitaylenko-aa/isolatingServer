@@ -56,9 +56,6 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "tool",
     "doctor",
     "ask",
-    "session.open",
-    "session.resume",
-    "session.close",
     "session.update_context",
     "project.profile.set",
     "question.shrink"
@@ -619,73 +616,6 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         }
         case EApiMethod::Ask:
             return handle_ask(request);
-        case EApiMethod::SessionOpen:
-        {
-            const std::string session_id = make_session_id();
-            const std::string project_id = m_project_manager.has_current()
-                ? m_project_manager.current().m_project.m_project_id : std::string();
-            nlohmann::json payload = {{"project_id", project_id}};
-            if (!m_conversation_store.create_session_with_event(
-                    session_id, project_id, "session.open", payload.dump()))
-            {
-                return make_error(EErrorKind::IoError, "cannot create conversation session");
-            }
-            response.m_ok = true;
-            response.m_state = "READY";
-            response.m_session_id = session_id;
-            response.m_project_id = project_id;
-            return response;
-        }
-        case EApiMethod::SessionResume:
-        {
-            // Resume is scoped to the currently opened project. A projectId
-            // parameter may confirm the address, but must not let a client
-            // select an arbitrary project's session without opening it.
-            if (!m_project_manager.is_opened())
-            {
-                m_project_manager.restore_session();
-            }
-            if (!m_project_manager.is_opened() || !m_project_manager.has_current())
-            {
-                return make_error(EErrorKind::ProjectNotOpen,
-                                  "project not open; session.resume requires an open project");
-            }
-
-            const std::string& current_project =
-                m_project_manager.current().m_project.m_project_id;
-            if (!request.m_project_id.empty() && request.m_project_id != current_project)
-            {
-                return make_error(EErrorKind::InvalidRequest,
-                                  "projectId does not match the currently opened project");
-            }
-
-            const auto session = m_conversation_store.latest_session_for_project(current_project);
-            if (!session.has_value())
-            {
-                return make_error(EErrorKind::SymbolNotFound,
-                                  "no open conversation session for project");
-            }
-            response.m_ok = true;
-            response.m_state = "READY";
-            response.m_session_id = session->m_id;
-            response.m_project_id = session->m_project_id;
-            return response;
-        }
-        case EApiMethod::SessionClose:
-        {
-            if (request.m_session_id.empty())
-            {
-                return make_error(EErrorKind::InvalidRequest, "missing session_id");
-            }
-            // Closing a conversation removes it: a session either exists or not.
-            if (!m_conversation_store.delete_session(request.m_session_id))
-            {
-                return make_error(EErrorKind::InvalidRequest, "unknown session");
-            }
-            response.m_ok = true;
-            response.m_session_id = request.m_session_id;
-            return response;
-        }
         case EApiMethod::QuestionShrink:
         {
             if (request.m_session_id.empty() || request.m_question_id == 0)
@@ -852,14 +782,17 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         }
     }
 
-    // Адрес диалога — забота агента, а не клиента. Проект открыт, значит проект
-    // адресуем: активная сессия уже создана в project.open и её id отправлен
-    // клиенту. Клиент вправе не передавать session_id, и тогда берётся активная
-    // сессия проекта.
+    // Адрес диалога — забота агента, а не клиента (decisions.md №20: один
+    // процесс = один проект = одна сессия на весь срок жизни процесса).
+    // Активная сессия уже создана в project.open, её id отправлен клиенту, и
+    // именно она и используется для ask — всегда, независимо от того, что
+    // (если вообще что-то) клиент прислал в session_id. Клиент вправе вовсе
+    // его не передавать.
     //
-    // Если session_id всё же пришёл и не совпал с активной — это не параметр
-    // адресации, а признак поломки: либо в логике, либо балуются экземпляры.
-    // Такой запрос отклоняется и оставляет след в журнале.
+    // Присланный session_id — не параметр адресации, а необязательный флаг
+    // "клиент считает, что говорит с этой же беседой". При расхождении запрос
+    // не отклоняется (новый сеанс/перезапуск клиента — обычное дело), но
+    // расхождение остаётся в журнале как диагностика.
     const std::string current_project_id =
         m_project_manager.current().m_project.m_project_id;
     const std::string active_session_id = [&]() -> std::string
@@ -869,22 +802,15 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         return active.has_value() ? active->m_id : std::string();
     }();
 
-    std::string session_id = request.m_session_id.empty()
-        ? active_session_id : request.m_session_id;
+    const std::string session_id = active_session_id;
 
     if (!request.m_session_id.empty() && !active_session_id.empty()
         && request.m_session_id != active_session_id)
     {
-        m_logger.log_event(ELogLevel::Error, "session.foreign", {
+        m_logger.log_event(ELogLevel::Info, "session.client_mismatch", {
             {"request_id", request.m_request_id},
-            {"project_id", current_project_id},
-            {"received_matches_active", false},
-            {"active_session_known", true}
+            {"project_id", current_project_id}
         });
-        return make_error(
-            EErrorKind::InvalidRequest,
-            "session_id does not match the active conversation of the open project; "
-            "the client must not address the dialogue itself");
     }
 
     if (session_id.empty())

@@ -2931,30 +2931,29 @@ path       = "/home/user/src/my-project"
 
 ## 89.3.2. `session_id`
 
-Идентифицирует клиентскую рабочую сессию.
+**Пересмотрено (decisions.md №20).** Одновременная работа агента с двумя и
+более проектами не планируется; мультисессионность на один проект (IDE-1 +
+IDE-2 + CLI параллельно) — отвергнутый вариант, а не недоделанный. Схема ниже
+и описание `session.open`/`session.resume`/`session.close` из более ранней
+редакции документа (§89.10.x) были реализацией именно этого отвергнутого
+варианта и удалены как из кода, так и из этого документа.
 
-Session не равна project.
+Действующая модель: **жизнь сессии = жизнь процесса**. Один `serve`-процесс
+открывает один проект; `project.open` сам создаёт единственную активную
+сессию проекта (или находит уже существующую — переоткрытие идемпотентно) и
+возвращает её `session_id` в ответе. Отдельного `session.open` не требуется.
 
-Один проект может одновременно использоваться несколькими клиентами:
+`session_id` в запросах `ask` — **не адрес**, а необязательный флаг клиента
+("я считаю, что говорю с этой же беседой"). Агент всегда отвечает через
+собственную активную сессию открытого проекта, какой бы `session_id` клиент
+ни прислал (или не прислал вовсе); расхождение не отклоняет запрос, а только
+остаётся диагностикой в журнале (`session.client_mismatch`). Закрывать сессию
+явно не нужно — она живёт, пока жив процесс; `project.close`/завершение
+процесса и есть её закрытие.
 
-```text
-project A
-   |
-   +-- session IDE-1
-   |
-   +-- session IDE-2
-   |
-   +-- session CLI
-```
-
-Каждая session имеет собственный:
-
-* текущий editor context;
-* контекст диалога;
-* историю запросов;
-* состояние отмены текущих операций.
-
-Session может переключаться между проектами.
+Единственный оставшийся метод с префиксом `session.` —
+`session.update_context` (§89.12): он не адресует диалог, а обновляет
+структурированный контекст уже известной единственной сессии.
 
 ---
 
@@ -3341,43 +3340,10 @@ Response:
 
 # 89.10. Session API
 
-## 89.10.1. `session.open`
+## 89.10. `session.open`/`session.close` — удалены (decisions.md №20)
 
-```json
-{
-  "id": "req-020",
-  "method": "session.open",
-  "params": {
-    "project_id": "project-7f31"
-  }
-}
-```
-
-Response:
-
-```json
-{
-  "id": "req-020",
-  "result": {
-    "session_id": "sess-91ab",
-    "project_id": "project-7f31"
-  }
-}
-```
-
----
-
-## 89.10.2. `session.close`
-
-```json
-{
-  "id": "req-021",
-  "method": "session.close",
-  "params": {
-    "session_id": "sess-91ab"
-  }
-}
-```
+Адрес диалога создаёт и возвращает `project.open` (§89.8.1); отдельных
+методов для открытия/закрытия сессии в протоколе больше нет — см. §89.3.2.
 
 ---
 
@@ -4289,8 +4255,6 @@ Response:
     "index.status",
     "index.refresh",
     "index.rebuild",
-    "session.open",
-    "session.close",
     "session.update_context",
     "ask",
     "request.cancel",
@@ -4328,13 +4292,11 @@ Response:
 ```text
 1. connect
 2. agent.status
-3. project.open
-4. session.open
-5. session.update_context
-6. ask
-7. receive events
-8. request.cancel
-9. session.close
+3. project.open   (уже создаёт и возвращает session_id — см. §89.3.2)
+4. session.update_context
+5. ask
+6. receive events
+7. request.cancel
 ```
 
 При каждом изменении active editor plugin может отправлять:
@@ -4701,8 +4663,6 @@ index.status
 index.refresh
 index.rebuild
 
-session.open
-session.close
 session.update_context
 
 ask

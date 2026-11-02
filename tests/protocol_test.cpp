@@ -6,18 +6,16 @@
 
 #include "cli/CProtocolServer.h"
 
-TEST_CASE("protocol maps conversation session methods and context payloads", "[protocol][conversation]")
+TEST_CASE("protocol maps the session context payload", "[protocol][conversation]")
 {
     fcpp::SApiRequest request;
     std::string id;
     std::string error;
 
-    REQUIRE(fcpp::CProtocolServer::parse_request(
-        R"({"id":"open-1","method":"session.open","params":{}})", request, id, error));
-    REQUIRE(id == "open-1");
-    REQUIRE(request.m_request_id == "open-1");
-    REQUIRE(request.m_method == fcpp::EApiMethod::SessionOpen);
-
+    // decisions.md №20: session.open/resume/close are gone — the address of
+    // the dialogue belongs to the agent (project.open creates and returns
+    // it), not to a client-driven lifecycle. session.update_context is the
+    // one session.* method left: it mutates the one session a process has.
     REQUIRE(fcpp::CProtocolServer::parse_request(
         R"({"id":"context-1","method":"session.update_context","params":{"sessionId":"s-1","context":{"goal":"inspect","open_questions":["provenance"]}}})",
         request, id, error));
@@ -27,12 +25,6 @@ TEST_CASE("protocol maps conversation session methods and context payloads", "[p
     const nlohmann::json context = nlohmann::json::parse(request.m_context_json);
     REQUIRE(context["goal"] == "inspect");
     REQUIRE(context["open_questions"][0] == "provenance");
-
-    REQUIRE(fcpp::CProtocolServer::parse_request(
-        R"({"id":"close-1","method":"session.close","params":{"session_id":"s-1"}})",
-        request, id, error));
-    REQUIRE(request.m_method == fcpp::EApiMethod::SessionClose);
-    REQUIRE(request.m_session_id == "s-1");
 }
 
 TEST_CASE("protocol parses structured answer and question shrink requests", "[protocol][chat]")
@@ -163,16 +155,20 @@ TEST_CASE("protocol preserves a decoded session id when later ask validation fai
     REQUIRE(document["error"]["session_id"] == "session-kept");
 }
 
-TEST_CASE("protocol requires a session for every ask", "[protocol][validation][session]")
+TEST_CASE("protocol accepts ask with or without a client-supplied session id",
+          "[protocol][validation][session]")
 {
+    // decisions.md №20: session_id — необязательный флаг клиента, не параметр
+    // адресации. Агент сам резолвит активную сессию открытого проекта;
+    // анонимный ask (без session_id вовсе) — обычный, валидный запрос.
     fcpp::SApiRequest request;
     std::string id;
     std::string error;
 
-    REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
+    REQUIRE(fcpp::CProtocolServer::parse_request(
         R"({"id":"anon-ask","method":"ask","params":{"text":"что делает этот метод?"}})",
         request, id, error));
-    REQUIRE(error == "missing or empty required field: params.session_id");
+    REQUIRE(request.m_session_id.empty());
 
     REQUIRE(fcpp::CProtocolServer::parse_request(
         R"({"id":"session-ask","method":"ask","params":{"session_id":"s-1","text":"что делает этот метод?"}})",
@@ -195,7 +191,8 @@ TEST_CASE("protocol rejects missing required fields and invalid identifiers", "[
     REQUIRE(error == "missing or empty required field: params.target");
 
     REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(
-        R"({"id":"missing-session","method":"session.close","params":{}})", request, id, error));
+        R"({"id":"missing-session","method":"session.update_context","params":{"context":{}}})",
+        request, id, error));
     REQUIRE(error == "missing or empty required field: params.session_id");
 
     REQUIRE_FALSE(fcpp::CProtocolServer::parse_request(

@@ -53,21 +53,6 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::QuestionShrink;
         return true;
     }
-    if (name == "session.open")
-    {
-        out = EApiMethod::SessionOpen;
-        return true;
-    }
-    if (name == "session.resume")
-    {
-        out = EApiMethod::SessionResume;
-        return true;
-    }
-    if (name == "session.close")
-    {
-        out = EApiMethod::SessionClose;
-        return true;
-    }
     if (name == "session.update_context")
     {
         out = EApiMethod::SessionUpdateContext;
@@ -330,7 +315,6 @@ bool CProtocolServer::parse_request(const std::string& text,
         {"text", EExpectedJsonType::String}, {"answer", EExpectedJsonType::Object},
         {"question_id", EExpectedJsonType::Integer}, {"profile", EExpectedJsonType::String},
         {"session_id", EExpectedJsonType::String}, {"sessionId", EExpectedJsonType::String},
-        {"projectId", EExpectedJsonType::String},
         {"tool", EExpectedJsonType::String}, {"target", EExpectedJsonType::String},
         {"limit", EExpectedJsonType::UnsignedInteger},
         {"stream", EExpectedJsonType::Boolean}, {"editor", EExpectedJsonType::Object}
@@ -445,10 +429,6 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_session_id = params["sessionId"].get<std::string>();
     }
-    if (params.contains("projectId") && params["projectId"].is_string())
-    {
-        out_request.m_project_id = params["projectId"].get<std::string>();
-    }
     if (params.contains("context"))
     {
         out_request.m_context_json = params["context"].dump();
@@ -508,12 +488,10 @@ bool CProtocolServer::parse_request(const std::string& text,
                     || !require_non_empty(out_request.m_target, "params.target")) return false;
             break;
         case EApiMethod::Ask:
-            // Жёсткий контракт: диалог адресуется сессией. Без неё ответ не имеет
-            // истории, поэтому запрос отклоняется, а не исполняется анонимно.
-            if (!require_non_empty(out_request.m_session_id, "params.session_id"))
-            {
-                return false;
-            }
+            // decisions.md №20: session_id — необязательный флаг клиента
+            // ("я считаю, что говорю с этой же беседой"), не параметр адресации.
+            // Адрес диалога резолвит сам агент (активная сессия открытого
+            // проекта); пустой params.session_id — обычный случай, не ошибка.
             if (params.contains("answer"))
             {
                 if (!out_request.m_text.empty())
@@ -532,9 +510,6 @@ bool CProtocolServer::parse_request(const std::string& text,
             {
                 return false;
             }
-            break;
-        case EApiMethod::SessionClose:
-            if (!require_non_empty(out_request.m_session_id, "params.session_id")) return false;
             break;
         case EApiMethod::SessionUpdateContext:
             if (!require_non_empty(out_request.m_session_id, "params.session_id")

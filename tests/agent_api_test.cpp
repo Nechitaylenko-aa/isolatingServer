@@ -121,40 +121,6 @@ TEST_CASE("agent API: open/status/tool через единый интерфей�
     REQUIRE_FALSE(invalid_open_response.m_ok);
     REQUIRE(invalid_open_response.m_message.find("canonicalize_project_root") != std::string::npos);
 
-    // Conversation sessions have a lifecycle independent of project sessions.
-    fcpp::SApiRequest session_open;
-    session_open.m_method = fcpp::EApiMethod::SessionOpen;
-    const fcpp::SApiResponse session_response = api.execute(session_open);
-    REQUIRE(session_response.m_ok);
-    REQUIRE_FALSE(session_response.m_session_id.empty());
-
-    // resume требует открытого проекта: иначе адрес диалога не определён.
-    fcpp::SApiRequest resume_without_project;
-    resume_without_project.m_method = fcpp::EApiMethod::SessionResume;
-    const fcpp::SApiResponse resume_rejected = api.execute(resume_without_project);
-    REQUIRE_FALSE(resume_rejected.m_ok);
-    REQUIRE(resume_rejected.m_error == fcpp::EErrorKind::ProjectNotOpen);
-
-    // Supplying a projectId must not bypass the open-project requirement.
-    fcpp::SApiRequest resume_arbitrary_project;
-    resume_arbitrary_project.m_method = fcpp::EApiMethod::SessionResume;
-    resume_arbitrary_project.m_project_id = "project-that-is-not-open";
-    const fcpp::SApiResponse arbitrary_resume = api.execute(resume_arbitrary_project);
-    REQUIRE_FALSE(arbitrary_resume.m_ok);
-    REQUIRE(arbitrary_resume.m_error == fcpp::EErrorKind::ProjectNotOpen);
-
-    fcpp::SApiRequest update_context;
-    update_context.m_method = fcpp::EApiMethod::SessionUpdateContext;
-    update_context.m_session_id = session_response.m_session_id;
-    update_context.m_context_json = R"({"goal":"inspect API","open_questions":["history injection"]})";
-    REQUIRE(api.execute(update_context).m_ok);
-
-    fcpp::SApiRequest close_conversation;
-    close_conversation.m_method = fcpp::EApiMethod::SessionClose;
-    close_conversation.m_session_id = session_response.m_session_id;
-    REQUIRE(api.execute(close_conversation).m_ok);
-    REQUIRE_FALSE(api.execute(close_conversation).m_ok);
-
     fcpp::SApiRequest open_request;
     open_request.m_method = fcpp::EApiMethod::ProjectOpen;
     open_request.m_path = project_dir.string();
@@ -170,29 +136,44 @@ TEST_CASE("agent API: open/status/tool через единый интерфей�
     open_again.m_path = project_dir.string();
     const fcpp::SApiResponse reopened = api.execute(open_again);
     REQUIRE(reopened.m_ok);
+    // Переоткрытие того же проекта (= перезапуск клиента/процесса) находит ту
+    // же активную сессию — отдельного session.resume для этого не нужно,
+    // адрес уже восстановлен самим project.open.
     REQUIRE(reopened.m_session_id == open_response.m_session_id);
 
-    // Клиент не адресует диалог: чужой session_id — признак поломки, а не
-    // параметр. Такой запрос отклоняется и оставляет событие в журнале.
+    fcpp::SApiRequest update_context;
+    update_context.m_method = fcpp::EApiMethod::SessionUpdateContext;
+    update_context.m_session_id = open_response.m_session_id;
+    update_context.m_context_json = R"({"goal":"inspect API","open_questions":["history injection"]})";
+    REQUIRE(api.execute(update_context).m_ok);
+
+    // decisions.md №20: session_id — необязательный флаг клиента, не параметр
+    // адресации. "Чужой" id сам по себе не отклоняет запрос (дальнейший успех
+    // ask зависит от настроенной LLM, не проверяется здесь) — расхождение
+    // остаётся диагностикой в журнале, а не поводом для InvalidRequest.
     {
         fcpp::SApiRequest foreign;
         foreign.m_method = fcpp::EApiMethod::Ask;
         foreign.m_session_id = "session-of-another-instance";
         foreign.m_text = "Explain this request";
         const fcpp::SApiResponse foreign_response = api.execute(foreign);
-        REQUIRE_FALSE(foreign_response.m_ok);
-        REQUIRE(foreign_response.m_error == fcpp::EErrorKind::InvalidRequest);
-        REQUIRE(foreign_response.m_message.find("must not address") != std::string::npos);
-    }
+        REQUIRE_FALSE(foreign_response.m_message.find("must not address") != std::string::npos);
 
-    // После перезапуска клиент восстанавливает адрес диалога у агента,
-    // хранящего id в БД, а не у себя.
-    fcpp::SApiRequest session_resume;
-    session_resume.m_method = fcpp::EApiMethod::SessionResume;
-    const fcpp::SApiResponse resumed = api.execute(session_resume);
-    REQUIRE(resumed.m_ok);
-    REQUIRE(resumed.m_session_id == open_response.m_session_id);
-    REQUIRE(resumed.m_project_id == open_response.m_project_id);
+        const std::filesystem::path log_path = config.agent_dir() / "logs" / "agent.jsonl";
+        std::ifstream input(log_path);
+        REQUIRE(input.is_open());
+        std::string line;
+        bool mismatch_logged = false;
+        while (std::getline(input, line))
+        {
+            const nlohmann::json record = nlohmann::json::parse(line);
+            if (record.value("event", std::string()) == "session.client_mismatch")
+            {
+                mismatch_logged = true;
+            }
+        }
+        REQUIRE(mismatch_logged);
+    }
 
     fcpp::SApiRequest profile_request;
     profile_request.m_method = fcpp::EApiMethod::ProjectProfileSet;
@@ -328,15 +309,10 @@ TEST_CASE("agent API: ask rejects empty text before invoking orchestration", "[a
     REQUIRE(config.load());
 
     fcpp::CAgentApi api(config);
-    fcpp::SApiRequest open_session;
-    open_session.m_method = fcpp::EApiMethod::SessionOpen;
-    const fcpp::SApiResponse session = api.execute(open_session);
-    REQUIRE(session.m_ok);
-    REQUIRE_FALSE(session.m_session_id.empty());
-
+    // Пустой текст отклоняется раньше любого резолва сессии/проекта — id не
+    // нужен вовсе, session.open больше не существует как отдельный метод.
     fcpp::SApiRequest request;
     request.m_method = fcpp::EApiMethod::Ask;
-    request.m_session_id = session.m_session_id;
     request.m_text.clear();
 
     const fcpp::SApiResponse response = api.execute(request);

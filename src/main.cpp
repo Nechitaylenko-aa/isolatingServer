@@ -55,9 +55,6 @@ void print_usage(const std::string& program)
     std::cout << "  def|ancestors|derived|search|source <symbol> [<path>]\n";
     std::cout << "  ask \"<text>\" --session <id> [--file F --line L --col C] [--stream]\n";
     std::cout << "                                  Запрос в диалоге (сессия обязательна)\n";
-    std::cout << "  session open                    Создать отдельную сессию\n";
-    std::cout << "  session resume [project-path]   Восстановить сессию проекта\n";
-    std::cout << "  session close <id>              Закрыть сессию\n";
     std::cout << "\nОпции: --config PATH --project PATH --compile-commands PATH --yes --json --verbose\n";
 }
 
@@ -342,78 +339,6 @@ int main(int argc, char* argv[])
         }
         std::cout << response.m_text;
         std::cout << (command == "build" ? "сборка успешна\n" : "тесты пройдены\n");
-        return 0;
-    }
-    if (command == "session")
-    {
-        if (argc < 3)
-        {
-            std::cerr << "fcpp-agent: session требует подкоманду (open|resume|close)\n";
-            return 2;
-        }
-        const std::string subcommand = argv[2];
-
-        fcpp::SApiRequest request;
-        if (subcommand == "open")
-        {
-            request.m_method = fcpp::EApiMethod::SessionOpen;
-        }
-        else if (subcommand == "resume")
-        {
-            // CLI is one-shot, unlike the long-lived IDE protocol server.
-            // Open the supplied project in this process, or restore the last
-            // project address before asking the API to resume its session.
-            if (argc >= 4)
-            {
-                fcpp::SApiRequest open_request;
-                open_request.m_method = fcpp::EApiMethod::ProjectOpen;
-                open_request.m_path = argv[3];
-                const fcpp::SApiResponse opened = api.execute(open_request);
-                if (!opened.m_ok)
-                {
-                    std::cerr << "fcpp-agent: cannot open project for session resume: "
-                              << opened.m_message << '\n';
-                    return 1;
-                }
-            }
-            else
-            {
-                fcpp::SApiRequest status_request;
-                status_request.m_method = fcpp::EApiMethod::ProjectStatus;
-                const fcpp::SApiResponse status = api.execute(status_request);
-                if (!status.m_ok)
-                {
-                    std::cerr << "fcpp-agent: session resume requires a project path "
-                                 "or a previously opened project; use 'session resume <path>'\n";
-                    return 1;
-                }
-            }
-            request.m_method = fcpp::EApiMethod::SessionResume;
-        }
-        else if (subcommand == "close")
-        {
-            if (argc < 4)
-            {
-                std::cerr << "fcpp-agent: session close требует id сессии\n";
-                return 2;
-            }
-            request.m_method = fcpp::EApiMethod::SessionClose;
-            request.m_session_id = argv[3];
-        }
-        else
-        {
-            std::cerr << "fcpp-agent: неизвестная подкоманда session: " << subcommand << '\n';
-            return 2;
-        }
-
-        const fcpp::SApiResponse response = api.execute(request);
-        if (!response.m_ok)
-        {
-            std::cerr << "fcpp-agent: " << fcpp::error_kind_name(response.m_error)
-                      << ": " << response.m_message << '\n';
-            return 1;
-        }
-        std::cout << response.m_session_id << '\n';
         return 0;
     }
     if (command == "ask")
