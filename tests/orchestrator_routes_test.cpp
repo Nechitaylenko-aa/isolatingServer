@@ -398,8 +398,8 @@ void scaffold_project(const std::filesystem::path& dir, const std::filesystem::p
  * @param allow_exec Разрешить исполнение (сборку).
  * @return Сконфигурированный менеджер.
  */
-fcpp::CConfigManager make_config(const std::filesystem::path& home,
-                                 bool allow_write, bool allow_exec)
+    fcpp::CConfigManager make_config(const std::filesystem::path& /*home*/,
+                                     bool allow_write, bool allow_exec)
 {
     fcpp::CConfigManager config;
     REQUIRE(config.bootstrap());
