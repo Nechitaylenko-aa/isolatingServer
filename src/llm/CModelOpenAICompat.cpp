@@ -168,6 +168,16 @@ std::string CModelOpenAICompat::build_body(const std::vector<SModelMessage>& mes
     document["max_tokens"] = m_max_tokens;
     document["stream"] = stream;
 
+    if (m_endpoint.m_disable_thinking)
+    {
+        // Qwen-style шаблоны читают enable_thinking либо как поле верхнего
+        // уровня, либо как chat_template_kwargs.enable_thinking — точная
+        // форма зависит от версии сервера (не проверялась), отправляем обе;
+        // лишнее поле совместимый сервер просто проигнорирует.
+        document["enable_thinking"] = false;
+        document["chat_template_kwargs"] = {{"enable_thinking", false}};
+    }
+
     nlohmann::json array = nlohmann::json::array();
     for (const SModelMessage& message : messages)
     {

@@ -233,12 +233,14 @@ bool CConfigManager::bootstrap()
         {"llm_coder_local_api", ""}, {"llm_coder_local_model", ""}, {"llm_coder_local_key", ""},
         {"llm_coder_local_type", "openai-compat"}, {"llm_coder_local_alias", ""},
         {"llm_coder_local_context_window_tokens", "0"}, {"llm_coder_local_output_reserve_tokens", "4096"},
+        {"llm_coder_local_disable_thinking", "NO"},
         {"llm_thinker_smart_api", ""}, {"llm_thinker_smart_model", ""}, {"llm_thinker_smart_key", ""},
         {"llm_thinker_smart_type", "openai-compat"}, {"llm_thinker_smart_alias", ""},
         {"llm_thinker_smart_context_window_tokens", "57344"}, {"llm_thinker_smart_output_reserve_tokens", "8192"},
         {"llm_thinker_local_api", ""}, {"llm_thinker_local_model", ""}, {"llm_thinker_local_key", ""},
         {"llm_thinker_local_type", "openai-compat"}, {"llm_thinker_local_alias", ""},
-        {"llm_thinker_local_context_window_tokens", "0"}, {"llm_thinker_local_output_reserve_tokens", "4096"}
+        {"llm_thinker_local_context_window_tokens", "0"}, {"llm_thinker_local_output_reserve_tokens", "4096"},
+        {"llm_thinker_local_disable_thinking", "NO"}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -279,7 +281,8 @@ bool CConfigManager::bootstrap()
         content << "llm_coder_local_type=\"openai-compat\"\n";
         content << "llm_coder_local_alias=\"\"\n";
         content << "llm_coder_local_context_window_tokens=\"0\"\n";
-        content << "llm_coder_local_output_reserve_tokens=\"4096\"\n\n";
+        content << "llm_coder_local_output_reserve_tokens=\"4096\"\n";
+        content << "llm_coder_local_disable_thinking=\"NO\"\n\n";
         content << "llm_thinker_smart_api=\"\"\n";
         content << "llm_thinker_smart_model=\"\"\n";
         content << "llm_thinker_smart_key=\"\"\n";
@@ -294,6 +297,7 @@ bool CConfigManager::bootstrap()
         content << "llm_thinker_local_alias=\"\"\n";
         content << "llm_thinker_local_context_window_tokens=\"0\"\n";
         content << "llm_thinker_local_output_reserve_tokens=\"4096\"\n";
+        content << "llm_thinker_local_disable_thinking=\"NO\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -448,7 +452,7 @@ bool CConfigManager::load() const
     const std::string coder_group_alias = value_or_empty(entries, "llm_coder_alias");
     const std::string thinker_group_alias = value_or_empty(entries, "llm_thinker_alias");
 
-    auto load_llm_role = [&entries, &read_size](SLlmModelRole& role,
+    auto load_llm_role = [&entries, &read_size, &read_bool](SLlmModelRole& role,
                                                 const std::string& prefix,
                                                 const std::string& group_alias) -> bool
     {
@@ -456,6 +460,7 @@ bool CConfigManager::load() const
         role.m_model = value_or_empty(entries, prefix + "_model");
         role.m_key = value_or_empty(entries, prefix + "_key");
         role.m_type = value_or_empty(entries, prefix + "_type");
+        role.m_disable_thinking = read_bool(prefix + "_disable_thinking", false);
         role.m_alias = value_or_empty(entries, prefix + "_alias");
         if (role.m_alias.empty())
         {

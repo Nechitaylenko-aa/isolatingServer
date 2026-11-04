@@ -211,6 +211,37 @@ std::size_t estimate_tokens(const std::string& text)
 }
 
 /**
+ * @brief Срезать ведущий блок `<think>...</think>` из ответа модели.
+ *
+ * Страховка для decision-моделей в горячем пути (YES/NO-гейты): даже при
+ * `SModelEndpoint::m_disable_thinking` сервер может не уважать флаг. Снаружи
+ * (validator, CPatchParser и т.п.) всегда должен быть виден только финальный
+ * ответ, не рассуждение перед ним. Срезается только ведущий блок — закрытый
+ * тег должен присутствовать; незакрытый (ответ оборвался посреди
+ * рассуждения) не трогаем, пусть видна настоящая причина сбоя, а не пустая
+ * строка.
+ *
+ * @param text Сырой текст ответа.
+ * @return Текст без ведущего `<think>` блока (или исходный текст без изменений).
+ */
+std::string strip_leading_think_block(const std::string& text)
+{
+    std::size_t start = text.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos || text.compare(start, 7, "<think>") != 0)
+    {
+        return text;
+    }
+    const std::size_t close = text.find("</think>", start + 7);
+    if (close == std::string::npos)
+    {
+        return text;
+    }
+    const std::size_t after = close + 8U;
+    const std::size_t rest = text.find_first_not_of(" \t\r\n", after);
+    return rest == std::string::npos ? std::string() : text.substr(rest);
+}
+
+/**
  * @brief Привести промпт к бюджету токенов, сохранив начало и конец.
  *
  * Начало промпта содержит контекст (код/историю), конец — сам вопрос
@@ -424,6 +455,7 @@ std::unique_ptr<IModelApi> CLlmLayer::make_model(ELlmRole role) const
     endpoint.m_base_url = config.m_resolved_api;
     endpoint.m_model = config.m_resolved_model;
     endpoint.m_api_key = config.m_resolved_key;
+    endpoint.m_disable_thinking = config.m_resolved_disable_thinking;
 
     const std::size_t reserve = config.m_resolved_output_reserve_tokens == 0
         ? static_cast<std::size_t>(k_default_max_tokens)
@@ -554,15 +586,22 @@ SLlmExecutionResult CLlmLayer::execute(
             return false;
         }
 
+        const std::string stripped = strip_leading_think_block(reply.m_text);
+        if (stripped.empty())
+        {
+            error = "empty model response after stripping the think block";
+            return false;
+        }
+
         std::string validation_error;
-        if (!validator(reply.m_text, validation_error))
+        if (!validator(stripped, validation_error))
         {
             error = validation_error.empty()
                 ? "response violates result contract" : validation_error;
             return false;
         }
 
-        text = reply.m_text;
+        text = stripped;
         return true;
     };
 

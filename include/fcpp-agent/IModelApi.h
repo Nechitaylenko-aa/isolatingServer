@@ -91,6 +91,11 @@ struct SModelEndpoint
     std::string m_base_url; ///< Base URL (до /v1 включительно).
     std::string m_model;    ///< Имя модели.
     std::string m_api_key;  ///< API-ключ (секрет, не логируется).
+    /** @brief Отключить thinking-режим шаблона (Qwen-style `enable_thinking`).
+     * Актуально для decision-моделей в горячем пути (YES/NO-гейты) — без
+     * этого ответ приходит обёрнутым в `<think>...</think>` и не проходит
+     * точное сравнение в validate_prompt_result. */
+    bool m_disable_thinking = false;
 };
 
 /**

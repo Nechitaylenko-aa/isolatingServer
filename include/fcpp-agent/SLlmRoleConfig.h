@@ -45,6 +45,7 @@ struct SLlmModelRole
     std::string m_alias;    ///< Имя роли-источника; приоритетнее остальных полей.
     std::size_t m_context_window_tokens = 0; ///< Окно контекста модели; 0 — неизвестно.
     std::size_t m_output_reserve_tokens = 0; ///< Резерв под ответ; 0 — дефолт слоя LLM.
+    bool m_disable_thinking = false; ///< Отключить `enable_thinking` (Qwen-style decision-модели).
 
     std::string m_resolved_api;   ///< Итоговый endpoint после разрешения alias.
     std::string m_resolved_model; ///< Итоговое имя модели после разрешения alias.
@@ -52,6 +53,7 @@ struct SLlmModelRole
     std::string m_resolved_type;  ///< Итоговый тип провайдера после разрешения alias.
     std::size_t m_resolved_context_window_tokens = 0; ///< Итоговое окно контекста.
     std::size_t m_resolved_output_reserve_tokens = 0; ///< Итоговый резерв ответа.
+    bool m_resolved_disable_thinking = false; ///< Итоговый признак после разрешения alias.
     ELlmRole m_resolved_role = ELlmRole::Count; ///< Роль, где реально объявлен endpoint.
     bool m_configured = false;                  ///< Роль разрешена и пригодна к вызову.
 };

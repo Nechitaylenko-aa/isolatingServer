@@ -72,6 +72,7 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
         role.m_resolved_type.clear();
         role.m_resolved_context_window_tokens = 0;
         role.m_resolved_output_reserve_tokens = 0;
+        role.m_resolved_disable_thinking = false;
         role.m_resolved_role = ELlmRole::Count;
         role.m_configured = false;
 
@@ -130,6 +131,7 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
             role.m_resolved_type = role.m_type;
             role.m_resolved_context_window_tokens = role.m_context_window_tokens;
             role.m_resolved_output_reserve_tokens = role.m_output_reserve_tokens;
+            role.m_resolved_disable_thinking = role.m_disable_thinking;
             role.m_resolved_role = static_cast<ELlmRole>(index);
             role.m_configured = true;
         }
@@ -160,6 +162,7 @@ bool resolve_llm_role_aliases(SLlmRoleSet& roles, std::string& error)
             role.m_resolved_type = target.m_resolved_type;
             role.m_resolved_context_window_tokens = target.m_resolved_context_window_tokens;
             role.m_resolved_output_reserve_tokens = target.m_resolved_output_reserve_tokens;
+            role.m_resolved_disable_thinking = target.m_resolved_disable_thinking;
             role.m_resolved_role = target.m_resolved_role;
             role.m_configured = true;
         }
