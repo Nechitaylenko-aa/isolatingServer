@@ -409,6 +409,11 @@ void scaffold_project(const std::filesystem::path& dir, const std::filesystem::p
         conf << "allow_write=\"" << (allow_write ? "YES" : "NO") << "\"\n";
         conf << "allow_exec=\"" << (allow_exec ? "YES" : "NO") << "\"\n";
     }
+    // Перезапись выше оставила в файле только права. load() отвергает конфиг
+    // без registry_path (и без enable_tidy), поэтому недостающие ключи обязан
+    // вернуть повторный bootstrap(): он дописывает только отсутствующие ключи
+    // и не трогает уже записанные права.
+    REQUIRE(config.bootstrap());
     REQUIRE(config.load());
     return config;
 }
