@@ -28,7 +28,8 @@ static const char* const m_error_kind_names[static_cast<std::size_t>(EErrorKind:
     "PermissionDenied",
     "PatchInvalid",
     "PatchApplyFailed",
-    "BuildFailed"
+    "BuildFailed",
+    "SnapshotNotFound"
 };
 
 } // namespace

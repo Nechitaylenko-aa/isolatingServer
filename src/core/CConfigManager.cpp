@@ -240,7 +240,8 @@ bool CConfigManager::bootstrap()
         {"llm_thinker_local_api", ""}, {"llm_thinker_local_model", ""}, {"llm_thinker_local_key", ""},
         {"llm_thinker_local_type", "openai-compat"}, {"llm_thinker_local_alias", ""},
         {"llm_thinker_local_context_window_tokens", "0"}, {"llm_thinker_local_output_reserve_tokens", "4096"},
-        {"llm_thinker_local_disable_thinking", "NO"}
+        {"llm_thinker_local_disable_thinking", "NO"},
+        {"snapshot_root", "/tmp/fcpp"}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -297,7 +298,9 @@ bool CConfigManager::bootstrap()
         content << "llm_thinker_local_alias=\"\"\n";
         content << "llm_thinker_local_context_window_tokens=\"0\"\n";
         content << "llm_thinker_local_output_reserve_tokens=\"4096\"\n";
-        content << "llm_thinker_local_disable_thinking=\"NO\"\n";
+        content << "llm_thinker_local_disable_thinking=\"NO\"\n\n";
+        content << "# --- Откат правок (decisions.md №22) ---\n";
+        content << "snapshot_root=\"/tmp/fcpp\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -434,6 +437,9 @@ bool CConfigManager::load() const
     m_config.m_db_dir = db_dir_value.empty() ? m_db_dir : std::filesystem::path(db_dir_value);
     const std::string build_value = value_or_empty(entries, "default_build");
     m_config.m_default_build = build_value.empty() ? "build" : build_value;
+    const std::string snapshot_root_value = value_or_empty(entries, "snapshot_root");
+    m_config.m_snapshot_root = snapshot_root_value.empty()
+        ? std::filesystem::path("/tmp/fcpp") : std::filesystem::path(snapshot_root_value);
 
     // Логические роли LLM: api/model/key/type либо alias (alias приоритетнее).
     auto read_size = [&entries](const std::string& key, std::size_t fallback,

@@ -35,6 +35,10 @@ struct SConfig
 
     std::filesystem::path m_db_dir;          ///< Каталог баз данных агента (вне проектов).
     std::string m_default_build = "build";   ///< Имя build-каталога по умолчанию (§2.3).
+    /** @brief Корень теневых git-снапшотов для отката правок (decisions.md №22).
+     * Не tmpfs по умолчанию на всех машинах — это понимается и допускается;
+     * снапшот хранит только изменившиеся git-объекты, не копию дерева. */
+    std::filesystem::path m_snapshot_root = "/tmp/fcpp";
 
     SLlmRoleSet m_llm_roles; ///< Логические роли LLM.
 };

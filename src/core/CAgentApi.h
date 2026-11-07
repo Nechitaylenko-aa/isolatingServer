@@ -60,6 +60,13 @@ private:
      * @return Ответ.
      */
     SApiResponse handle_ask(const SApiRequest& request);
+
+    /**
+     * @brief Откатить проект к состоянию теневого git-снапшота (decisions.md №22).
+     * @param request Запрос (m_rollback_ref приоритетнее m_rollback_steps).
+     * @return Ответ; m_text — SHA, к которому откатили.
+     */
+    SApiResponse handle_rollback(const SApiRequest& request);
     SApiResponse execute_impl(const SApiRequest& request);
 
     const CConfigManager& m_config_manager; ///< Конфигурация.

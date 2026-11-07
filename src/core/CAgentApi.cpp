@@ -13,6 +13,7 @@
 #include <cctype>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -26,6 +27,7 @@
 #include "core/CHash.h"
 #include "core/CDoctor.h"
 #include "core/CExecutor.h"
+#include "core/CGitSnapshotStore.h"
 #include "fcpp-agent/IClang.h"
 #include "index/CClangFactory.h"
 #include "index/CSQLiteIndex.h"
@@ -56,6 +58,7 @@ static const char* const m_api_method_names[static_cast<std::size_t>(EApiMethod:
     "tool",
     "doctor",
     "ask",
+    "edit.rollback",
     "session.update_context",
     "project.profile.set",
     "question.shrink"
@@ -616,6 +619,8 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
         }
         case EApiMethod::Ask:
             return handle_ask(request);
+        case EApiMethod::EditRollback:
+            return handle_rollback(request);
         case EApiMethod::QuestionShrink:
         {
             if (request.m_session_id.empty() || request.m_question_id == 0)
@@ -1014,6 +1019,57 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
             ? "request not understood; no evidence or clarification was produced"
             : answer;
     }
+    return response;
+}
+
+SApiResponse CAgentApi::handle_rollback(const SApiRequest& request)
+{
+    if (!m_project_manager.has_current())
+    {
+        m_project_manager.restore_session();
+    }
+    if (!m_project_manager.has_current())
+    {
+        return make_error(EErrorKind::ProjectNotOpen, "project not open");
+    }
+    if (!m_config_manager.config().m_allow_write)
+    {
+        return make_error(EErrorKind::PermissionDenied,
+                          "rollback writes to the project tree; allow_write is NO");
+    }
+    if (request.m_rollback_ref.empty() && request.m_rollback_steps == 0)
+    {
+        return make_error(EErrorKind::InvalidRequest,
+                          "either rollback_ref or rollback_steps (>0) is required");
+    }
+
+    const std::filesystem::path project_root =
+        m_project_manager.current().m_project.m_canonical_path;
+    const std::string project_id = m_project_manager.current().m_project.m_project_id;
+    const CGitSnapshotStore snapshots(m_config_manager.config().m_snapshot_root);
+
+    std::string target = request.m_rollback_ref;
+    std::string error;
+    if (target.empty())
+    {
+        const std::optional<std::string> resolved =
+            snapshots.resolve_steps_back(project_root, project_id, request.m_rollback_steps, error);
+        if (!resolved.has_value())
+        {
+            return make_error(EErrorKind::SnapshotNotFound, error);
+        }
+        target = *resolved;
+    }
+
+    if (!snapshots.restore(project_root, project_id, target, error))
+    {
+        return make_error(EErrorKind::SnapshotNotFound, error);
+    }
+
+    SApiResponse response;
+    response.m_ok = true;
+    response.m_text = target;
+    response.m_message = "project restored to snapshot " + target;
     return response;
 }
 

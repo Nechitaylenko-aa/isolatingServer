@@ -42,6 +42,7 @@ enum class EApiMethod
     Tool,            ///< Детерминированный запрос к индексу.
     Doctor,          ///< Проверка окружения.
     Ask,             ///< Пользовательский AI-запрос (§89.13, §94).
+    EditRollback,    ///< Откат правки через теневой git-снапшот (decisions.md №22).
     SessionUpdateContext, ///< Обновить структурированный контекст сессии.
     ProjectProfileSet, ///< Установить паспорт текущего проекта.
     QuestionShrink,    ///< Обрезать диалог до указанного вопроса (пока заглушка).
@@ -126,6 +127,10 @@ struct SApiRequest
     std::uint32_t m_editor_column = 0;///< Колонка курсора (0 — нет).
     bool m_stream = false;            ///< Режим вывода (транспорт CLI, не семантика запроса).
     std::function<bool(const std::string&)> m_on_stream_chunk; ///< Потоковый вывод; false прерывает генерацию.
+
+    // Откат правки через теневой git-снапшот (decisions.md №22).
+    std::uint32_t m_rollback_steps = 0; ///< Сколько снапшотов назад (0 — не задано, используется m_rollback_ref).
+    std::string m_rollback_ref;         ///< Явный целевой SHA; приоритет над m_rollback_steps, если задан оба.
 };
 
 /**

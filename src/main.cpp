@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -54,6 +55,7 @@ void print_usage(const std::string& program)
     std::cout << "  outline|callers|callees|refs|includes|overrides|dispatch\n";
     std::cout << "  def|ancestors|derived|search|source <symbol> [<path>]\n";
     std::cout << "  ask \"<text>\" --session <id> [--file F --line L --col C] [--stream]\n";
+    std::cout << "  rollback --steps N | --to <sha>   Откатить проект к снапшоту\n";
     std::cout << "                                  Запрос в диалоге (сессия обязательна)\n";
     std::cout << "\nОпции: --config PATH --project PATH --compile-commands PATH --yes --json --verbose\n";
 }
@@ -341,6 +343,50 @@ int main(int argc, char* argv[])
         std::cout << (command == "build" ? "сборка успешна\n" : "тесты пройдены\n");
         return 0;
     }
+    if (command == "rollback")
+    {
+        fcpp::SApiRequest request;
+        request.m_method = fcpp::EApiMethod::EditRollback;
+        for (int index = 2; index < argc; ++index)
+        {
+            const std::string arg = argv[index];
+            if (arg == "--steps" && index + 1 < argc)
+            {
+                try
+                {
+                    request.m_rollback_steps = static_cast<std::uint32_t>(std::stoul(argv[++index]));
+                }
+                catch (const std::exception&)
+                {
+                    std::cerr << "fcpp-agent: --steps требует целое число\n";
+                    return 2;
+                }
+            }
+            else if (arg == "--to" && index + 1 < argc)
+            {
+                request.m_rollback_ref = argv[++index];
+            }
+        }
+        if (request.m_rollback_steps == 0 && request.m_rollback_ref.empty())
+        {
+            std::cerr << "fcpp-agent: rollback требует --steps N или --to <sha>\n";
+            return 2;
+        }
+
+        fcpp::CConfigManager config;
+        config.load();
+        fcpp::CAgentApi api(config);
+        const fcpp::SApiResponse response = api.execute(request);
+        if (!response.m_ok)
+        {
+            std::cerr << "fcpp-agent: " << fcpp::error_kind_name(response.m_error)
+                      << ": " << response.m_message << '\n';
+            return 1;
+        }
+        std::cout << response.m_message << '\n';
+        return 0;
+    }
+
     if (command == "ask")
     {
         if (argc < 3)

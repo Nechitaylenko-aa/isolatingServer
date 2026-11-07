@@ -31,6 +31,7 @@ enum class EErrorKind
     PatchInvalid,   ///< Патч невалиден (§46).
     PatchApplyFailed,///< Ошибка применения патча (§77).
     BuildFailed,    ///< Сборка не прошла (COMPILATION FAIL, ADR-10).
+    SnapshotNotFound,///< Нет снапшота для отката (decisions.md №22).
     Count           ///< Маркер количества для инициализации массива.
 };
 

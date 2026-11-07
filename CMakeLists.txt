@@ -111,6 +111,9 @@ add_library(fcpp_core STATIC
     src/core/CProjectProfile.cpp
     src/core/CProjectPaths.cpp
     src/core/CExecutor.cpp
+    src/core/CProcessRunner.cpp
+    src/core/CGitProcess.cpp
+    src/core/CGitSnapshotStore.cpp
     src/core/CHash.cpp
     src/core/CCompileCommandsLocator.cpp
     src/core/CCompileCommandsParser.cpp

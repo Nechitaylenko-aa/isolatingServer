@@ -15,6 +15,7 @@
 
 #include "core/CConfigManager.h"
 #include "core/CExecutor.h"
+#include "core/CGitSnapshotStore.h"
 #include "core/CHistorian.h"
 #include "core/CCursorContextAnalyzer.h"
 #include "core/CLogger.h"
@@ -670,6 +671,7 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
     // never a silent one.
     if (!m_config_manager->config().m_allow_exec)
     {
+        take_snapshot(request, project_root);
         result.m_ok = true;
         result.m_status = ERequestStatus::Completed;
         result.m_exit_reason = EExitReason::None;
@@ -718,11 +720,35 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
     }
 
     result.m_trace.emplace_back(ETraceEvent::BuildVerified);
+    take_snapshot(request, project_root);
     result.m_ok = true;
     result.m_status = ERequestStatus::Completed;
     result.m_exit_reason = EExitReason::None;
     result.m_message = "Patch applied and build verified ("
         + std::to_string(validation.m_changes.size()) + " files).";
+}
+
+void CRequestOrchestrator::take_snapshot(const SOrchestrationRequest& request,
+                                         const std::filesystem::path& project_root) const
+{
+    if (m_config_manager == nullptr || m_project_manager == nullptr
+        || !m_project_manager->has_current())
+    {
+        return;
+    }
+
+    const CGitSnapshotStore snapshots(m_config_manager->config().m_snapshot_root);
+    const std::string project_id = m_project_manager->current().m_project.m_project_id;
+
+    std::string error;
+    const bool ok = snapshots.snapshot(project_root, project_id,
+        "edit " + request.m_request_id, error);
+
+    // Страховка на будущее, не часть контракта текущего ответа: провал не
+    // должен превращать уже успешно применённую (и, если нужно, собранную)
+    // правку в ошибку — только видимость в журнале.
+    m_logger.log_event(ok ? ELogLevel::Info : ELogLevel::Warn, "snapshot.taken",
+        {{"request_id", request.m_request_id}, {"ok", ok}, {"error", error}});
 }
 
 CRequestOrchestrator::ERootChoice CRequestOrchestrator::choose_root(

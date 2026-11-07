@@ -48,6 +48,11 @@ bool method_from_name(const std::string& name, EApiMethod& out)
         out = EApiMethod::Ask;
         return true;
     }
+    if (name == "edit.rollback")
+    {
+        out = EApiMethod::EditRollback;
+        return true;
+    }
     if (name == "question.shrink")
     {
         out = EApiMethod::QuestionShrink;
@@ -317,7 +322,8 @@ bool CProtocolServer::parse_request(const std::string& text,
         {"session_id", EExpectedJsonType::String}, {"sessionId", EExpectedJsonType::String},
         {"tool", EExpectedJsonType::String}, {"target", EExpectedJsonType::String},
         {"limit", EExpectedJsonType::UnsignedInteger},
-        {"stream", EExpectedJsonType::Boolean}, {"editor", EExpectedJsonType::Object}
+        {"stream", EExpectedJsonType::Boolean}, {"editor", EExpectedJsonType::Object},
+        {"rollbackSteps", EExpectedJsonType::UnsignedInteger}, {"rollbackRef", EExpectedJsonType::String}
     };
     for (const SFieldTypeCheck& field : field_checks)
     {
@@ -449,6 +455,14 @@ bool CProtocolServer::parse_request(const std::string& text,
     {
         out_request.m_stream = params["stream"].get<bool>();
     }
+    if (params.contains("rollbackSteps"))
+    {
+        out_request.m_rollback_steps = params["rollbackSteps"].get<std::uint32_t>();
+    }
+    if (params.contains("rollbackRef") && params["rollbackRef"].is_string())
+    {
+        out_request.m_rollback_ref = params["rollbackRef"].get<std::string>();
+    }
 
     if (params.contains("editor") && params["editor"].is_object())
     {
@@ -508,6 +522,13 @@ bool CProtocolServer::parse_request(const std::string& text,
             }
             else if (!require_non_empty(out_request.m_text, "params.text"))
             {
+                return false;
+            }
+            break;
+        case EApiMethod::EditRollback:
+            if (out_request.m_rollback_ref.empty() && out_request.m_rollback_steps == 0)
+            {
+                out_error = "either params.rollbackRef or a non-zero params.rollbackSteps is required";
                 return false;
             }
             break;
