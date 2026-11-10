@@ -490,13 +490,13 @@ bool CProtocolServer::parse_request(const std::string& text,
                 return false;
             }
             break;
-        case EApiMethod::EditRollback:
+        /*case EApiMethod::EditRollback:
             if (out_request.m_rollback_ref.empty() && out_request.m_rollback_steps == 0)
             {
                 out_error = "either params.rollbackRef or a non-zero params.rollbackSteps is required";
                 return false;
             }
-            break;
+            break;*/
         case EApiMethod::SessionUpdateContext:
             if (!require_non_empty(out_request.m_session_id, "params.session_id")
                     || !params.contains("context"))
