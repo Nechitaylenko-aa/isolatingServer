@@ -92,199 +92,49 @@ SApiResponse make_error(EErrorKind kind, const std::string& message)
 }
 
 
-/** Parse the current deterministic clarification format into a public question DTO. */
-SChatQuestion make_chat_question(const std::string& text, std::uint16_t question_id)
+/**
+ * @brief Отобразить решение дерева (EExitReason) в категорию ошибки API.
+ *
+ * Дерево уже приняло точное, типизированное решение о причине отказа —
+ * граница API должна его читать, а не угадывать заново по содержимому
+ * m_message (прежняя логика так и делала: answer.empty() ? NotUnderstood :
+ * Ambiguous — все 15 причин derevа схлопывались в один и тот же Ambiguous).
+ *
+ * @param reason Причина завершения из SOrchestrationResult.
+ * @return Ближайшая по смыслу категория EErrorKind.
+ */
+EErrorKind error_kind_for_exit_reason(EExitReason reason)
 {
-    SChatQuestion result;
-    SQuestion question;
-    question.m_id = question_id;
-
-    std::size_t line_start = 0;
-    bool first_line = true;
-    while (line_start <= text.size())
+    switch (reason)
     {
-        const std::size_t line_end = text.find('\n', line_start);
-        std::string line = text.substr(
-            line_start, line_end == std::string::npos ? std::string::npos : line_end - line_start);
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
-        {
-            line.pop_back();
-        }
-        const std::size_t first = line.find_first_not_of(" \t");
-        if (first != std::string::npos)
-        {
-            line.erase(0, first);
-            if (first_line)
-            {
-                question.m_text = line;
-                first_line = false;
-            }
-            else if (line.rfind("- ", 0) == 0)
-            {
-                std::string option = line.substr(2);
-                const std::size_t option_start = option.find_first_not_of(" \t");
-                if (option_start != std::string::npos)
-                {
-                    option.erase(0, option_start);
-                    const auto normalize_option = [](const std::string& value)
-                    {
-                        std::string result;
-                        bool previous_space = false;
-                        for (const unsigned char ch : value)
-                        {
-                            if (std::isspace(ch))
-                            {
-                                if (!result.empty() && !previous_space)
-                                {
-                                    result.push_back(' ');
-                                }
-                                previous_space = true;
-                            }
-                            else
-                            {
-                                result.push_back(static_cast<char>(std::tolower(ch)));
-                                previous_space = false;
-                            }
-                        }
-                        if (!result.empty() && result.back() == ' ')
-                        {
-                            result.pop_back();
-                        }
-                        return result;
-                    };
-                    const std::string normalized_option = normalize_option(option);
-                    const bool duplicate = std::any_of(
-                        question.m_options.begin(), question.m_options.end(),
-                        [&normalize_option, &normalized_option](const std::string& existing)
-                        {
-                            return normalize_option(existing) == normalized_option;
-                        });
-                    if (!duplicate)
-                    {
-                        question.m_options.push_back(std::move(option));
-                    }
-                }
-            }
-            else
-            {
-                question.m_text += "\n" + line;
-            }
-        }
-        if (line_end == std::string::npos)
-        {
-            break;
-        }
-        line_start = line_end + 1;
+    case EExitReason::None:
+        return EErrorKind::Ok;
+    case EExitReason::EmptyRequest:
+    case EExitReason::RequestTooLong:
+    case EExitReason::EditWithoutTarget:
+        return EErrorKind::InvalidRequest;
+    case EExitReason::CursorRelevanceFailed:
+    case EExitReason::HistoryRelevanceFailed:
+    case EExitReason::FileRelevanceFailed:
+    case EExitReason::FileNotRelevant:
+        return EErrorKind::NotUnderstood;
+    case EExitReason::LlmGenerationFailed:
+        return EErrorKind::IoError;
+    case EExitReason::IndexUnavailable:
+        return EErrorKind::IndexNotReady;
+    case EExitReason::PermissionDenied:
+        return EErrorKind::PermissionDenied;
+    case EExitReason::PatchUnparsable:
+    case EExitReason::PatchInvalid:
+        return EErrorKind::PatchInvalid;
+    case EExitReason::PatchApplyFailed:
+        return EErrorKind::PatchApplyFailed;
+    case EExitReason::BuildFailed:
+        return EErrorKind::BuildFailed;
+    case EExitReason::Count:
+        break;
     }
-
-    if (question.m_text.empty())
-    {
-        question.m_text = text;
-    }
-    result.m_questions.push_back(std::move(question));
-    result.m_wait_for_user = true;
-    return result;
-}
-
-nlohmann::json chat_question_json(const SChatQuestion& question)
-{
-    nlohmann::json result = {
-        {"wait_for_user", question.m_wait_for_user},
-        {"questions", nlohmann::json::array()}
-    };
-    for (const SQuestion& item : question.m_questions)
-    {
-        result["questions"].push_back({
-            {"id", item.m_id},
-            {"text", item.m_text},
-            {"options", item.m_options},
-            {"and", item.m_and}
-        });
-    }
-    return result;
-}
-
-std::uint16_t next_question_id(const std::vector<SConversationEvent>& events)
-{
-    std::uint32_t maximum = 0;
-    for (const SConversationEvent& event : events)
-    {
-        if (event.m_kind != "assistant")
-        {
-            continue;
-        }
-        try
-        {
-            const nlohmann::json payload = nlohmann::json::parse(event.m_payload);
-            if (!payload.contains("question") || !payload["question"].is_object()
-                || !payload["question"].contains("questions")
-                || !payload["question"]["questions"].is_array())
-            {
-                continue;
-            }
-            for (const nlohmann::json& item : payload["question"]["questions"])
-            {
-                if (item.is_object() && item.contains("id") && item["id"].is_number_integer())
-                {
-                    const std::int64_t id = item["id"].get<std::int64_t>();
-                    if (id > 0 && id <= UINT16_MAX)
-                    {
-                        maximum = std::max(maximum, static_cast<std::uint32_t>(id));
-                    }
-                }
-            }
-        }
-        catch (const nlohmann::json::exception&)
-        {
-            continue;
-        }
-    }
-    return maximum >= UINT16_MAX ? 0 : static_cast<std::uint16_t>(maximum + 1);
-}
-
-bool question_has_option(const std::vector<SConversationEvent>& events,
-                         std::uint16_t question_id,
-                         const std::string& option)
-{
-    const std::vector<SConversationEvent> active_events = active_conversation_events(events);
-    for (auto event = active_events.rbegin(); event != active_events.rend(); ++event)
-    {
-        if (event->m_kind != "assistant")
-        {
-            continue;
-        }
-        try
-        {
-            const nlohmann::json payload = nlohmann::json::parse(event->m_payload);
-            if (!payload.contains("question") || !payload["question"].is_object()
-                || !payload["question"].contains("questions")
-                || !payload["question"]["questions"].is_array())
-            {
-                continue;
-            }
-            for (const nlohmann::json& item : payload["question"]["questions"])
-            {
-                if (!item.is_object() || !item.contains("id") || !item["id"].is_number_integer()
-                    || item["id"].get<std::int64_t>() != question_id
-                    || !item.contains("options") || !item["options"].is_array())
-                {
-                    continue;
-                }
-                for (const nlohmann::json& candidate : item["options"])
-                {
-                    if (candidate.is_string() && candidate.get<std::string>() == option)
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-        catch (const nlohmann::json::exception&)
-        {
-            continue;
-        }
-    }
-    return false;
+    return EErrorKind::NotUnderstood;
 }
 
 } // namespace
@@ -693,17 +543,10 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
 
 SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 {
-    const bool answering_choice = !request.m_selected_option.empty();
-    if ((!answering_choice && request.m_text.empty())
-        || (answering_choice && request.m_answer_question_id == 0))
+    if (request.m_text.empty())
     {
-        return make_error(EErrorKind::InvalidRequest,
-                          answering_choice
-                              ? "answer.question_id is required for a choice"
-                              : "empty ask text");
+        return make_error(EErrorKind::InvalidRequest, "empty ask text");
     }
-
-    const std::string effective_text = answering_choice ? request.m_selected_option : request.m_text;
 
     const bool had_light_project = m_project_manager.has_current()
         && !m_project_manager.is_opened();
@@ -875,25 +718,13 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
             }
         }
 
-        if (answering_choice
-            && !question_has_option(stored_events, request.m_answer_question_id, request.m_selected_option))
-        {
-            return make_error(EErrorKind::InvalidRequest,
-                              "question_id or selected option does not match conversation history");
-        }
-
         conversation_history = reconstruct_conversation_turns(stored_events);
-        nlohmann::json user_event = {
-            {"text", effective_text},
+        const nlohmann::json user_event = {
+            {"text", request.m_text},
             {"editor_file", request.m_editor_file},
             {"editor_line", request.m_editor_line},
             {"editor_column", request.m_editor_column}
         };
-        if (answering_choice)
-        {
-            user_event["answer_question_id"] = request.m_answer_question_id;
-            user_event["selected_option"] = request.m_selected_option;
-        }
         if (!m_conversation_store.append_event(session_id, "user", user_event.dump()))
         {
             return make_error(EErrorKind::IoError, "cannot persist user message");
@@ -902,7 +733,7 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
 
     SOrchestrationRequest orchestration_request;
     orchestration_request.m_request_id = request.m_request_id;
-    orchestration_request.m_text = effective_text;
+    orchestration_request.m_text = request.m_text;
     orchestration_request.m_session_id = session_id;
     orchestration_request.m_cursor_line = request.m_editor_line;
     orchestration_request.m_cursor_column = request.m_editor_column;
@@ -968,34 +799,15 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
     const SOrchestrationResult orchestration_result = orchestrator.run(orchestration_request);
 
     SApiResponse response;
-    std::string answer = orchestration_result.m_message;
+    const std::string& answer = orchestration_result.m_message;
     response.m_ok = orchestration_result.m_ok;
     response.m_message = orchestration_result.m_message;
 
-    const bool clarification = !response.m_ok
-        && answer.rfind("Уточните, что имеется в виду:", 0) == 0;
-    if (clarification)
     {
-        const std::uint16_t question_id = next_question_id(stored_events);
-        if (question_id == 0)
-        {
-            return make_error(EErrorKind::IoError, "question ID space exhausted");
-        }
-        response.m_ok = true;
-        response.m_state = "CLARIFY";
-        response.m_has_question = true;
-        response.m_question = make_chat_question(answer, question_id);
-    }
-
-    {
-        nlohmann::json assistant_event = {
+        const nlohmann::json assistant_event = {
             {"text", answer},
             {"ok", response.m_ok}
         };
-        if (response.m_has_question)
-        {
-            assistant_event["question"] = chat_question_json(response.m_question);
-        }
         if (!m_conversation_store.append_event(session_id, "assistant", assistant_event.dump()))
         {
             return make_error(EErrorKind::IoError, "answer produced but could not persist conversation event");
@@ -1004,20 +816,17 @@ SApiResponse CAgentApi::handle_ask(const SApiRequest& request)
         // the id comes back on every answer.
         response.m_session_id = session_id;
     }
-    if (response.m_ok && !response.m_has_question)
+    if (response.m_ok)
     {
         response.m_state = "COMPLETED";
         response.m_text = answer;
     }
-    else if (!response.m_ok)
+    else
     {
-        // A failed ask must never leak EErrorKind::Ok with an empty message.
-        // Distinguish a genuine ambiguity from a pipeline that produced neither
-        // an answer nor a clarification.
-        response.m_error = answer.empty() ? EErrorKind::NotUnderstood : EErrorKind::Ambiguous;
-        response.m_message = answer.empty()
-            ? "request not understood; no evidence or clarification was produced"
-            : answer;
+        // Дерево уже решило, почему запрос не прошёл (m_exit_reason) —
+        // граница API читает это решение, а не угадывает заново по тексту.
+        response.m_error = error_kind_for_exit_reason(orchestration_result.m_exit_reason);
+        response.m_message = answer;
     }
     return response;
 }

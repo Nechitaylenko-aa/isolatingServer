@@ -50,58 +50,6 @@ enum class EApiMethod
 };
 
 /**
- * @brief Один вопрос, отображаемый пользователю.
- *
- * options пуст — свободный текстовый ответ; иначе пользователь выбирает один
- * из перечисленных вариантов. m_and зарезервирован для будущей группировки.
- */
-struct SQuestion
-{
-    std::uint16_t m_id = 0;
-    std::string m_text;
-    std::vector<std::string> m_options;
-    bool m_and = false;
-};
-
-/**
- * @brief Структурированный запрос агента к пользователю.
- *
- * Текущая версия выдаёт один вопрос за раз. Вектор оставлен в модели для
- * расширения до группы вопросов без смены API-формата.
- */
-struct SChatQuestion
-{
-    std::vector<SQuestion> m_questions;
-    bool m_wait_for_user = true;
-};
-
-/** @brief Тип записи в линейной истории диалога. */
-enum class EChatItemType : std::uint8_t
-{
-    UserRequest,
-    AgentQuestion,
-    UserAnswer,
-    AgentResponse
-};
-
-/**
- * @brief Одна запись линейной истории диалога.
- *
- * m_text содержит пользовательский запрос/ответ либо итоговый ответ агента.
- * Для AgentQuestion структурированные данные находятся в m_question.
- * Действия агента намеренно не являются типом записи диалога.
- */
-struct SChatItem
-{
-    std::uint16_t m_id = 0;
-    EChatItemType m_type = EChatItemType::UserRequest;
-    std::string m_text;
-    SChatQuestion m_question;
-};
-
-using TChat = std::vector<SChatItem>;
-
-/**
  * @brief Типизированный запрос к Agent API.
  */
 struct SApiRequest
@@ -116,8 +64,6 @@ struct SApiRequest
 
     // Тело запроса Ask (§94): только текст и опциональный редакторский контекст.
     std::string m_text;               ///< Текст запроса.
-    std::uint16_t m_answer_question_id = 0; ///< ID вопроса, на который отвечает пользователь.
-    std::string m_selected_option;     ///< Выбранный вариант ответа.
     std::uint16_t m_question_id = 0;   ///< Вопрос для question.shrink.
     std::string m_session_id;         ///< Необязательный флаг клиента (decisions.md №20) — не адрес.
     std::string m_context_json;       ///< Контекст для session.update_context (JSON).
@@ -145,8 +91,6 @@ struct SApiResponse
     std::string m_project_id;              ///< Идентификатор проекта.
     std::string m_session_id;              ///< Идентификатор conversation session.
     std::string m_text;                    ///< Текстовый вывод (source/сообщение).
-    bool m_has_question = false;           ///< Есть структурированный вопрос для пользователя.
-    SChatQuestion m_question;              ///< Вопрос и варианты выбора.
     bool m_has_shrink_result = false;      ///< Ответ содержит результат shrink_question.
     bool m_shrink_result = false;          ///< false означает, что чат не изменён.
     SIndexStatus m_index_status;           ///< Состояние индекса.

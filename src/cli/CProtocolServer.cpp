@@ -317,7 +317,7 @@ bool CProtocolServer::parse_request(const std::string& text,
         EExpectedJsonType m_type;
     } field_checks[] = {
         {"projectRoot", EExpectedJsonType::String}, {"path", EExpectedJsonType::String},
-        {"text", EExpectedJsonType::String}, {"answer", EExpectedJsonType::Object},
+        {"text", EExpectedJsonType::String},
         {"question_id", EExpectedJsonType::Integer}, {"profile", EExpectedJsonType::String},
         {"session_id", EExpectedJsonType::String}, {"sessionId", EExpectedJsonType::String},
         {"tool", EExpectedJsonType::String}, {"target", EExpectedJsonType::String},
@@ -344,18 +344,6 @@ bool CProtocolServer::parse_request(const std::string& text,
         return false;
     }
 
-    if (params.contains("answer"))
-    {
-        const nlohmann::json& answer = params["answer"];
-        if (!validate_optional_type(answer, "question_id", "params.answer",
-                                    EExpectedJsonType::Integer, out_error)
-                || !validate_optional_type(answer, "option", "params.answer",
-                                           EExpectedJsonType::String, out_error)
-                || !validate_uint16_field(answer, "question_id", "params.answer", out_error))
-        {
-            return false;
-        }
-    }
     if (params.contains("editor"))
     {
         const nlohmann::json& editor = params["editor"];
@@ -398,22 +386,6 @@ bool CProtocolServer::parse_request(const std::string& text,
     if (params.contains("text") && params["text"].is_string())
     {
         out_request.m_text = params["text"].get<std::string>();
-    }
-    if (params.contains("answer") && params["answer"].is_object())
-    {
-        const nlohmann::json& answer = params["answer"];
-        if (answer.contains("question_id"))
-        {
-            const nlohmann::json& value = answer["question_id"];
-            const std::uint64_t question_id = value.is_number_unsigned()
-                ? value.get<std::uint64_t>()
-                : static_cast<std::uint64_t>(value.get<std::int64_t>());
-            out_request.m_answer_question_id = static_cast<std::uint16_t>(question_id);
-        }
-        if (answer.contains("option") && answer["option"].is_string())
-        {
-            out_request.m_selected_option = answer["option"].get<std::string>();
-        }
     }
     if (params.contains("question_id"))
     {
@@ -506,22 +478,15 @@ bool CProtocolServer::parse_request(const std::string& text,
             // ("я считаю, что говорю с этой же беседой"), не параметр адресации.
             // Адрес диалога резолвит сам агент (активная сессия открытого
             // проекта); пустой params.session_id — обычный случай, не ошибка.
-            if (params.contains("answer"))
+            if (!require_non_empty(out_request.m_text, "params.text"))
             {
-                if (!out_request.m_text.empty())
-                {
-                    out_error = "params.text and params.answer are mutually exclusive";
-                    return false;
-                }
-                if (out_request.m_answer_question_id == 0
-                        || !require_non_empty(out_request.m_selected_option, "params.answer.option"))
-                {
-                    if (out_error.empty()) out_error = "params.answer requires a non-zero question_id";
-                    return false;
-                }
+                return false;
             }
-            else if (!require_non_empty(out_request.m_text, "params.text"))
+            break;
+        case EApiMethod::EditRollback:
+            if (out_request.m_rollback_ref.empty() && out_request.m_rollback_steps == 0)
             {
+                out_error = "either params.rollbackRef or a non-zero params.rollbackSteps is required";
                 return false;
             }
             break;
@@ -588,22 +553,6 @@ std::string CProtocolServer::serialize_response(const std::string& id,
             result["text"] = response.m_text;
             // Для ask текст ответа дублируем в answer.text (стабильный контракт UI).
             result["answer"] = { {"text", response.m_text} };
-        }
-        if (response.m_has_question)
-        {
-            nlohmann::json question;
-            question["wait_for_user"] = response.m_question.m_wait_for_user;
-            question["questions"] = nlohmann::json::array();
-            for (const SQuestion& item : response.m_question.m_questions)
-            {
-                question["questions"].push_back({
-                    {"id", item.m_id},
-                    {"text", item.m_text},
-                    {"options", item.m_options},
-                    {"and", item.m_and}
-                });
-            }
-            result["question"] = question;
         }
         if (response.m_has_shrink_result)
         {
