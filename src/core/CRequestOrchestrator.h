@@ -276,8 +276,10 @@ private:
      * @param request Запрос (для request_id в сообщении коммита и логах).
      * @param project_root Каталог проекта.
      */
+    /** @brief label переопределяет префикс сообщения коммита; пусто → "edit". */
     void take_snapshot(const SOrchestrationRequest& request,
-                       const std::filesystem::path& project_root) const;
+                       const std::filesystem::path& project_root,
+                       const std::string& label = "edit") const;
 
     /**
      * @brief Собрать префикс промпта из среза кода и фактов индекса.

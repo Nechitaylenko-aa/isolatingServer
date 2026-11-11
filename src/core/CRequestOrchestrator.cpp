@@ -646,6 +646,12 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
         {{"request_id", request.m_request_id},
          {"files", validation.m_changes.size()}});
 
+    // Снапшот до правки: без него первый rollback --steps 1 всегда даёт
+    // "fewer than N snapshots in history" — в истории есть только коммит
+    // после Edit, но не базовое состояние до него.
+    // Провал не блокирует Edit (та же политика, что у post-edit снапшота).
+    take_snapshot(request, project_root, "pre-edit");
+
     const CPatchApplier applier;
     std::string apply_message;
     if (!applier.apply(validation.m_changes, apply_message))
@@ -729,7 +735,8 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
 }
 
 void CRequestOrchestrator::take_snapshot(const SOrchestrationRequest& request,
-                                         const std::filesystem::path& project_root) const
+                                         const std::filesystem::path& project_root,
+                                         const std::string& label) const
 {
     if (m_config_manager == nullptr || m_project_manager == nullptr
         || !m_project_manager->has_current())
@@ -742,7 +749,7 @@ void CRequestOrchestrator::take_snapshot(const SOrchestrationRequest& request,
 
     std::string error;
     const bool ok = snapshots.snapshot(project_root, project_id,
-        "edit " + request.m_request_id, error);
+        label + " " + request.m_request_id, error);
 
     // Страховка на будущее, не часть контракта текущего ответа: провал не
     // должен превращать уже успешно применённую (и, если нужно, собранную)
