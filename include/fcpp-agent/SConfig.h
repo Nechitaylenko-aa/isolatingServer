@@ -40,6 +40,10 @@ struct SConfig
      * снапшот хранит только изменившиеся git-объекты, не копию дерева. */
     std::filesystem::path m_snapshot_root = "/tmp/fcpp";
 
+    /** @brief Максимальное число попыток Edit при сбое сборки (plan.md §2.1).
+     * При 0 — не ограничено (не рекомендуется). По умолчанию 3. */
+    uint8_t m_max_edit_attempts = 3;
+
     SLlmRoleSet m_llm_roles; ///< Логические роли LLM.
 };
 

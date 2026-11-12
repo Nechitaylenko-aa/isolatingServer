@@ -282,6 +282,28 @@ private:
                        const std::string& label = "edit") const;
 
     /**
+     * @brief Один проход генерации патча: LLM → parse → validate → apply → build.
+     *
+     * Не трогает снапшоты — ими управляет generate_edit (pre-edit до цикла,
+     * post-edit только при успехе). При сбое сборки откатывает applier.revert()
+     * и возвращает BuildFailed + stderr компилятора в prev_build_error.
+     *
+     * @param request       Исходный запрос.
+     * @param result        Заполняется при успехе или финальном сбое.
+     * @param role          Роль LLM.
+     * @param prompt_input  Готовый промпт (уже содержит ошибку предыдущей итерации,
+     *                      если это повтор).
+     * @param prev_build_error  Outs: stderr компилятора при BuildFailed, иначе пусто.
+     * @return true — патч применён и (если allow_exec) собран; false — сбой,
+     *         result и prev_build_error уже заполнены.
+     */
+    bool attempt_edit(const SOrchestrationRequest& request,
+                      SOrchestrationResult& result,
+                      ELlmRole role,
+                      const std::string& prompt_input,
+                      std::string& prev_build_error) const;
+
+    /**
      * @brief Собрать префикс промпта из среза кода и фактов индекса.
      * @param result Результат с собранными данными.
      * @return Текст префикса.

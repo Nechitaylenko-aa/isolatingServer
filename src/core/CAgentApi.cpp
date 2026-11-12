@@ -517,7 +517,7 @@ SApiResponse CAgentApi::execute_impl(const SApiRequest& request)
             }
             try
             {
-                (void)nlohmann::json::parse(request.m_context_json);
+                [[maybe_unused]] const auto parsed = nlohmann::json::parse(request.m_context_json);
             }
             catch (const nlohmann::json::exception&)
             {

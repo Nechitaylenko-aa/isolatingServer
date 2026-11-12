@@ -241,7 +241,8 @@ bool CConfigManager::bootstrap()
         {"llm_thinker_local_type", "openai-compat"}, {"llm_thinker_local_alias", ""},
         {"llm_thinker_local_context_window_tokens", "0"}, {"llm_thinker_local_output_reserve_tokens", "4096"},
         {"llm_thinker_local_disable_thinking", "NO"},
-        {"snapshot_root", "/tmp/fcpp"}
+        {"snapshot_root", "/tmp/fcpp"},
+        {"max_edit_attempts", "3"}
     };
 
     // Файл отсутствует — пишем полный шаблон с комментариями.
@@ -300,7 +301,11 @@ bool CConfigManager::bootstrap()
         content << "llm_thinker_local_output_reserve_tokens=\"4096\"\n";
         content << "llm_thinker_local_disable_thinking=\"NO\"\n\n";
         content << "# --- Откат правок (decisions.md №22) ---\n";
-        content << "snapshot_root=\"/tmp/fcpp\"\n";
+        content << "snapshot_root=\"/tmp/fcpp\"\n\n";
+        content << "# --- Edit retry (plan.md §2.1) ---\n";
+        content << "# При сбое сборки патч откатывается и LLM получает stderr компилятора.\n";
+        content << "# 0 — без ограничений (не рекомендуется).\n";
+        content << "max_edit_attempts=\"3\"\n";
 
         std::ofstream output(m_config_path);
         if (!output.is_open())
@@ -440,6 +445,17 @@ bool CConfigManager::load() const
     const std::string snapshot_root_value = value_or_empty(entries, "snapshot_root");
     m_config.m_snapshot_root = snapshot_root_value.empty()
         ? std::filesystem::path("/tmp/fcpp") : std::filesystem::path(snapshot_root_value);
+
+    const std::string max_attempts_value = value_or_empty(entries, "max_edit_attempts");
+    if (!max_attempts_value.empty())
+    {
+        try
+        {
+            const int v = std::stoi(max_attempts_value);
+            m_config.m_max_edit_attempts = static_cast<uint8_t>(v > 0 ? v : 0);
+        }
+        catch (const std::exception&) {}
+    }
 
     // Логические роли LLM: api/model/key/type либо alias (alias приоритетнее).
     auto read_size = [&entries](const std::string& key, std::size_t fallback,

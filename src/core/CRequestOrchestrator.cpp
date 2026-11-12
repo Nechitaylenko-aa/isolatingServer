@@ -586,16 +586,19 @@ bool CRequestOrchestrator::check_edit_permission(const SOrchestrationRequest& re
     return true;
 }
 
-void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
-                                         SOrchestrationResult& result,
-                                         ELlmRole role,
-                                         const std::string& prompt_input) const
+bool CRequestOrchestrator::attempt_edit(const SOrchestrationRequest& request,
+                                        SOrchestrationResult& result,
+                                        ELlmRole role,
+                                        const std::string& prompt_input,
+                                        std::string& prev_build_error) const
 {
+    prev_build_error.clear();
+
     if (m_llm == nullptr)
     {
         fail(request, result, EExitReason::LlmGenerationFailed,
              "LLM layer is not configured.", ETraceEvent::ExitLlmGenerationFailed);
-        return;
+        return false;
     }
 
     const SLlmExecutionResult generated =
@@ -605,7 +608,7 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
         fail(request, result, EExitReason::LlmGenerationFailed,
              generated.m_error.empty() ? "LLM patch generation failed." : generated.m_error,
              ETraceEvent::ExitLlmGenerationFailed);
-        return;
+        return false;
     }
 
     SPatchSet patch;
@@ -614,7 +617,7 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
         fail(request, result, EExitReason::PatchUnparsable,
              "Model response is not a well-formed unified diff.",
              ETraceEvent::ExitPatchUnparsable);
-        return;
+        return false;
     }
     result.m_trace.emplace_back(ETraceEvent::PatchGenerated);
     m_logger.log_event(ELogLevel::Info, "patch.generated",
@@ -639,18 +642,12 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
              "Generated patch failed validation; see response for file-level detail.",
              ETraceEvent::ExitPatchInvalid);
         result.m_message += "\n" + validation.m_message;
-        return;
+        return false;
     }
     result.m_trace.emplace_back(ETraceEvent::PatchValidated);
     m_logger.log_event(ELogLevel::Info, "patch.validated",
         {{"request_id", request.m_request_id},
          {"files", validation.m_changes.size()}});
-
-    // Снапшот до правки: без него первый rollback --steps 1 всегда даёт
-    // "fewer than N snapshots in history" — в истории есть только коммит
-    // после Edit, но не базовое состояние до него.
-    // Провал не блокирует Edit (та же политика, что у post-edit снапшота).
-    take_snapshot(request, project_root, "pre-edit");
 
     const CPatchApplier applier;
     std::string apply_message;
@@ -660,7 +657,7 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
              "Failed to write the generated patch to disk; see response for detail.",
              ETraceEvent::ExitPatchApplyFailed);
         result.m_message += "\n" + apply_message;
-        return;
+        return false;
     }
     result.m_trace.emplace_back(ETraceEvent::PatchApplied);
     result.m_changed_files.clear();
@@ -677,13 +674,12 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
     // never a silent one.
     if (!m_config_manager->config().m_allow_exec)
     {
-        take_snapshot(request, project_root);
         result.m_ok = true;
         result.m_status = ERequestStatus::Completed;
         result.m_exit_reason = EExitReason::None;
         result.m_message = "Patch applied (" + std::to_string(validation.m_changes.size())
             + " files); build verification skipped: allow_exec is NO.";
-        return;
+        return true;
     }
 
     const SConfig& config = m_config_manager->config();
@@ -718,20 +714,86 @@ void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
 
         // Compiler stderr likely carries absolute paths — kept out of fail()'s
         // logged reason for the same decisions.md #15 reason as above.
+        // Возвращаем stderr вызывающему — он передаст его в следующую итерацию.
+        prev_build_error = build.m_stderr;
         fail(request, result, EExitReason::BuildFailed,
              "Compilation failed after applying the generated patch; changes were reverted.",
              ETraceEvent::ExitBuildFailed);
         result.m_message += "\n" + build.m_stderr;
-        return;
+        return false;
     }
 
     result.m_trace.emplace_back(ETraceEvent::BuildVerified);
-    take_snapshot(request, project_root);
     result.m_ok = true;
-    result.m_status = ERequestStatus::Completed;
-    result.m_exit_reason = EExitReason::None;
-    result.m_message = "Patch applied and build verified ("
-        + std::to_string(validation.m_changes.size()) + " files).";
+    return true;
+}
+
+void CRequestOrchestrator::generate_edit(const SOrchestrationRequest& request,
+                                         SOrchestrationResult& result,
+                                         ELlmRole role,
+                                         const std::string& prompt_input) const
+{
+    // m_project_manager/m_config_manager non-null: check_edit_permission() уже
+    // проверил это до вызова.
+    const std::filesystem::path project_root =
+        m_project_manager->current().m_project.m_canonical_path;
+
+    // Снапшот до любых правок — один раз на весь цикл попыток.
+    // Без него rollback --steps 1 всегда даёт "fewer than N snapshots" —
+    // в истории только коммит после Edit, не базовое состояние.
+    take_snapshot(request, project_root, "pre-edit");
+
+    const uint8_t max_attempts = m_config_manager->config().m_max_edit_attempts;
+    std::string prev_build_error;
+    std::string current_prompt = prompt_input;
+
+    for (uint8_t attempt = 0; ; ++attempt)
+    {
+        // Сбрасываем промежуточный статус перед каждой попыткой — attempt_edit
+        // заполняет result при сбое, но мы продолжаем цикл.
+        result.m_ok = false;
+        result.m_exit_reason = EExitReason::None;
+
+        if (!prev_build_error.empty())
+        {
+            // Добавляем stderr предыдущей попытки в промпт, чтобы модель
+            // знала что именно сломалось. Детерминированный шаг — не LLM решает
+            // «нужен ли retry», а оркестратор по факту BuildFailed.
+            current_prompt = prompt_input
+                + "\n\n// === Previous attempt failed to compile. "
+                  "Fix the patch to resolve the following errors:\n"
+                + prev_build_error;
+
+            m_logger.log_event(ELogLevel::Info, "edit.retry",
+                {{"request_id", request.m_request_id},
+                 {"attempt", static_cast<int>(attempt)},
+                 {"max_attempts", static_cast<int>(max_attempts)}});
+        }
+
+        if (attempt_edit(request, result, role, current_prompt, prev_build_error))
+        {
+            // Успех — снапшот после правки и выход.
+            take_snapshot(request, project_root);
+            return;
+        }
+
+        // Если не BuildFailed — смысла повторять нет (LlmGenerationFailed,
+        // PatchUnparsable, PatchInvalid, PatchApplyFailed): модель либо
+        // недоступна, либо вернула принципиально неверный формат.
+        if (result.m_exit_reason != EExitReason::BuildFailed)
+        {
+            return;
+        }
+
+        // Исчерпаны попытки (max_attempts == 0 → без ограничения, не рекомендуется).
+        if (max_attempts > 0 && attempt + 1 >= max_attempts)
+        {
+            m_logger.log_event(ELogLevel::Warn, "edit.retry_exhausted",
+                {{"request_id", request.m_request_id},
+                 {"attempts", static_cast<int>(attempt + 1)}});
+            return;
+        }
+    }
 }
 
 void CRequestOrchestrator::take_snapshot(const SOrchestrationRequest& request,
